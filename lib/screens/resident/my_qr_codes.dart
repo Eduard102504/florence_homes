@@ -105,46 +105,82 @@ class _MyQRCodesState extends State<MyQRCodes> {
   Color _getStatusColor(String status) {
     switch (status) {
       case 'Active':
-        return Colors.green;
+        return const Color(0xFF4CAF50);
       case 'Expiring soon':
-        return Colors.orange;
+        return const Color(0xFFFF9800);
       case 'Expired':
-        return Colors.red;
+        return const Color(0xFFD32F2F);
       case 'Used':
-        return Colors.grey;
+        return const Color(0xFF9E9E9E);
       default:
-        return Colors.grey;
+        return const Color(0xFF9E9E9E);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final filteredQRCodes = _getFilteredQRCodes();
+    final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My QR Codes'),
-        backgroundColor: Colors.green,
+        title: Row(
+          children: [
+            const Icon(Icons.qr_code, size: 22, color: Color(0xFFFFF8F0)),
+            const SizedBox(width: 8),
+            const Text(
+              'My QR Codes',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+                fontSize: 18,
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFFD4C4A8),
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, size: 20),
             onPressed: _loadQRCodes,
+            color: const Color(0xFFFFF8F0),
           ),
         ],
       ),
-      body: _buildBody(filteredQRCodes),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              const Color(0xFFFFF8F0),
+              const Color(0xFFF5F0E8),
+              const Color(0xFFEDE5D8),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: _buildBody(filteredQRCodes, screenWidth),
+        ),
+      ),
     );
   }
 
-  Widget _buildBody(List<Map<String, dynamic>> filteredQRCodes) {
+  Widget _buildBody(List<Map<String, dynamic>> filteredQRCodes, double screenWidth) {
     if (_isLoading) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8)),
+            ),
             SizedBox(height: 16),
-            Text('Loading your QR codes...'),
+            Text(
+              'Loading your QR codes...',
+              style: TextStyle(color: Color(0xFFB8A99A)),
+            ),
           ],
         ),
       );
@@ -155,12 +191,16 @@ class _MyQRCodesState extends State<MyQRCodes> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error, size: 64, color: Colors.red),
+            const Icon(Icons.error, size: 48, color: Color(0xFFD32F2F)),
             const SizedBox(height: 16),
-            Text(_errorMessage!),
+            Text(_errorMessage!, style: const TextStyle(color: Color(0xFF8D6E63))),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _loadQRCodes,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFD4C4A8),
+                foregroundColor: const Color(0xFF6B5B4F),
+              ),
               child: const Text('Retry'),
             ),
           ],
@@ -173,20 +213,31 @@ class _MyQRCodesState extends State<MyQRCodes> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
-              Icons.qr_code,
-              size: 80,
-              color: Colors.grey,
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.qr_code,
+                size: 70,
+                color: Color(0xFFD4C4A8),
+              ),
             ),
             const SizedBox(height: 16),
             const Text(
               'No QR Codes Yet',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF6B5B4F),
+              ),
             ),
             const SizedBox(height: 8),
             const Text(
               'Generate visitor QR codes from the home screen',
-              style: TextStyle(color: Colors.grey),
+              style: TextStyle(color: Color(0xFFB8A99A), fontSize: 13),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
@@ -195,7 +246,11 @@ class _MyQRCodesState extends State<MyQRCodes> {
                 Navigator.pop(context);
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: const Color(0xFFD4C4A8),
+                foregroundColor: const Color(0xFF6B5B4F),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
               ),
               child: const Text('Go to Dashboard'),
             ),
@@ -206,48 +261,100 @@ class _MyQRCodesState extends State<MyQRCodes> {
 
     return Column(
       children: [
+        // Stats Card
+        Container(
+          margin: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFFD4C4A8), Color(0xFFC4A882)],
+                  ),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.qr_code_scanner, color: Color(0xFFFFF8F0), size: 28),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Total QR Codes',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFFB8A99A),
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${_qrCodes.length}',
+                      style: const TextStyle(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF5D4037),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  _filter == 'all' ? 'All' : _filter,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF8D6E63),
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
         // Filter Chips
-        Padding(
-          padding: const EdgeInsets.all(16.0),
+        Container(
+          margin: const EdgeInsets.symmetric(horizontal: 12),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
             child: Row(
               children: [
-                FilterChip(
-                  label: const Text('All'),
-                  selected: _filter == 'all',
-                  onSelected: (selected) {
-                    setState(() => _filter = 'all');
-                  },
-                ),
+                _buildFilterChip('All', 'all'),
                 const SizedBox(width: 8),
-                FilterChip(
-                  label: const Text('Active'),
-                  selected: _filter == 'active',
-                  onSelected: (selected) {
-                    setState(() => _filter = 'active');
-                  },
-                ),
+                _buildFilterChip('Active', 'active'),
                 const SizedBox(width: 8),
-                FilterChip(
-                  label: const Text('Expired'),
-                  selected: _filter == 'expired',
-                  onSelected: (selected) {
-                    setState(() => _filter = 'expired');
-                  },
-                ),
+                _buildFilterChip('Expired', 'expired'),
                 const SizedBox(width: 8),
-                FilterChip(
-                  label: const Text('Used'),
-                  selected: _filter == 'used',
-                  onSelected: (selected) {
-                    setState(() => _filter = 'used');
-                  },
-                ),
+                _buildFilterChip('Used', 'used'),
               ],
             ),
           ),
         ),
+        const SizedBox(height: 12),
 
         // QR Codes List
         Expanded(
@@ -259,20 +366,21 @@ class _MyQRCodesState extends State<MyQRCodes> {
                 Icon(
                   Icons.qr_code,
                   size: 60,
-                  color: Colors.grey.shade400,
+                  color: const Color(0xFFE0D5C1),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
                 Text(
                   'No ${_filter == 'all' ? '' : _filter} QR codes',
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
+                  style: const TextStyle(
+                    color: Color(0xFFB8A99A),
+                    fontSize: 14,
                   ),
                 ),
               ],
             ),
           )
               : ListView.builder(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             itemCount: filteredQRCodes.length,
             itemBuilder: (context, index) {
               final qr = filteredQRCodes[index];
@@ -280,124 +388,150 @@ class _MyQRCodesState extends State<MyQRCodes> {
               final statusColor = _getStatusColor(status);
               final expiresAt = DateTime.parse(qr['expiresAt']);
 
-              return Card(
-                margin: const EdgeInsets.only(bottom: 12),
-                child: InkWell(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => QRDisplayScreen(
-                          qrData: qr['qrCodeData'] ?? qr['id'],
-                          visitorName: qr['visitorName'],
-                          isSavedQR: true,
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+                  ),
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => QRDisplayScreen(
+                            qrData: qr['qrCodeData'] ?? qr['id'],
+                            visitorName: qr['visitorName'],
+                            isSavedQR: true,
+                          ),
                         ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      const Color(0xFFD4C4A8),
+                                      const Color(0xFFC4A882),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.qr_code,
+                                  color: Color(0xFFFFF8F0),
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      qr['visitorName'],
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: Color(0xFF6B5B4F),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'For: ${qr['residentName']}',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: const Color(0xFFB8A99A),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: statusColor,
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Text(
+                                  status == 'Expiring soon' ? '⚠️ $status' : status,
+                                  style: TextStyle(
+                                    fontSize: 10,
+                                    color: statusColor,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.access_time,
+                                size: 14,
+                                color: Color(0xFFB8A99A),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Expires: ${DateFormat('MMM dd, hh:mm a').format(expiresAt)}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFFB8A99A),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.calendar_today,
+                                size: 14,
+                                color: Color(0xFFB8A99A),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Generated: ${DateFormat('MMM dd, yyyy').format(DateTime.parse(qr['generatedAt']))}',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFFB8A99A),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                       ),
-                    );
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: Colors.green.shade50,
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Icon(
-                                Icons.qr_code,
-                                color: Colors.green,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    qr['visitorName'],
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'For: ${qr['residentName']}',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: statusColor.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: statusColor,
-                                  width: 1,
-                                ),
-                              ),
-                              child: Text(
-                                status,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: statusColor,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.access_time,
-                              size: 14,
-                              color: Colors.grey.shade600,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Expires: ${DateFormat('MMM dd, yyyy • hh:mm a').format(expiresAt)}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Icon(
-                              Icons.calendar_today,
-                              size: 14,
-                              color: Colors.grey.shade600,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Generated: ${DateFormat('MMM dd, yyyy').format(DateTime.parse(qr['generatedAt']))}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
                     ),
                   ),
                 ),
@@ -406,6 +540,33 @@ class _MyQRCodesState extends State<MyQRCodes> {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildFilterChip(String label, String value) {
+    return FilterChip(
+      label: Text(
+        label,
+        style: TextStyle(
+          color: _filter == value ? const Color(0xFFFFF8F0) : const Color(0xFF6B5B4F),
+          fontSize: 13,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+      selected: _filter == value,
+      onSelected: (selected) {
+        setState(() => _filter = value);
+      },
+      backgroundColor: Colors.white,
+      selectedColor: const Color(0xFFD4C4A8),
+      checkmarkColor: const Color(0xFFFFF8F0),
+      side: BorderSide(
+        color: _filter == value ? const Color(0xFFD4C4A8) : const Color(0xFFE0D5C1),
+        width: 1.5,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+      ),
     );
   }
 }

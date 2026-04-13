@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/background_nfc_service.dart';
 import 'package:intl/intl.dart';
+
 class ScannerManagementScreen extends StatefulWidget {
   const ScannerManagementScreen({super.key});
 
@@ -48,7 +49,6 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen> {
       _nfcScanning = prefs.getBool('nfc_scanning') ?? false;
     });
 
-    // If NFC was previously on, restart it
     if (_nfcScanning) {
       _startNFCScanning();
     }
@@ -84,7 +84,6 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen> {
         if (_recentScans.length > 20) _recentScans.removeLast();
       });
 
-      // Show notification
       _showScanResult(result);
     });
   }
@@ -102,32 +101,57 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: Icon(
-          result['success'] ? Icons.check_circle : Icons.error,
-          color: result['success'] ? Colors.green : Colors.red,
-          size: 48,
+          result['success'] ? Icons.check_circle_outline : Icons.error_outline,
+          color: result['success'] ? const Color(0xFF8D6E63) : const Color(0xFFD32F2F),
+          size: 40,
+        ),
+        backgroundColor: const Color(0xFFFFF8F0),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFFE0D5C1), width: 1.5),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             if (result['success']) ...[
-              Text('✅ ${result['message']}'),
+              const Text('🎉 Access Granted!', style: TextStyle(color: Color(0xFF8D6E63), fontWeight: FontWeight.bold, fontSize: 14)),
               const SizedBox(height: 8),
-              Text('Resident: ${result['residentName']}'),
-              Text('House: ${result['houseNumber']}'),
+              _buildCuteInfoRow('👤', 'Resident', result['residentName']),
+              _buildCuteInfoRow('🏠', 'House', result['houseNumber']),
             ] else ...[
-              Text('❌ ${result['message']}'),
+              const Text('😔 Access Denied', style: TextStyle(color: Color(0xFFD32F2F), fontWeight: FontWeight.bold, fontSize: 14)),
+              const SizedBox(height: 8),
+              _buildCuteInfoRow('❌', 'Reason', result['message']),
             ],
-            const SizedBox(height: 8),
-            Text('Tag: ${result['tagId']}'),
-            const SizedBox(height: 8),
-            Text('Time: ${DateFormat('hh:mm:ss a').format(DateTime.now())}'),
+            const Divider(color: Color(0xFFE0D5C1), height: 16),
+            _buildCuteInfoRow('🔖', 'Tag', result['tagId']),
+            _buildCuteInfoRow('⏰', 'Time', DateFormat('hh:mm:ss a').format(DateTime.now())),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFF8D6E63),
+              backgroundColor: const Color(0xFFF5F0E8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            ),
+            child: const Text('OK', style: TextStyle(fontSize: 12)),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCuteInfoRow(String emoji, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 14)),
+          const SizedBox(width: 8),
+          SizedBox(width: 50, child: Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFFB8A99A), fontWeight: FontWeight.w500))),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 12, color: Color(0xFF6B5B4F), fontWeight: FontWeight.w500))),
         ],
       ),
     );
@@ -135,7 +159,6 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen> {
 
   @override
   void dispose() {
-    // Don't stop scanning on dispose - keep running in background
     super.dispose();
   }
 
@@ -143,343 +166,301 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Scanner Management'),
-        backgroundColor: Colors.green,
+        title: Row(
+          children: [
+            const Icon(Icons.scanner, size: 24, color: Color(0xFFFFF8F0)),
+            const SizedBox(width: 10),
+            const Text(
+              'Scanner Management',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+                fontSize: 18,
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFFD4C4A8),
+        elevation: 0,
         actions: [
           if (_nfcScanning)
             Container(
-              margin: const EdgeInsets.only(right: 16),
+              margin: const EdgeInsets.only(right: 12),
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: Colors.red,
-                borderRadius: BorderRadius.circular(20),
+                color: const Color(0xFF8D6E63),
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [BoxShadow(color: const Color(0xFF8D6E63).withOpacity(0.3), blurRadius: 4)],
               ),
               child: const Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.circle, size: 8, color: Colors.white),
+                  Icon(Icons.fiber_manual_record, size: 8, color: Color(0xFFFFF8F0)),
                   SizedBox(width: 4),
-                  Text('SCANNING', style: TextStyle(color: Colors.white, fontSize: 10)),
+                  Text('SCANNING', style: TextStyle(color: Color(0xFFFFF8F0), fontSize: 9, fontWeight: FontWeight.bold)),
                 ],
               ),
             ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // NFC Scanner Card with ON/OFF toggle
-            Card(
-              elevation: 4,
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.purple.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.nfc, color: Colors.purple, size: 30),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              const Color(0xFFFFF8F0),
+              const Color(0xFFF5F0E8),
+              const Color(0xFFEDE5D8),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // NFC Scanner Card
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [BoxShadow(color: const Color(0xFFD4C4A8).withOpacity(0.15), blurRadius: 8, offset: const Offset(0, 3))],
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
                             children: [
-                              const Text(
-                                'Phone NFC Scanner',
-                                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [Color(0xFFD4C4A8), Color(0xFFC4A882)],
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: const Icon(Icons.nfc, color: Color(0xFFFFF8F0), size: 24),
                               ),
-                              Text(
-                                _nfcScanning
-                                    ? '🔴 NFC Scanning ACTIVE - Running in background'
-                                    : '⚪ NFC Scanning OFF',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: _nfcScanning ? Colors.green : Colors.grey,
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text('📱 Phone NFC Scanner', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F))),
+                                    const SizedBox(height: 2),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: _nfcScanning ? const Color(0xFF8D6E63).withOpacity(0.15) : const Color(0xFFD4C4A8).withOpacity(0.3),
+                                        borderRadius: BorderRadius.circular(16),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(_nfcScanning ? Icons.power_settings_new : Icons.power_off, size: 10, color: _nfcScanning ? const Color(0xFF8D6E63) : const Color(0xFFB8A99A)),
+                                          const SizedBox(width: 2),
+                                          Text(_nfcScanning ? 'Active' : 'Inactive', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: _nfcScanning ? const Color(0xFF8D6E63) : const Color(0xFFB8A99A))),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Transform.scale(
+                                scale: 1.0,
+                                child: Switch(
+                                  value: _nfcScanning,
+                                  onChanged: (value) => value ? _startNFCScanning() : _stopNFCScanning(),
+                                  activeColor: const Color(0xFF8D6E63),
+                                  activeTrackColor: const Color(0xFFD4C4A8),
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                        Switch(
-                          value: _nfcScanning,
-                          onChanged: (value) {
-                            if (value) {
-                              _startNFCScanning();
-                            } else {
-                              _stopNFCScanning();
-                            }
-                          },
-                          activeColor: Colors.green,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(Icons.info, size: 16, color: Colors.blue.shade700),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'NFC scanner runs in background. You can navigate to other screens and it will continue scanning.',
-                              style: TextStyle(fontSize: 12, color: Colors.blue.shade700),
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF8D6E63).withOpacity(0.08),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFFD4C4A8).withOpacity(0.3)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Text('💡', style: TextStyle(fontSize: 14)),
+                                const SizedBox(width: 8),
+                                Expanded(child: Text('NFC runs in background! Tap RFID tag to grant access.', style: TextStyle(fontSize: 11, color: const Color(0xFF8D6E63), fontWeight: FontWeight.w500))),
+                              ],
                             ),
                           ),
                         ],
                       ),
                     ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Recent Scans
+                if (_recentScans.isNotEmpty) ...[
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(color: const Color(0xFFD4C4A8).withOpacity(0.3), borderRadius: BorderRadius.circular(10)),
+                        child: const Icon(Icons.history, color: Color(0xFF8D6E63), size: 18),
+                      ),
+                      const SizedBox(width: 8),
+                      const Text('Recent Activity', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F))),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(color: const Color(0xFFD4C4A8).withOpacity(0.2), borderRadius: BorderRadius.circular(16)),
+                        child: Text('${_recentScans.length} scans', style: const TextStyle(fontSize: 10, color: Color(0xFF8D6E63), fontWeight: FontWeight.w600)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: _recentScans.length > 3 ? 3 : _recentScans.length,
+                    itemBuilder: (context, index) {
+                      final scan = _recentScans[index];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          boxShadow: [BoxShadow(color: const Color(0xFFD4C4A8).withOpacity(0.1), blurRadius: 4, offset: const Offset(0, 1))],
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE0D5C1), width: 1)),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            leading: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: scan['success'] ? const Color(0xFF8D6E63).withOpacity(0.12) : const Color(0xFFD32F2F).withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Icon(scan['success'] ? Icons.check_circle_outline : Icons.error_outline, color: scan['success'] ? const Color(0xFF8D6E63) : const Color(0xFFD32F2F), size: 18),
+                            ),
+                            title: Text(scan['success'] ? scan['residentName'] ?? 'Unknown' : scan['message'], style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: scan['success'] ? const Color(0xFF6B5B4F) : const Color(0xFFD32F2F))),
+                            subtitle: Text(scan['tagId']?.substring(0, 10) ?? 'No tag', style: const TextStyle(fontSize: 10, color: Color(0xFFB8A99A))),
+                            trailing: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(color: const Color(0xFFF5F0E8), borderRadius: BorderRadius.circular(16)),
+                              child: Text(DateFormat('hh:mm a').format(scan['timestamp']), style: const TextStyle(fontSize: 10, color: Color(0xFF8D6E63), fontWeight: FontWeight.w500)),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // External Scanners
+                Row(
+                  children: [
+                    Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: const Color(0xFFD4C4A8).withOpacity(0.3), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.devices, color: Color(0xFF8D6E63), size: 18)),
+                    const SizedBox(width: 8),
+                    const Text('External Scanners', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F))),
                   ],
                 ),
-              ),
-            ),
+                const SizedBox(height: 10),
 
-            const SizedBox(height: 24),
+                _buildScannerCard(title: 'Bluetooth', icon: Icons.bluetooth, emoji: '🔷', color: const Color(0xFF8D6E63), enabled: _bluetoothEnabled, onChanged: (v) async { setState(() => _bluetoothEnabled = v); await _saveSetting('bt_scanner', v); }, subtitle: 'Wireless RFID scanners', status: _bluetoothEnabled ? '✓ Ready' : '○ Disabled'),
+                const SizedBox(height: 10),
+                _buildScannerCard(title: 'USB Scanner', icon: Icons.usb, emoji: '🔌', color: const Color(0xFFB8A99A), enabled: _usbEnabled, onChanged: (v) async { setState(() => _usbEnabled = v); await _saveSetting('usb_scanner', v); }, subtitle: 'USB-OTG connection', status: _usbEnabled ? '✓ Waiting' : '○ Disabled'),
+                const SizedBox(height: 10),
 
-            // Recent Scans
-            if (_recentScans.isNotEmpty) ...[
-              const Text(
-                'Recent Scans',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              ListView.builder(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: _recentScans.length > 5 ? 5 : _recentScans.length,
-                itemBuilder: (context, index) {
-                  final scan = _recentScans[index];
-                  return Card(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    child: ListTile(
-                      leading: Icon(
-                        scan['success'] ? Icons.check_circle : Icons.error,
-                        color: scan['success'] ? Colors.green : Colors.red,
-                      ),
-                      title: Text(scan['success'] ? scan['residentName'] ?? 'Unknown' : scan['message']),
-                      subtitle: Text(scan['tagId'] ?? 'No tag'),
-                      trailing: Text(
-                        DateFormat('hh:mm a').format(scan['timestamp']),
-                        style: const TextStyle(fontSize: 12),
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ],
-
-            const SizedBox(height: 24),
-
-            // Other Scanner Types (UI only)
-            const Text(
-              'External Scanners',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 12),
-
-            // Bluetooth Scanner
-            _buildScannerCard(
-              title: 'Bluetooth Scanner',
-              icon: Icons.bluetooth,
-              color: Colors.blue,
-              enabled: _bluetoothEnabled,
-              onChanged: (value) async {
-                setState(() => _bluetoothEnabled = value);
-                await _saveSetting('bt_scanner', value);
-              },
-              subtitle: 'Connect wireless RFID scanners',
-              status: _bluetoothEnabled ? 'Ready to connect' : 'Disabled',
-            ),
-
-            const SizedBox(height: 12),
-
-            // USB Scanner
-            _buildScannerCard(
-              title: 'USB Scanner',
-              icon: Icons.usb,
-              color: Colors.orange,
-              enabled: _usbEnabled,
-              onChanged: (value) async {
-                setState(() => _usbEnabled = value);
-                await _saveSetting('usb_scanner', value);
-              },
-              subtitle: 'Connect via USB-OTG cable',
-              status: _usbEnabled ? 'Waiting for device' : 'Disabled',
-            ),
-
-            const SizedBox(height: 12),
-
-            // Network Scanner
-            Card(
-              elevation: 2,
-              child: ExpansionTile(
-                leading: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.teal.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(Icons.wifi, color: Colors.teal, size: 30),
-                ),
-                title: const Text(
-                  'Network Scanner',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(
-                  _networkEnabled ? 'Connected to $_networkIp' : 'Disabled',
-                  style: TextStyle(
-                    color: _networkEnabled ? Colors.green : Colors.grey,
-                  ),
-                ),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
+                // Network Scanner
+                Container(
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: [BoxShadow(color: const Color(0xFFD4C4A8).withOpacity(0.15), blurRadius: 6)]),
+                  child: Container(
+                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5)),
+                    child: ExpansionTile(
+                      leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFD4C4A8), Color(0xFFC4A882)]), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.wifi, color: Color(0xFFFFF8F0), size: 20)),
+                      title: const Text('🌐 Network Scanner', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F), fontSize: 13)),
+                      subtitle: Text(_networkEnabled ? '✓ Connected to $_networkIp' : '○ Disabled', style: TextStyle(color: _networkEnabled ? const Color(0xFF8D6E63) : const Color(0xFFB8A99A), fontSize: 10)),
                       children: [
-                        SwitchListTile(
-                          title: const Text('Enable Network Scanner'),
-                          value: _networkEnabled,
-                          onChanged: (value) async {
-                            setState(() => _networkEnabled = value);
-                            await _saveSetting('net_scanner', value);
-                          },
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: Column(
+                            children: [
+                              SwitchListTile(title: const Text('Enable', style: TextStyle(color: Color(0xFF6B5B4F), fontSize: 12)), value: _networkEnabled, onChanged: (v) async { setState(() => _networkEnabled = v); await _saveSetting('net_scanner', v); }, activeColor: const Color(0xFF8D6E63)),
+                              if (_networkEnabled) ...[
+                                const SizedBox(height: 8),
+                                TextField(decoration: InputDecoration(labelText: 'IP Address', labelStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 11), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: const Color(0xFFFFF8F0), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)), onChanged: (v) => _networkIp = v),
+                                const SizedBox(height: 8),
+                                TextField(decoration: InputDecoration(labelText: 'Port', labelStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 11), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: const Color(0xFFFFF8F0), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)), keyboardType: TextInputType.number, onChanged: (v) => _networkPort = v),
+                                const SizedBox(height: 12),
+                                ElevatedButton.icon(onPressed: () async { if (_networkIp != null) { await _saveSetting('network_ip', _networkIp); await _saveSetting('network_port', _networkPort); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Connecting...'), backgroundColor: Color(0xFF8D6E63), behavior: SnackBarBehavior.floating)); } }, icon: const Icon(Icons.link, size: 14), label: const Text('Connect', style: TextStyle(fontSize: 12)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4C4A8), foregroundColor: const Color(0xFF6B5B4F), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))),
+                              ],
+                            ],
+                          ),
                         ),
-                        if (_networkEnabled) ...[
-                          TextField(
-                            decoration: const InputDecoration(
-                              labelText: 'Scanner IP Address',
-                              border: OutlineInputBorder(),
-                              hintText: '192.168.1.100',
-                            ),
-                            onChanged: (value) => _networkIp = value,
-                            controller: TextEditingController(text: _networkIp),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            decoration: const InputDecoration(
-                              labelText: 'Port',
-                              border: OutlineInputBorder(),
-                            ),
-                            keyboardType: TextInputType.number,
-                            onChanged: (value) => _networkPort = value,
-                            controller: TextEditingController(text: _networkPort),
-                          ),
-                          const SizedBox(height: 12),
-                          ElevatedButton(
-                            onPressed: () async {
-                              if (_networkIp != null) {
-                                await _saveSetting('network_ip', _networkIp);
-                                await _saveSetting('network_port', _networkPort);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('Connecting to network scanner...')),
-                                );
-                              }
-                            },
-                            child: const Text('Connect'),
-                          ),
-                        ],
                       ],
                     ),
                   ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 24),
-
-            // Auto Gate Control
-            Card(
-              child: SwitchListTile(
-                title: const Text('Auto Gate Control'),
-                subtitle: const Text('Automatically open gate on successful scan'),
-                value: _autoGate,
-                onChanged: (value) async {
-                  setState(() => _autoGate = value);
-                  await _saveSetting('auto_gate', value);
-                },
-                secondary: Icon(
-                  Icons.door_front_door,
-                  color: _autoGate ? Colors.green : Colors.grey,
                 ),
-              ),
+
+                const SizedBox(height: 16),
+
+                // Auto Gate Control
+                Container(
+                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: [BoxShadow(color: const Color(0xFFD4C4A8).withOpacity(0.15), blurRadius: 6)]),
+                  child: Container(
+                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5)),
+                    child: SwitchListTile(
+                      title: const Text('🚪 Auto Gate Control', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F), fontSize: 13)),
+                      subtitle: const Text('Auto-open gate on success', style: TextStyle(color: Color(0xFFB8A99A), fontSize: 11)),
+                      value: _autoGate,
+                      onChanged: (v) async { setState(() => _autoGate = v); await _saveSetting('auto_gate', v); },
+                      secondary: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFD4C4A8), Color(0xFFC4A882)]), borderRadius: BorderRadius.circular(12)), child: Icon(Icons.door_front_door, color: _autoGate ? const Color(0xFFFFF8F0) : const Color(0xFFE0D5C1), size: 20)),
+                      activeColor: const Color(0xFF8D6E63),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildScannerCard({
-    required String title,
-    required IconData icon,
-    required Color color,
-    required bool enabled,
-    required Function(bool)? onChanged,
-    required String subtitle,
-    required String status,
-    bool showSwitch = true,
-  }) {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Icon(icon, color: color, size: 30),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    subtitle,
-                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    status,
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: enabled ? Colors.green : Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (showSwitch)
-              Switch(
-                value: enabled,
-                onChanged: onChanged,
-                activeColor: color,
-              ),
-          ],
+  Widget _buildScannerCard({required String title, required IconData icon, required String emoji, required Color color, required bool enabled, required Function(bool)? onChanged, required String subtitle, required String status}) {
+    return Container(
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: [BoxShadow(color: const Color(0xFFD4C4A8).withOpacity(0.15), blurRadius: 6)]),
+      child: Container(
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5)),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(gradient: LinearGradient(colors: [color, color.withOpacity(0.7)]), borderRadius: BorderRadius.circular(12)), child: Row(children: [Text(emoji, style: const TextStyle(fontSize: 14)), const SizedBox(width: 2), Icon(icon, color: const Color(0xFFFFF8F0), size: 16)])),
+              const SizedBox(width: 10),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F))), Text(subtitle, style: TextStyle(fontSize: 10, color: const Color(0xFFB8A99A))), Text(status, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: enabled ? const Color(0xFF8D6E63) : const Color(0xFFB8A99A)))])),
+              Switch(value: enabled, onChanged: onChanged, activeColor: const Color(0xFF8D6E63), activeTrackColor: const Color(0xFFD4C4A8)),
+            ],
+          ),
         ),
       ),
     );

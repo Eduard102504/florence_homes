@@ -29,163 +29,263 @@ class _QRDisplayScreenState extends State<QRDisplayScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('QR Code for ${widget.visitorName}'),
-        backgroundColor: Colors.green,
+        title: Row(
+          children: [
+            const Icon(Icons.qr_code, size: 22, color: Color(0xFFFFF8F0)),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                'QR for ${widget.visitorName}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1,
+                  fontSize: 16,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFFD4C4A8),
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.share),
+            icon: const Icon(Icons.share, size: 20),
             onPressed: _shareQR,
+            color: const Color(0xFFFFF8F0),
           ),
           IconButton(
-            icon: const Icon(Icons.download),
+            icon: const Icon(Icons.download, size: 20),
             onPressed: _saveQR,
+            color: const Color(0xFFFFF8F0),
           ),
         ],
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // QR Code
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.shade300,
-                      blurRadius: 10,
-                      offset: const Offset(0, 5),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              const Color(0xFFFFF8F0),
+              const Color(0xFFF5F0E8),
+              const Color(0xFFEDE5D8),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // QR Code Card
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFD4C4A8).withOpacity(0.3),
+                        blurRadius: 15,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                    border: Border.all(
+                      color: const Color(0xFFE0D5C1),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: QrImageView(
+                    data: widget.qrData,
+                    version: QrVersions.auto,
+                    size: 250.0,
+                    eyeStyle: const QrEyeStyle(
+                      color: Color(0xFF5D4037),
+                      eyeShape: QrEyeShape.square,
+                    ),
+                    dataModuleStyle: const QrDataModuleStyle(
+                      color: Color(0xFF5D4037),
+                      dataModuleShape: QrDataModuleShape.square,
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Visitor Info Card
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                    border: Border.all(
+                      color: const Color(0xFFE0D5C1),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFFD4C4A8), Color(0xFFC4A882)],
+                            ),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: const Icon(
+                            Icons.person,
+                            size: 40,
+                            color: Color(0xFFFFF8F0),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          widget.visitorName,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF5D4037),
+                            letterSpacing: 0.5,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF8D6E63).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Text(
+                            'Valid for single entry',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF8D6E63),
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        const Divider(
+                          color: Color(0xFFE0D5C1),
+                          height: 24,
+                        ),
+                        const SizedBox(height: 8),
+                        _buildInfoRow(
+                          Icons.access_time,
+                          'Valid Until',
+                          '24 hours from generation',
+                        ),
+                        const SizedBox(height: 8),
+                        _buildInfoRow(
+                          Icons.qr_code,
+                          'Instructions',
+                          'Show this QR code to security guard at gate',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // Action Buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: _isSaving ? null : _shareQR,
+                        icon: const Icon(Icons.share, size: 18),
+                        label: const Text('Share'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: const BorderSide(color: Color(0xFFD4C4A8), width: 1.5),
+                          foregroundColor: const Color(0xFF6B5B4F),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _isSaving ? null : _saveQR,
+                        icon: _isSaving
+                            ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFF8F0)),
+                          ),
+                        )
+                            : const Icon(Icons.download, size: 18),
+                        label: Text(_isSaving ? 'Saving...' : 'Save'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFFD4C4A8),
+                          foregroundColor: const Color(0xFF6B5B4F),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          textStyle: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ),
-                child: QrImageView(
-                  data: widget.qrData,
-                  version: QrVersions.auto,
-                  size: 250.0,
-                  eyeStyle: const QrEyeStyle(
-                    color: Colors.black,
-                    eyeShape: QrEyeShape.square,
-                  ),
-                  dataModuleStyle: const QrDataModuleStyle(
-                    color: Colors.black,
-                    dataModuleShape: QrDataModuleShape.square,
-                  ),
-                ),
-              ),
 
-              const SizedBox(height: 24),
+                const SizedBox(height: 16),
 
-              // Visitor Info
-              Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
+                // Info Note
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF3E0),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: const Color(0xFFFFE0B2),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
                     children: [
-                      const Icon(
-                        Icons.person,
-                        size: 48,
-                        color: Colors.green,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        widget.visitorName,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                      const Icon(Icons.info_outline, size: 16, color: Color(0xFFE6A500)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'This QR code is valid for 24 hours only. Share it only with your intended visitor.',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFFA87900),
+                            height: 1.3,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Valid for single entry',
-                        style: TextStyle(
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      const Divider(),
-                      const SizedBox(height: 8),
-                      _buildInfoRow(
-                        Icons.access_time,
-                        'Valid Until',
-                        '24 hours from generation',
-                      ),
-                      const SizedBox(height: 4),
-                      _buildInfoRow(
-                        Icons.qr_code,
-                        'Instructions',
-                        'Show this QR code to security guard at gate',
                       ),
                     ],
                   ),
                 ),
-              ),
 
-              const SizedBox(height: 24),
-
-              // Action Buttons
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: _isSaving ? null : _shareQR,
-                      icon: const Icon(Icons.share),
-                      label: const Text('Share'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _isSaving ? null : _saveQR,
-                      icon: _isSaving
-                          ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                          : const Icon(Icons.download),
-                      label: Text(_isSaving ? 'Saving...' : 'Save to Gallery'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 16),
-
-              // Note
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.amber.shade50,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.amber.shade200),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info, color: Colors.amber.shade700),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Note: This QR code is valid for 24 hours only. Please share it only with your intended visitor.',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.amber.shade800,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ],
+                const SizedBox(height: 12),
+              ],
+            ),
           ),
         ),
       ),
@@ -195,22 +295,26 @@ class _QRDisplayScreenState extends State<QRDisplayScreen> {
   Widget _buildInfoRow(IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: Colors.grey.shade600),
-        const SizedBox(width: 8),
+        Icon(icon, size: 16, color: const Color(0xFFD4C4A8)),
+        const SizedBox(width: 10),
         SizedBox(
-          width: 80,
+          width: 85,
           child: Text(
             label,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 12,
-              color: Colors.grey.shade600,
+              color: Color(0xFFB8A99A),
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(fontSize: 12),
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF6B5B4F),
+            ),
           ),
         ),
       ],
@@ -222,24 +326,20 @@ class _QRDisplayScreenState extends State<QRDisplayScreen> {
       final directory = await getTemporaryDirectory();
       final filePath = '${directory.path}/qr_${DateTime.now().millisecondsSinceEpoch}.png';
 
-      // Create a simple widget to capture QR code
-      final repaintBoundary = RepaintBoundary(
-        child: QrImageView(
-          data: widget.qrData,
-          version: QrVersions.auto,
-          size: 300.0,
-        ),
-      );
-
-      // You would need to capture the widget to an image
-      // For now, share the QR data as text
       await Share.share(
-        'Visitor QR Code for ${widget.visitorName}\nData: ${widget.qrData}\n\nFlorence Homes Gate System',
+        '🎫 Visitor QR Code for ${widget.visitorName}\n\n'
+            'Data: ${widget.qrData}\n\n'
+            '🏠 Florence Homes Gate System\n'
+            'Valid for 24 hours only.',
       );
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error sharing QR: $e')),
+          SnackBar(
+            content: Text('Error sharing QR: $e'),
+            backgroundColor: const Color(0xFFD32F2F),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     }
@@ -253,17 +353,33 @@ class _QRDisplayScreenState extends State<QRDisplayScreen> {
       final fileName = 'qr_${widget.visitorName.replaceAll(' ', '_')}_${DateTime.now().millisecondsSinceEpoch}.txt';
       final filePath = '${directory.path}/$fileName';
 
-      await File(filePath).writeAsString(widget.qrData);
+      await File(filePath).writeAsString(
+        '=== Florence Homes Visitor QR Code ===\n'
+            'Visitor: ${widget.visitorName}\n'
+            'Data: ${widget.qrData}\n'
+            'Generated: ${DateTime.now()}\n'
+            'Valid for: 24 hours\n'
+            '========================================\n'
+            'Show this code at the gate entrance.',
+      );
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('QR data saved to ${directory.path}')),
+          SnackBar(
+            content: Text('✅ QR saved to ${directory.path}'),
+            backgroundColor: const Color(0xFF8D6E63),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving QR: $e')),
+          SnackBar(
+            content: Text('Error saving QR: $e'),
+            backgroundColor: const Color(0xFFD32F2F),
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     }

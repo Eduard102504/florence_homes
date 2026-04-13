@@ -1,4 +1,3 @@
-// lib/screens/admin/pending_approvals.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -32,46 +31,11 @@ class _PendingApprovalsState extends State<PendingApprovals> {
     });
 
     try {
-      print('=== LOADING PENDING USERS ===');
-
-      // First, let's check if we can access Firestore at all
-      try {
-        print('Testing Firestore connection...');
-        DocumentSnapshot testDoc = await _firestore.collection('users').doc('test').get();
-        print('Firestore connection successful');
-      } catch (e) {
-        print('Firestore connection FAILED: $e');
-        setState(() {
-          _errorMessage = 'Cannot connect to Firestore: $e';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      // Get ALL users first to see what's in the database
-      print('Fetching all users...');
-      QuerySnapshot allUsers = await _firestore.collection('users').get();
-      print('Total users found: ${allUsers.docs.length}');
-
-      for (var doc in allUsers.docs) {
-        print('User data: ${doc.data()}');
-      }
-
-      // Now query for residents with isApproved = false
-      print('Querying for pending residents...');
       QuerySnapshot snapshot = await _firestore
           .collection('users')
           .where('userType', isEqualTo: 'resident')
           .where('isApproved', isEqualTo: false)
           .get();
-
-      print('Pending users found: ${snapshot.docs.length}');
-
-      if (snapshot.docs.isNotEmpty) {
-        for (var doc in snapshot.docs) {
-          print('Pending user: ${doc.data()}');
-        }
-      }
 
       setState(() {
         _pendingUsers = snapshot.docs.map((doc) {
@@ -80,11 +44,7 @@ class _PendingApprovalsState extends State<PendingApprovals> {
         _isLoading = false;
       });
 
-      print('=== FINISHED LOADING ===');
-
     } catch (e) {
-      print('ERROR loading pending users: $e');
-      print('Stack trace: ${StackTrace.current}');
       setState(() {
         _errorMessage = 'Error: $e';
         _isLoading = false;
@@ -94,44 +54,46 @@ class _PendingApprovalsState extends State<PendingApprovals> {
 
   Future<void> _approveUser(UserModel user) async {
     try {
-      print('Approving user: ${user.id} - ${user.fullName}');
-
       await _firestore.collection('users').doc(user.id).update({
         'isApproved': true,
       });
 
-      print('User approved successfully');
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${user.fullName} has been approved')),
+        SnackBar(
+          content: Text('✅ ${user.fullName} has been approved'),
+          backgroundColor: const Color(0xFF8D6E63),
+        ),
       );
 
       _loadPendingUsers();
     } catch (e) {
-      print('Error approving user: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
       );
     }
   }
 
   Future<void> _rejectUser(UserModel user) async {
     try {
-      print('Rejecting user: ${user.id} - ${user.fullName}');
-
       await _firestore.collection('users').doc(user.id).delete();
 
-      print('User rejected successfully');
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${user.fullName} has been rejected')),
+        SnackBar(
+          content: Text('❌ ${user.fullName} has been rejected'),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
       );
 
       _loadPendingUsers();
     } catch (e) {
-      print('Error rejecting user: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
+        SnackBar(
+          content: Text('Error: $e'),
+          backgroundColor: const Color(0xFFD32F2F),
+        ),
       );
     }
   }
@@ -140,16 +102,50 @@ class _PendingApprovalsState extends State<PendingApprovals> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pending Approvals'),
-        backgroundColor: Colors.green,
+        title: Row(
+          children: [
+            const Icon(Icons.pending_actions, size: 24, color: Color(0xFFFFF8F0)),
+            const SizedBox(width: 10),
+            const Text(
+              'Pending Approvals',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+                fontSize: 18,
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFFD4C4A8),
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, size: 20),
             onPressed: _loadPendingUsers,
+            color: const Color(0xFFFFF8F0),
           ),
         ],
       ),
-      body: _buildBody(),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              const Color(0xFFFFF8F0),
+              const Color(0xFFF5F0E8),
+              const Color(0xFFEDE5D8),
+            ],
+          ),
+        ),
+        child: SafeArea(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.all(16),
+            child: _buildBody(),
+          ),
+        ),
+      ),
     );
   }
 
@@ -159,9 +155,9 @@ class _PendingApprovalsState extends State<PendingApprovals> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
+            CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8))),
             SizedBox(height: 16),
-            Text('Loading pending approvals...'),
+            Text('Loading pending approvals...', style: TextStyle(color: Color(0xFFB8A99A))),
           ],
         ),
       );
@@ -172,13 +168,17 @@ class _PendingApprovalsState extends State<PendingApprovals> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error, size: 64, color: Colors.red),
+            const Icon(Icons.error, size: 48, color: Color(0xFFD32F2F)),
             const SizedBox(height: 16),
-            Text(_errorMessage!),
+            Text(_errorMessage!, style: const TextStyle(color: Color(0xFFB8A99A))),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _loadPendingUsers,
-              child: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFD4C4A8),
+                foregroundColor: const Color(0xFF6B5B4F),
+              ),
+              child: const Text('Retry 🔄'),
             ),
           ],
         ),
@@ -190,131 +190,124 @@ class _PendingApprovalsState extends State<PendingApprovals> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.check_circle, size: 80, color: Colors.green),
+            Icon(Icons.check_circle, size: 60, color: Color(0xFF8D6E63)),
             SizedBox(height: 16),
-            Text(
-              'No pending approvals',
-              style: TextStyle(fontSize: 18),
-            ),
+            Text('🎉 No pending approvals!', style: TextStyle(fontSize: 16, color: Color(0xFF6B5B4F), fontWeight: FontWeight.bold)),
             SizedBox(height: 8),
-            Text(
-              'All resident applications have been processed',
-              style: TextStyle(color: Colors.grey),
-            ),
+            Text('All residents have been processed', style: TextStyle(color: Color(0xFFB8A99A), fontSize: 12)),
           ],
         ),
       );
     }
 
     return ListView.builder(
-      padding: const EdgeInsets.all(16),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
       itemCount: _pendingUsers.length,
       itemBuilder: (context, index) {
         final user = _pendingUsers[index];
-        return Card(
+        return Container(
           margin: const EdgeInsets.only(bottom: 16),
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 30,
-                      backgroundColor: Colors.orange.shade100,
-                      child: Icon(
-                        Icons.person,
-                        size: 30,
-                        color: Colors.orange.shade800,
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            user.fullName,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                            ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                blurRadius: 8,
+                offset: const Offset(0, 3),
+              ),
+            ],
+          ),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              const Color(0xFFFF9800).withOpacity(0.2),
+                              const Color(0xFFFF9800).withOpacity(0.1),
+                            ],
                           ),
-                          Text(
-                            user.email,
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                            ),
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: const Icon(Icons.person, size: 32, color: Color(0xFFFF9800)),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(user.fullName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F))),
+                            const SizedBox(height: 2),
+                            Text(user.email, style: TextStyle(color: const Color(0xFFB8A99A), fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF9800).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFFF9800).withOpacity(0.3)),
+                        ),
+                        child: const Text('⏳ PENDING', style: TextStyle(color: Color(0xFFFF9800), fontWeight: FontWeight.bold, fontSize: 10)),
+                      ),
+                    ],
+                  ),
+                  const Divider(color: Color(0xFFE0D5C1), height: 20),
+                  _buildInfoRow(Icons.home, '🏠 House', user.houseNumber ?? 'Not provided'),
+                  const SizedBox(height: 6),
+                  _buildInfoRow(Icons.phone, '📱 Phone', user.phoneNumber ?? 'Not provided'),
+                  const SizedBox(height: 6),
+                  _buildInfoRow(Icons.calendar_today, '📅 Registered', DateFormat('MMM dd, yyyy').format(user.createdAt)),
+                  const SizedBox(height: 16),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _approveUser(user),
+                          icon: const Icon(Icons.check, size: 16),
+                          label: const Text('Approve', style: TextStyle(fontSize: 13)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF8D6E63),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.orange.shade100,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        'Pending',
-                        style: TextStyle(
-                          color: Colors.orange.shade800,
-                          fontWeight: FontWeight.bold,
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                const Divider(),
-                const SizedBox(height: 8),
-                _buildInfoRow(
-                  Icons.home,
-                  'House Number',
-                  user.houseNumber ?? 'Not provided',
-                ),
-                const SizedBox(height: 4),
-                _buildInfoRow(
-                  Icons.phone,
-                  'Phone',
-                  user.phoneNumber ?? 'Not provided',
-                ),
-                const SizedBox(height: 4),
-                _buildInfoRow(
-                  Icons.calendar_today,
-                  'Registered',
-                  DateFormat('MMM dd, yyyy').format(user.createdAt),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _approveUser(user),
-                        icon: const Icon(Icons.check),
-                        label: const Text('Approve'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _rejectUser(user),
+                          icon: const Icon(Icons.close, size: 16),
+                          label: const Text('Reject', style: TextStyle(fontSize: 13)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD32F2F),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _rejectUser(user),
-                        icon: const Icon(Icons.close),
-                        label: const Text('Reject'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.red,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -325,24 +318,10 @@ class _PendingApprovalsState extends State<PendingApprovals> {
   Widget _buildInfoRow(IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, size: 16, color: Colors.grey.shade600),
+        Icon(icon, size: 14, color: const Color(0xFFD4C4A8)),
         const SizedBox(width: 8),
-        SizedBox(
-          width: 100,
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade600,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 12),
-          ),
-        ),
+        SizedBox(width: 60, child: Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFFB8A99A), fontWeight: FontWeight.w500))),
+        Expanded(child: Text(value, style: const TextStyle(fontSize: 11, color: Color(0xFF6B5B4F)))),
       ],
     );
   }

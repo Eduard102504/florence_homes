@@ -46,3 +46,32 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # ADD THIS SECTION - Assets declaration for images
+  assets:
+    # Background images for login screen
+    - assets/images/gate_background.jpg
+    - assets/images/gate_background_2.jpg
+    - assets/images/gate_background_3.jpg
+
+    # App icons and logos
+    - assets/images/logo.png
+    - assets/images/gate_icon.png
+    - assets/images/florence_logo.png
+
+    # You can also add entire folders
+    # - assets/images/
+    # - assets/icons/
+
+  # Optional: Add custom fonts (if needed)
+  # fonts:
+  #   - family: Poppins
+  #     fonts:
+  #       - asset: assets/fonts/Poppins-Regular.ttf
+  #       - asset: assets/fonts/Poppins-Bold.ttf
+  #         weight: 700
+  #   - family: Montserrat
+  #     fonts:
+  #       - asset: assets/fonts/Montserrat-Regular.ttf
+  #       - asset: assets/fonts/Montserrat-Bold.ttf
+  #         weight: 700

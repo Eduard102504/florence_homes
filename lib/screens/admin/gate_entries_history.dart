@@ -23,7 +23,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
   String _selectedEntryType = 'all';
   List<String> _residents = [];
   Map<String, String> _residentNames = {};
-  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -103,222 +102,297 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Gate Entries History'),
-        backgroundColor: Colors.green,
+        title: Row(
+          children: [
+            const Icon(Icons.history, size: 22, color: Color(0xFFFFF8F0)),
+            const SizedBox(width: 8),
+            const Text(
+              'Gate Entries',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1,
+                fontSize: 18,
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFFD4C4A8),
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.filter_list),
+            icon: const Icon(Icons.filter_list, size: 20),
             onPressed: _showFilterDialog,
+            color: const Color(0xFFFFF8F0),
           ),
           IconButton(
-            icon: const Icon(Icons.download),
+            icon: const Icon(Icons.download, size: 20),
             onPressed: _exportToCSV,
+            color: const Color(0xFFFFF8F0),
           ),
           IconButton(
-            icon: const Icon(Icons.refresh),
+            icon: const Icon(Icons.refresh, size: 20),
             onPressed: _loadEntries,
+            color: const Color(0xFFFFF8F0),
           ),
         ],
       ),
-      body: Column(
-        children: [
-          if (_dateRange != null || _selectedResident != 'all' || _selectedEntryType != 'all')
-            Container(
-              padding: const EdgeInsets.all(12),
-              color: Colors.grey.shade100,
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    const Icon(Icons.filter_alt, size: 16),
-                    const SizedBox(width: 8),
-                    if (_dateRange != null)
-                      Chip(
-                        label: Text(
-                          '${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}',
-                        ),
-                        onDeleted: () {
-                          setState(() {
-                            _dateRange = null;
-                          });
-                          _loadEntries();
-                        },
-                      ),
-                    if (_selectedResident != 'all')
-                      Chip(
-                        label: Text('Resident: ${_residentNames[_selectedResident] ?? 'Unknown'}'),
-                        onDeleted: () {
-                          setState(() {
-                            _selectedResident = 'all';
-                          });
-                          _loadEntries();
-                        },
-                      ),
-                    if (_selectedEntryType != 'all')
-                      Chip(
-                        label: Text('Type: ${_selectedEntryType.toUpperCase()}'),
-                        onDeleted: () {
-                          setState(() {
-                            _selectedEntryType = 'all';
-                          });
-                          _loadEntries();
-                        },
-                      ),
-                    const SizedBox(width: 8),
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _dateRange = null;
-                          _selectedResident = 'all';
-                          _selectedEntryType = 'all';
-                        });
-                        _loadEntries();
-                      },
-                      child: const Text('Clear All'),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-          // Stats
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: _buildStatCard(
-                    'Total Entries',
-                    _entries.length.toString(),
-                    Icons.door_front_door,
-                    Colors.blue,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    'RFID Scans',
-                    _entries.where((e) => e.entryType == 'rfid').length.toString(),
-                    Icons.nfc,
-                    Colors.green,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildStatCard(
-                    'QR Scans',
-                    _entries.where((e) => e.entryType == 'qr').length.toString(),
-                    Icons.qr_code,
-                    Colors.purple,
-                  ),
-                ),
-              ],
-            ),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              const Color(0xFFFFF8F0),
+              const Color(0xFFF5F0E8),
+              const Color(0xFFEDE5D8),
+            ],
           ),
-
-          // Entries List
-          Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _entries.isEmpty
-                ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.history, size: 80, color: Colors.grey),
-                  SizedBox(height: 16),
-                  Text('No entries found'),
-                ],
-              ),
-            )
-                : ListView.builder(
-              padding: const EdgeInsets.all(16),
-              itemCount: _entries.length,
-              itemBuilder: (context, index) {
-                final entry = _entries[index];
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: ListTile(
-                    leading: CircleAvatar(
-                      backgroundColor: _getTypeColor(entry.entryType),
-                      child: Icon(
-                        _getTypeIcon(entry.entryType),
-                        color: Colors.white,
-                      ),
-                    ),
-                    title: Text(entry.residentName),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+        ),
+        child: SafeArea(
+          child: Column(
+            children: [
+              // Filter chips row
+              if (_dateRange != null || _selectedResident != 'all' || _selectedEntryType != 'all')
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
                       children: [
-                        Text(entry.entryType.toUpperCase()),
-                        if (entry.visitorName != null)
-                          Text('Visitor: ${entry.visitorName}'),
-                        Text(
-                          DateFormat('MMM dd, yyyy • hh:mm a').format(entry.timestamp),
-                          style: const TextStyle(fontSize: 12),
+                        const Icon(Icons.filter_alt, size: 14, color: Color(0xFF8D6E63)),
+                        const SizedBox(width: 6),
+                        if (_dateRange != null)
+                          Chip(
+                            backgroundColor: Colors.white,
+                            label: Text(
+                              '📅 ${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}',
+                              style: const TextStyle(color: Color(0xFF6B5B4F), fontSize: 10),
+                            ),
+                            deleteIconColor: const Color(0xFFB8A99A),
+                            onDeleted: () {
+                              setState(() {
+                                _dateRange = null;
+                              });
+                              _loadEntries();
+                            },
+                          ),
+                        if (_selectedResident != 'all')
+                          Chip(
+                            backgroundColor: Colors.white,
+                            label: Text(
+                              '👤 ${_residentNames[_selectedResident] ?? 'Unknown'}',
+                              style: const TextStyle(color: Color(0xFF6B5B4F), fontSize: 10),
+                            ),
+                            deleteIconColor: const Color(0xFFB8A99A),
+                            onDeleted: () {
+                              setState(() {
+                                _selectedResident = 'all';
+                              });
+                              _loadEntries();
+                            },
+                          ),
+                        if (_selectedEntryType != 'all')
+                          Chip(
+                            backgroundColor: Colors.white,
+                            label: Text(
+                              '🔖 ${_selectedEntryType.toUpperCase()}',
+                              style: const TextStyle(color: Color(0xFF6B5B4F), fontSize: 10),
+                            ),
+                            deleteIconColor: const Color(0xFFB8A99A),
+                            onDeleted: () {
+                              setState(() {
+                                _selectedEntryType = 'all';
+                              });
+                              _loadEntries();
+                            },
+                          ),
+                        const SizedBox(width: 6),
+                        TextButton(
+                          onPressed: () {
+                            setState(() {
+                              _dateRange = null;
+                              _selectedResident = 'all';
+                              _selectedEntryType = 'all';
+                            });
+                            _loadEntries();
+                          },
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF8D6E63),
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            minimumSize: Size.zero,
+                          ),
+                          child: const Text('Clear All', style: TextStyle(fontSize: 10)),
                         ),
                       ],
                     ),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 6,
-                      ),
+                  ),
+                ),
+
+              // Stats Cards - Using Wrap to prevent overflow (FIXED)
+              Padding(
+                padding: const EdgeInsets.all(10),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    _buildStatCard('📊 Total', _entries.length.toString(), Icons.door_front_door, const Color(0xFFD4C4A8), screenWidth),
+                    _buildStatCard('📡 RFID', _entries.where((e) => e.entryType == 'rfid').length.toString(), Icons.nfc, const Color(0xFFC4A882), screenWidth),
+                    _buildStatCard('📱 QR', _entries.where((e) => e.entryType == 'qr').length.toString(), Icons.qr_code, const Color(0xFFB8A99A), screenWidth),
+                  ],
+                ),
+              ),
+
+              // Entries List
+              Expanded(
+                child: _isLoading
+                    ? const Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8)),
+                  ),
+                )
+                    : _entries.isEmpty
+                    ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.history, size: 60, color: Color(0xFFE0D5C1)),
+                      SizedBox(height: 12),
+                      Text('No entries found', style: TextStyle(color: Color(0xFFB8A99A), fontSize: 14)),
+                      SizedBox(height: 4),
+                      Text('Try adjusting your filters', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 12)),
+                    ],
+                  ),
+                )
+                    : ListView.builder(
+                  padding: const EdgeInsets.all(10),
+                  itemCount: _entries.length,
+                  itemBuilder: (context, index) {
+                    final entry = _entries[index];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
                       decoration: BoxDecoration(
-                        color: entry.status == 'entry'
-                            ? Colors.green.shade50
-                            : Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(20),
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
                       ),
-                      child: Text(
-                        entry.status.toUpperCase(),
-                        style: TextStyle(
-                          color: entry.status == 'entry'
-                              ? Colors.green
-                              : Colors.red,
-                          fontWeight: FontWeight.bold,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          leading: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                                colors: [
+                                  _getTypeColor(entry.entryType),
+                                  _getTypeColor(entry.entryType).withOpacity(0.7),
+                                ],
+                              ),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(_getTypeIcon(entry.entryType), color: const Color(0xFFFFF8F0), size: 18),
+                          ),
+                          title: Text(
+                            entry.residentName,
+                            style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F), fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 2),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  entry.entryType.toUpperCase(),
+                                  style: const TextStyle(fontSize: 8, fontWeight: FontWeight.w600, color: Color(0xFF8D6E63)),
+                                ),
+                              ),
+                              if (entry.visitorName != null)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 2),
+                                  child: Text('👤 ${entry.visitorName}', style: const TextStyle(fontSize: 9, color: Color(0xFFB8A99A))),
+                                ),
+                              Text(
+                                '🕐 ${DateFormat('MMM dd, hh:mm a').format(entry.timestamp)}',
+                                style: const TextStyle(fontSize: 9, color: Color(0xFFD4C4A8)),
+                              ),
+                            ],
+                          ),
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: entry.status == 'entry'
+                                  ? const Color(0xFF8D6E63).withOpacity(0.15)
+                                  : const Color(0xFFD32F2F).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: entry.status == 'entry'
+                                    ? const Color(0xFF8D6E63).withOpacity(0.3)
+                                    : const Color(0xFFD32F2F).withOpacity(0.3),
+                              ),
+                            ),
+                            child: Text(
+                              entry.status == 'entry' ? '✅' : '❌',
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                    isThreeLine: true,
-                  ),
-                );
-              },
-            ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color) {
+  Widget _buildStatCard(String title, String value, IconData icon, Color color, double screenWidth) {
+    // Responsive sizing
+    double cardWidth = screenWidth < 600 ? (screenWidth / 3) - 16 : 100;
+    double iconSize = screenWidth < 600 ? 14 : 16;
+    double fontSize = screenWidth < 600 ? 11 : 13;
+    double labelSize = screenWidth < 600 ? 8 : 9;
+
     return Container(
-      padding: const EdgeInsets.all(12),
+      width: cardWidth.clamp(80, 120),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(12),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.3), width: 1),
       ),
       child: Column(
         children: [
-          Icon(icon, color: color),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 10,
-              color: color,
-            ),
-          ),
+          Icon(icon, color: color, size: iconSize),
+          const SizedBox(height: 2),
+          Text(value, style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, color: color)),
+          Text(title, style: TextStyle(fontSize: labelSize, color: color, fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -326,27 +400,19 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
 
   IconData _getTypeIcon(String type) {
     switch (type) {
-      case 'rfid':
-        return Icons.nfc;
-      case 'qr':
-        return Icons.qr_code;
-      case 'manual':
-        return Icons.person;
-      default:
-        return Icons.door_front_door;
+      case 'rfid': return Icons.nfc;
+      case 'qr': return Icons.qr_code;
+      case 'manual': return Icons.person;
+      default: return Icons.door_front_door;
     }
   }
 
   Color _getTypeColor(String type) {
     switch (type) {
-      case 'rfid':
-        return Colors.green;
-      case 'qr':
-        return Colors.purple;
-      case 'manual':
-        return Colors.orange;
-      default:
-        return Colors.blue;
+      case 'rfid': return const Color(0xFFD4C4A8);
+      case 'qr': return const Color(0xFFC4A882);
+      case 'manual': return const Color(0xFFB8A99A);
+      default: return const Color(0xFF8D6E63);
     }
   }
 
@@ -357,22 +423,43 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return AlertDialog(
-              title: const Text('Filter Entries'),
-              content: SingleChildScrollView(
+              title: const Text('🔍 Filter', style: TextStyle(color: Color(0xFF6B5B4F), fontWeight: FontWeight.bold, fontSize: 15)),
+              backgroundColor: const Color(0xFFFFF8F0),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(18),
+                side: const BorderSide(color: Color(0xFFE0D5C1), width: 1.5),
+              ),
+              content: SizedBox(
+                width: 300,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     ListTile(
-                      title: const Text('Date Range'),
-                      subtitle: Text(_dateRange == null
-                          ? 'Select range'
-                          : '${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}'),
-                      trailing: const Icon(Icons.calendar_today),
+                      title: const Text('📅 Date Range', style: TextStyle(color: Color(0xFF6B5B4F), fontSize: 12)),
+                      subtitle: Text(
+                        _dateRange == null
+                            ? 'Select range'
+                            : '${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}',
+                        style: const TextStyle(color: Color(0xFFB8A99A), fontSize: 11),
+                      ),
+                      trailing: const Icon(Icons.calendar_today, color: Color(0xFFD4C4A8), size: 16),
                       onTap: () async {
                         final picked = await showDateRangePicker(
                           context: context,
                           firstDate: DateTime(2024),
                           lastDate: DateTime.now(),
+                          builder: (context, child) {
+                            return Theme(
+                              data: Theme.of(context).copyWith(
+                                colorScheme: const ColorScheme.light(
+                                  primary: Color(0xFFD4C4A8),
+                                  onPrimary: Color(0xFFFFF8F0),
+                                  surface: Color(0xFFFFF8F0),
+                                ),
+                              ),
+                              child: child!,
+                            );
+                          },
                         );
                         if (picked != null) {
                           setStateDialog(() {
@@ -381,20 +468,33 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                         }
                       },
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 4),
                     DropdownButtonFormField<String>(
                       value: _selectedResident,
-                      decoration: const InputDecoration(
-                        labelText: 'Resident',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: '👤 Resident',
+                        labelStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 11),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFD4C4A8), width: 2),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       ),
                       items: [
-                        const DropdownMenuItem(value: 'all', child: Text('All Residents')),
+                        const DropdownMenuItem(value: 'all', child: Text('All Residents', style: TextStyle(fontSize: 12))),
                         ..._residents
                             .where((id) => id != 'all')
                             .map((id) => DropdownMenuItem(
                           value: id,
-                          child: Text(_residentNames[id] ?? 'Unknown'),
+                          child: Text(_residentNames[id] ?? 'Unknown', style: const TextStyle(fontSize: 12)),
                         )),
                       ],
                       onChanged: (value) {
@@ -403,18 +503,31 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                         });
                       },
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
                       value: _selectedEntryType,
-                      decoration: const InputDecoration(
-                        labelText: 'Entry Type',
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: '🔖 Entry Type',
+                        labelStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 11),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: const BorderSide(color: Color(0xFFD4C4A8), width: 2),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'all', child: Text('All Types')),
-                        DropdownMenuItem(value: 'rfid', child: Text('RFID')),
-                        DropdownMenuItem(value: 'qr', child: Text('QR Code')),
-                        DropdownMenuItem(value: 'manual', child: Text('Manual')),
+                        DropdownMenuItem(value: 'all', child: Text('All Types', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 'rfid', child: Text('RFID 📡', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 'qr', child: Text('QR Code 📱', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(value: 'manual', child: Text('Manual ✏️', style: TextStyle(fontSize: 12))),
                       ],
                       onChanged: (value) {
                         setStateDialog(() {
@@ -428,14 +541,20 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  child: const Text('Cancel'),
+                  style: TextButton.styleFrom(foregroundColor: const Color(0xFFB8A99A)),
+                  child: const Text('Cancel', style: TextStyle(fontSize: 12)),
                 ),
                 ElevatedButton(
                   onPressed: () {
                     Navigator.pop(context);
                     _loadEntries();
                   },
-                  child: const Text('Apply Filters'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFD4C4A8),
+                    foregroundColor: const Color(0xFF6B5B4F),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: const Text('Apply', style: TextStyle(fontSize: 12)),
                 ),
               ],
             );

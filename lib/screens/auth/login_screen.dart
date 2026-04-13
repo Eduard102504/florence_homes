@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,8 +17,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _isRegistering = false;
+  bool _imageLoaded = true;
 
-  // Registration controllers
   final _regNameController = TextEditingController();
   final _regEmailController = TextEditingController();
   final _regPasswordController = TextEditingController();
@@ -25,87 +27,206 @@ class _LoginScreenState extends State<LoginScreen> {
   final _regPhoneController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    _checkImageAsset();
+  }
+
+  Future<void> _checkImageAsset() async {
+    try {
+      await rootBundle.load('assets/images/gate_background.jpg');
+      setState(() {
+        _imageLoaded = true;
+      });
+      print('✅ Background image loaded successfully');
+    } catch (e) {
+      print('❌ Background image not found: $e');
+      setState(() {
+        _imageLoaded = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
 
     return Scaffold(
       body: Container(
         decoration: BoxDecoration(
-          gradient: LinearGradient(
+          // Background image with LIGHT overlay (not dark)
+          image: _imageLoaded
+              ? const DecorationImage(
+            image: AssetImage('assets/images/gate_background.jpg'),
+            fit: BoxFit.cover,
+            // REMOVED the dark colorFilter that was causing black background
+            // OR use a lighter overlay:
+            // colorFilter: ColorFilter.mode(
+            //   Colors.white.withOpacity(0.1),
+            //   BlendMode.lighten,
+            // ),
+          )
+              : null,
+          // Fallback gradient if image doesn't load
+          gradient: !_imageLoaded
+              ? LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Colors.green.shade700, Colors.green.shade900],
-          ),
+            colors: [
+              const Color(0xFFFFF8F0),
+              const Color(0xFFF5F0E8),
+              const Color(0xFFEDE5D8),
+            ],
+          )
+              : null,
         ),
-        child: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 60),
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    shape: BoxShape.circle,
+        child: Container(
+          // Add a semi-transparent overlay for better text readability
+          decoration: BoxDecoration(
+            color: Colors.black.withOpacity(0.3), // Light overlay, not dark
+          ),
+          child: SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24.0),
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(
+                    maxWidth: kIsWeb ? 500 : double.infinity,
                   ),
-                  child: const Icon(
-                    Icons.home,
-                    size: 50,
-                    color: Colors.green,
-                  ),
-                ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Florence Homes',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Village Gate System',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white70,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 48),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // Logo Section
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: [
+                              Color(0xFFC4A882),
+                              Color(0xFFD4C4A8),
+                            ],
+                          ),
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 15,
+                              offset: const Offset(0, 5),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.home_work,
+                          size: 50,
+                          color: Color(0xFFFFF8F0),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
 
-                // Login or Register Form
-                Card(
-                  elevation: 8,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(24.0),
-                    child: _isRegistering ? _buildRegisterForm(authProvider) : _buildLoginForm(authProvider),
+                      // Title
+                      const Text(
+                        'Florence Homes',
+                        style: TextStyle(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFFFF8F0),
+                          letterSpacing: 1.5,
+                          shadows: [
+                            Shadow(
+                              blurRadius: 10,
+                              color: Colors.black,
+                              offset: Offset(2, 2),
+                            ),
+                          ],
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Subtitle
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.4),
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        child: const Text(
+                          'Village Gate Access System',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: Color(0xFFFFF8F0),
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.5,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(height: 48),
+
+                      // Form Card
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.95),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.15),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: const Color(0xFFE0D5C1),
+                              width: 1,
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(32.0),
+                            child: _isRegistering
+                                ? _buildRegisterForm(authProvider)
+                                : _buildLoginForm(authProvider),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Toggle button
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _isRegistering = !_isRegistering;
+                          });
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: const Color(0xFF5D4037),
+                          backgroundColor: Colors.white.withOpacity(0.9),
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(30),
+                          ),
+                        ),
+                        child: Text(
+                          _isRegistering
+                              ? '← Back to Login'
+                              : 'Create New Account',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-
-                const SizedBox(height: 16),
-
-                // Toggle between Login and Register
-                TextButton(
-                  onPressed: () {
-                    setState(() {
-                      _isRegistering = !_isRegistering;
-                    });
-                  },
-                  child: Text(
-                    _isRegistering
-                        ? 'Already have an account? Login'
-                        : 'Create a resident account',
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
@@ -118,12 +239,46 @@ class _LoginScreenState extends State<LoginScreen> {
       key: _formKey,
       child: Column(
         children: [
+          const Text(
+            'Welcome Back',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF5D4037),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Please enter your credentials to continue',
+            style: TextStyle(
+              color: Color(0xFF8D6E63),
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 32),
+
           TextFormField(
             controller: _emailController,
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              prefixIcon: Icon(Icons.email),
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: 'Email Address',
+              labelStyle: const TextStyle(color: Color(0xFF8D6E63), fontWeight: FontWeight.w500),
+              prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFFC4A882), size: 22),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFC4A882), width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
             keyboardType: TextInputType.emailAddress,
             validator: (value) {
@@ -134,16 +289,20 @@ class _LoginScreenState extends State<LoginScreen> {
             },
           ),
           const SizedBox(height: 16),
+
           TextFormField(
             controller: _passwordController,
             decoration: InputDecoration(
               labelText: 'Password',
-              prefixIcon: const Icon(Icons.lock),
+              labelStyle: const TextStyle(color: Color(0xFF8D6E63), fontWeight: FontWeight.w500),
+              prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFFC4A882), size: 22),
               suffixIcon: IconButton(
                 icon: Icon(
                   _isPasswordVisible
                       ? Icons.visibility
                       : Icons.visibility_off,
+                  color: const Color(0xFFC4A882),
+                  size: 20,
                 ),
                 onPressed: () {
                   setState(() {
@@ -151,7 +310,21 @@ class _LoginScreenState extends State<LoginScreen> {
                   });
                 },
               ),
-              border: const OutlineInputBorder(),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFC4A882), width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
             obscureText: !_isPasswordVisible,
             validator: (value) {
@@ -161,9 +334,15 @@ class _LoginScreenState extends State<LoginScreen> {
               return null;
             },
           ),
-          const SizedBox(height: 24),
+
+          const SizedBox(height: 32),
+
           if (authProvider.isLoading)
-            const Center(child: CircularProgressIndicator())
+            const Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFC4A882)),
+              ),
+            )
           else
             ElevatedButton(
               onPressed: () async {
@@ -183,7 +362,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
                         content: Text('Invalid email or password'),
-                        backgroundColor: Colors.red,
+                        backgroundColor: Color(0xFFD32F2F),
+                        behavior: SnackBarBehavior.floating,
                       ),
                     );
                   }
@@ -191,9 +371,19 @@ class _LoginScreenState extends State<LoginScreen> {
               },
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 50),
-                backgroundColor: Colors.green,
+                backgroundColor: const Color(0xFFC4A882),
+                foregroundColor: const Color(0xFFFFF8F0),
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                ),
               ),
-              child: const Text('Login'),
+              child: const Text('Sign In'),
             ),
         ],
       ),
@@ -205,12 +395,46 @@ class _LoginScreenState extends State<LoginScreen> {
       key: _formKey,
       child: Column(
         children: [
+          const Text(
+            'Create Account',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF5D4037),
+              letterSpacing: 0.5,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Register as a resident of Florence Homes',
+            style: TextStyle(
+              color: Color(0xFF8D6E63),
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 24),
+
           TextFormField(
             controller: _regNameController,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Full Name',
-              prefixIcon: Icon(Icons.person),
-              border: OutlineInputBorder(),
+              labelStyle: const TextStyle(color: Color(0xFF8D6E63), fontWeight: FontWeight.w500),
+              prefixIcon: const Icon(Icons.person_outline, color: Color(0xFFC4A882), size: 22),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFC4A882), width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
             validator: (value) {
               if (value == null || value.isEmpty) {
@@ -219,13 +443,29 @@ class _LoginScreenState extends State<LoginScreen> {
               return null;
             },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+
           TextFormField(
             controller: _regEmailController,
-            decoration: const InputDecoration(
-              labelText: 'Email',
-              prefixIcon: Icon(Icons.email),
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: 'Email Address',
+              labelStyle: const TextStyle(color: Color(0xFF8D6E63), fontWeight: FontWeight.w500),
+              prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFFC4A882), size: 22),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFC4A882), width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
             keyboardType: TextInputType.emailAddress,
             validator: (value) {
@@ -238,13 +478,31 @@ class _LoginScreenState extends State<LoginScreen> {
               return null;
             },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+
           TextFormField(
             controller: _regPasswordController,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Password',
-              prefixIcon: Icon(Icons.lock),
-              border: OutlineInputBorder(),
+              labelStyle: const TextStyle(color: Color(0xFF8D6E63), fontWeight: FontWeight.w500),
+              prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFFC4A882), size: 22),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFC4A882), width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              helperText: 'Minimum 6 characters',
+              helperStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 11),
             ),
             obscureText: true,
             validator: (value) {
@@ -257,13 +515,29 @@ class _LoginScreenState extends State<LoginScreen> {
               return null;
             },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+
           TextFormField(
             controller: _regConfirmPasswordController,
-            decoration: const InputDecoration(
+            decoration: InputDecoration(
               labelText: 'Confirm Password',
-              prefixIcon: Icon(Icons.lock_outline),
-              border: OutlineInputBorder(),
+              labelStyle: const TextStyle(color: Color(0xFF8D6E63), fontWeight: FontWeight.w500),
+              prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFFC4A882), size: 22),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFC4A882), width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
             obscureText: true,
             validator: (value) {
@@ -276,29 +550,67 @@ class _LoginScreenState extends State<LoginScreen> {
               return null;
             },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+
           TextFormField(
             controller: _regHouseController,
-            decoration: const InputDecoration(
-              labelText: 'House Number / Unit',
-              prefixIcon: Icon(Icons.home),
-              border: OutlineInputBorder(),
-              hintText: 'e.g., Block A, Lot 12, Unit 3',
+            decoration: InputDecoration(
+              labelText: 'House Number / Unit (Optional)',
+              labelStyle: const TextStyle(color: Color(0xFF8D6E63), fontWeight: FontWeight.w500),
+              prefixIcon: const Icon(Icons.home_outlined, color: Color(0xFFC4A882), size: 22),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFC4A882), width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              hintText: 'e.g., Block A, Lot 12',
+              hintStyle: const TextStyle(color: Color(0xFFD4C4A8), fontSize: 12),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
+
           TextFormField(
             controller: _regPhoneController,
-            decoration: const InputDecoration(
-              labelText: 'Phone Number',
-              prefixIcon: Icon(Icons.phone),
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: 'Phone Number (Optional)',
+              labelStyle: const TextStyle(color: Color(0xFF8D6E63), fontWeight: FontWeight.w500),
+              prefixIcon: const Icon(Icons.phone_outlined, color: Color(0xFFC4A882), size: 22),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Color(0xFFC4A882), width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
             ),
             keyboardType: TextInputType.phone,
           ),
           const SizedBox(height: 24),
+
           if (authProvider.isLoading)
-            const Center(child: CircularProgressIndicator())
+            const Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFC4A882)),
+              ),
+            )
           else
             ElevatedButton(
               onPressed: () async {
@@ -320,7 +632,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(result['message']),
-                        backgroundColor: Colors.green,
+                        backgroundColor: const Color(0xFF8D6E63),
+                        behavior: SnackBarBehavior.floating,
                       ),
                     );
 
@@ -337,7 +650,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(result['message']),
-                        backgroundColor: Colors.red,
+                        backgroundColor: const Color(0xFFD32F2F),
+                        behavior: SnackBarBehavior.floating,
                       ),
                     );
                   }
@@ -345,25 +659,22 @@ class _LoginScreenState extends State<LoginScreen> {
               },
               style: ElevatedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 50),
-                backgroundColor: Colors.green,
+                backgroundColor: const Color(0xFFC4A882),
+                foregroundColor: const Color(0xFFFFF8F0),
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  letterSpacing: 0.5,
+                ),
               ),
-              child: const Text('Register as Resident'),
+              child: const Text('Register'),
             ),
         ],
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
-    _regNameController.dispose();
-    _regEmailController.dispose();
-    _regPasswordController.dispose();
-    _regConfirmPasswordController.dispose();
-    _regHouseController.dispose();
-    _regPhoneController.dispose();
-    super.dispose();
   }
 }
