@@ -6,6 +6,9 @@ import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import '../../models/gate_entry_model.dart';
+import 'package:printing/printing.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 
 class GateEntriesHistory extends StatefulWidget {
   const GateEntriesHistory({super.key});
@@ -21,6 +24,10 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
   DateTimeRange? _dateRange;
   String _selectedResident = 'all';
   String _selectedEntryType = 'all';
+  List<GateEntryModel> _filteredEntries = [];
+  String _searchQuery = '';
+  DateTime? _specificDate;
+  TimeOfDay? _specificTime;
   List<String> _residents = [];
   Map<String, String> _residentNames = {};
   final TextEditingController _searchController = TextEditingController();
@@ -74,8 +81,167 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
       _entries = snapshot.docs.map((doc) {
         return GateEntryModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
       }).toList();
+      _applySearchFilter();
       _isLoading = false;
     });
+  }
+
+  void _applySearchFilter() {
+    List<GateEntryModel> temp = List.from(_entries);
+
+    // Search by resident name or visitor name
+    if (_searchQuery.isNotEmpty) {
+      temp = temp.where((entry) {
+        return entry.residentName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+            (entry.visitorName?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
+      }).toList();
+    }
+
+    // Filter by specific date
+    if (_specificDate != null) {
+      temp = temp.where((entry) {
+        return entry.timestamp.year == _specificDate!.year &&
+            entry.timestamp.month == _specificDate!.month &&
+            entry.timestamp.day == _specificDate!.day;
+      }).toList();
+    }
+
+    // Filter by specific time
+    if (_specificTime != null) {
+      temp = temp.where((entry) {
+        return entry.timestamp.hour == _specificTime!.hour &&
+            entry.timestamp.minute == _specificTime!.minute;
+      }).toList();
+    }
+
+    setState(() {
+      _filteredEntries = temp;
+    });
+  }
+
+  Future<void> _exportToPDF() async {
+    final pdf = pw.Document();
+    final now = DateTime.now();
+
+    String filterTitle = 'All Entries';
+    if (_dateRange != null) {
+      filterTitle = '${DateFormat('MMM dd, yyyy').format(_dateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(_dateRange!.end)}';
+    } else if (_specificDate != null) {
+      filterTitle = 'Date: ${DateFormat('MMM dd, yyyy').format(_specificDate!)}';
+    } else if (_specificTime != null) {
+      filterTitle = 'Time: ${_specificTime!.format(context)}';
+    } else if (_searchQuery.isNotEmpty) {
+      filterTitle = 'Search: $_searchQuery';
+    } else if (_selectedResident != 'all') {
+      filterTitle = 'Resident: ${_residentNames[_selectedResident] ?? 'Unknown'}';
+    } else if (_selectedEntryType != 'all') {
+      filterTitle = 'Type: ${_selectedEntryType.toUpperCase()}';
+    }
+
+    // Build table rows
+    final List<pw.TableRow> tableRows = [];
+
+    // Header
+    tableRows.add(
+      pw.TableRow(
+        decoration: pw.BoxDecoration(color: PdfColors.grey300),
+        children: [
+          pw.Padding(child: pw.Text('#', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), padding: const pw.EdgeInsets.all(8)),
+          pw.Padding(child: pw.Text('Date', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), padding: const pw.EdgeInsets.all(8)),
+          pw.Padding(child: pw.Text('Time', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), padding: const pw.EdgeInsets.all(8)),
+          pw.Padding(child: pw.Text('Resident', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), padding: const pw.EdgeInsets.all(8)),
+          pw.Padding(child: pw.Text('Type', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), padding: const pw.EdgeInsets.all(8)),
+          pw.Padding(child: pw.Text('Visitor', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), padding: const pw.EdgeInsets.all(8)),
+          pw.Padding(child: pw.Text('Status', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), padding: const pw.EdgeInsets.all(8)),
+        ],
+      ),
+    );
+
+    // Data rows - USING _filteredEntries
+    for (int i = 0; i < _filteredEntries.length; i++) {
+      final entry = _filteredEntries[i];
+      tableRows.add(
+        pw.TableRow(
+          children: [
+            pw.Padding(child: pw.Text('${i + 1}', style: const pw.TextStyle(fontSize: 9)), padding: const pw.EdgeInsets.all(6)),
+            pw.Padding(child: pw.Text(DateFormat('yyyy-MM-dd').format(entry.timestamp), style: const pw.TextStyle(fontSize: 9)), padding: const pw.EdgeInsets.all(6)),
+            pw.Padding(child: pw.Text(DateFormat('hh:mm a').format(entry.timestamp), style: const pw.TextStyle(fontSize: 9)), padding: const pw.EdgeInsets.all(6)),
+            pw.Padding(child: pw.Text(entry.residentName, style: const pw.TextStyle(fontSize: 9)), padding: const pw.EdgeInsets.all(6)),
+            pw.Padding(child: pw.Text(entry.entryType.toUpperCase(), style: const pw.TextStyle(fontSize: 9)), padding: const pw.EdgeInsets.all(6)),
+            pw.Padding(child: pw.Text(entry.visitorName ?? '-', style: const pw.TextStyle(fontSize: 9)), padding: const pw.EdgeInsets.all(6)),
+            pw.Padding(
+              child: pw.Text(
+                entry.status.toUpperCase(),
+                style: pw.TextStyle(
+                  fontSize: 9,
+                  fontWeight: pw.FontWeight.bold,
+                  color: entry.status == 'entry' ? PdfColors.green : PdfColors.red,
+                ),
+              ),
+              padding: const pw.EdgeInsets.all(6),
+            ),
+          ],
+        ),
+      );
+    }
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        orientation: pw.PageOrientation.portrait,
+        build: (pw.Context context) {
+          return [
+            pw.Header(
+              level: 0,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text('Florence Homes - Gate Entries Report', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 8),
+                  pw.Text('Generated: ${DateFormat('MMM dd, yyyy hh:mm a').format(now)}', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+                  pw.Text('Filter: $filterTitle', style: pw.TextStyle(fontSize: 10, color: PdfColors.blue)),
+                  pw.Text('Total Entries: ${_filteredEntries.length}', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                  pw.SizedBox(height: 16),
+                  pw.Divider(),
+                ],
+              ),
+            ),
+            pw.Table(border: pw.TableBorder.all(color: PdfColors.grey), children: tableRows),
+            pw.SizedBox(height: 20),
+            pw.Text('Summary', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+            pw.SizedBox(height: 8),
+            pw.Table(
+              border: pw.TableBorder.all(color: PdfColors.grey),
+              children: [
+                pw.TableRow(
+                  children: [
+                    pw.Padding(child: pw.Text('Total Entries', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), padding: const pw.EdgeInsets.all(6)),
+                    pw.Padding(child: pw.Text('${_filteredEntries.length}'), padding: const pw.EdgeInsets.all(6)),
+                    pw.Padding(child: pw.Text('RFID Scans', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), padding: const pw.EdgeInsets.all(6)),
+                    pw.Padding(child: pw.Text('${_filteredEntries.where((e) => e.entryType == 'rfid').length}'), padding: const pw.EdgeInsets.all(6)),
+                  ],
+                ),
+                pw.TableRow(
+                  children: [
+                    pw.Padding(child: pw.Text('QR Scans', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), padding: const pw.EdgeInsets.all(6)),
+                    pw.Padding(child: pw.Text('${_filteredEntries.where((e) => e.entryType.toLowerCase().contains('qr')).length}'), padding: const pw.EdgeInsets.all(6)),
+                    pw.Padding(child: pw.Text('Manual Entries', style: pw.TextStyle(fontWeight: pw.FontWeight.bold)), padding: const pw.EdgeInsets.all(6)),
+                    pw.Padding(child: pw.Text('${_filteredEntries.where((e) => e.entryType == 'manual').length}'), padding: const pw.EdgeInsets.all(6)),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 16),
+            pw.Text('Report generated by Florence Homes Gate System', style: pw.TextStyle(fontSize: 8, color: PdfColors.grey), textAlign: pw.TextAlign.center),
+          ];
+        },
+      ),
+    );
+
+    final output = await getTemporaryDirectory();
+    final file = File('${output.path}/gate_entries_${DateTime.now().millisecondsSinceEpoch}.pdf');
+    await file.writeAsBytes(await pdf.save());
+    await Share.shareXFiles([XFile(file.path)], text: 'Gate Entries Report');
   }
 
   Future<void> _exportToCSV() async {
@@ -83,7 +249,8 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
       ['Date', 'Time', 'Resident', 'Type', 'Visitor', 'Status']
     ];
 
-    for (var entry in _entries) {
+    // USING _filteredEntries (hindi _entries)
+    for (var entry in _filteredEntries) {
       rows.add([
         DateFormat('yyyy-MM-dd').format(entry.timestamp),
         DateFormat('HH:mm:ss').format(entry.timestamp),
@@ -103,6 +270,11 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
 
   @override
   Widget build(BuildContext context) {
+    // Use filtered entries for stats and list
+    final totalEntries = _filteredEntries.length;
+    final rfidEntries = _filteredEntries.where((e) => e.entryType == 'rfid').length;
+    final qrEntries = _filteredEntries.where((e) => e.entryType.toLowerCase().contains('qr')).length;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Gate Entries History'),
@@ -111,6 +283,10 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
           IconButton(
             icon: const Icon(Icons.filter_list),
             onPressed: _showFilterDialog,
+          ),
+          IconButton(
+            icon: const Icon(Icons.picture_as_pdf),
+            onPressed: _exportToPDF,
           ),
           IconButton(
             icon: const Icon(Icons.download),
@@ -124,6 +300,81 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
       ),
       body: Column(
         children: [
+          // ========== NEW: SEARCH BAR ==========
+          Padding(
+            padding: const EdgeInsets.all(12),
+            child: TextField(
+              decoration: InputDecoration(
+                hintText: 'Search by resident or visitor name...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    setState(() {
+                      _searchQuery = '';
+                    });
+                    _applySearchFilter();
+                  },
+                )
+                    : null,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
+                _applySearchFilter();
+              },
+            ),
+          ),
+
+          // ========== NEW: DATE & TIME FILTER BUTTONS ==========
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _showDateFilterDialog,
+                    icon: const Icon(Icons.date_range, size: 18),
+                    label: Text(_specificDate != null
+                        ? DateFormat('MMM dd, yyyy').format(_specificDate!)
+                        : 'Specific Date'),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.grey.shade400),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: _showTimeFilterDialog,
+                    icon: const Icon(Icons.access_time, size: 18),
+                    label: Text(_specificTime != null
+                        ? _specificTime!.format(context)
+                        : 'Specific Time'),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: Colors.grey.shade400),
+                    ),
+                  ),
+                ),
+                if (_specificDate != null || _specificTime != null || _searchQuery.isNotEmpty)
+                  TextButton(
+                    onPressed: _clearAllFilters,
+                    child: const Text('Clear Filters'),
+                  ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          // ========== EXISTING: ACTIVE FILTERS DISPLAY (Date Range, Resident, Entry Type) ==========
           if (_dateRange != null || _selectedResident != 'all' || _selectedEntryType != 'all')
             Container(
               padding: const EdgeInsets.all(12),
@@ -183,7 +434,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
               ),
             ),
 
-          // Stats
+          // ========== UPDATED STATS (using _filteredEntries) ==========
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Row(
@@ -191,7 +442,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                 Expanded(
                   child: _buildStatCard(
                     'Total Entries',
-                    _entries.length.toString(),
+                    totalEntries.toString(),
                     Icons.door_front_door,
                     Colors.blue,
                   ),
@@ -200,7 +451,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                 Expanded(
                   child: _buildStatCard(
                     'RFID Scans',
-                    _entries.where((e) => e.entryType == 'rfid').length.toString(),
+                    rfidEntries.toString(),
                     Icons.nfc,
                     Colors.green,
                   ),
@@ -209,7 +460,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                 Expanded(
                   child: _buildStatCard(
                     'QR Scans',
-                    _entries.where((e) => e.entryType == 'qr').length.toString(),
+                    qrEntries.toString(),
                     Icons.qr_code,
                     Colors.purple,
                   ),
@@ -218,11 +469,11 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
             ),
           ),
 
-          // Entries List
+          // ========== UPDATED ENTRIES LIST (using _filteredEntries) ==========
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
-                : _entries.isEmpty
+                : _filteredEntries.isEmpty
                 ? const Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -235,9 +486,9 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
             )
                 : ListView.builder(
               padding: const EdgeInsets.all(16),
-              itemCount: _entries.length,
+              itemCount: _filteredEntries.length,
               itemBuilder: (context, index) {
-                final entry = _entries[index];
+                final entry = _filteredEntries[index];
                 return Card(
                   margin: const EdgeInsets.only(bottom: 12),
                   child: ListTile(
@@ -291,6 +542,46 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
         ],
       ),
     );
+  }
+
+  Future<void> _showDateFilterDialog() async {
+    final picked = await showDatePicker(
+      context: context,
+      firstDate: DateTime(2024),
+      lastDate: DateTime.now(),
+      initialDate: _specificDate ?? DateTime.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _specificDate = picked;
+      });
+      _applySearchFilter();
+    }
+  }
+
+  Future<void> _showTimeFilterDialog() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _specificTime ?? TimeOfDay.now(),
+    );
+    if (picked != null) {
+      setState(() {
+        _specificTime = picked;
+      });
+      _applySearchFilter();
+    }
+  }
+
+  void _clearAllFilters() {
+    setState(() {
+      _searchQuery = '';
+      _specificDate = null;
+      _specificTime = null;
+      _dateRange = null;
+      _selectedResident = 'all';
+      _selectedEntryType = 'all';
+    });
+    _loadEntries();
   }
 
   Widget _buildStatCard(String title, String value, IconData icon, Color color) {

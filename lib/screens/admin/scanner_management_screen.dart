@@ -4,6 +4,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/background_nfc_service.dart';
 import 'package:intl/intl.dart';
+import 'camera_qr_scanner_screen.dart';
+
 class ScannerManagementScreen extends StatefulWidget {
   const ScannerManagementScreen({super.key});
 
@@ -281,6 +283,7 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen> {
               ),
             ],
 
+
             const SizedBox(height: 24),
 
             // Other Scanner Types (UI only)
@@ -288,6 +291,74 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen> {
               'External Scanners',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
+
+            const SizedBox(height: 12),
+
+// ============================================================
+// CAMERA QR SCANNER (CLICKABLE CARD)
+// ============================================================
+            Card(
+              elevation: 2,
+              child: InkWell(
+                onTap: () async {
+                  final result = await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const CameraQRScannerScreen(),
+                    ),
+                  );
+                  if (result == true) {
+                    setState(() {});
+                  }
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Padding(
+                  padding: const EdgeInsets.all(12.0),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.qr_code_scanner, color: Colors.purple, size: 30),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Camera QR Scanner',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const Text(
+                              'Scan visitor QR codes using camera',
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'Tap to scan',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.purple,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios, size: 16, color: Colors.grey),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+
+
             const SizedBox(height: 12),
 
             // Bluetooth Scanner

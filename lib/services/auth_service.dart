@@ -1,4 +1,4 @@
-// lib/services/auth_service.dart - Complete file with auto admin creation
+// lib/services/auth_service.dart - With Email Verification
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
@@ -17,7 +17,6 @@ class AuthService {
       if (email.toLowerCase().trim() == adminEmail.toLowerCase() && password == adminPassword) {
         print('Attempting admin login...');
 
-        // Try to sign in with Firebase
         UserCredential? userCredential;
         bool isNewAdmin = false;
 
@@ -27,9 +26,17 @@ class AuthService {
             password: adminPassword,
           );
           print('Admin signed in successfully');
+
+          // ✅ CHECK: Admin email verification (auto-verify admin)
+          if (!userCredential.user!.emailVerified) {
+            // Auto-verify admin (bypass email verification for admin)
+            print('Auto-verifying admin email...');
+            // Note: You can't directly set emailVerified to true from client side
+            // Admin should verify email once or use email link sign-in
+          }
+
         } catch (e) {
           print('Admin not found, creating new account...');
-          // Admin doesn't exist, create it
           try {
             userCredential = await _auth.createUserWithEmailAndPassword(
               email: adminEmail,
@@ -49,7 +56,6 @@ class AuthService {
         if (userCredential != null) {
           String userId = userCredential.user!.uid;
 
-          // Check if admin exists in Firestore
           DocumentSnapshot adminDoc = await _firestore.collection('users').doc(userId).get();
 
           if (!adminDoc.exists || isNewAdmin) {
@@ -86,6 +92,22 @@ class AuthService {
         password: password,
       );
 
+      // ✅ CHECK IF EMAIL IS VERIFIED
+      User? user = userCredential.user;
+      await user?.reload(); // Refresh user data
+      user = _auth.currentUser;
+
+      if (user != null && !user.emailVerified) {
+        // Send new verification email
+        await user.sendEmailVerification();
+        await _auth.signOut();
+        return {
+          'success': false,
+          'message': 'Please verify your email first. A verification email has been sent to $email',
+          'requiresVerification': true,
+        };
+      }
+
       String userId = userCredential.user!.uid;
       DocumentSnapshot userDoc = await _firestore.collection('users').doc(userId).get();
 
@@ -107,11 +129,11 @@ class AuthService {
         };
       }
 
-      UserModel user = UserModel.fromMap(userId, userDoc.data() as Map<String, dynamic>);
+      UserModel userModel = UserModel.fromMap(userId, userDoc.data() as Map<String, dynamic>);
 
       return {
         'success': true,
-        'user': user,
+        'user': userModel,
       };
     } catch (e) {
       print('Login error: $e');
@@ -122,7 +144,7 @@ class AuthService {
     }
   }
 
-  // Register new user (residents only)
+  // Register new user (residents only) WITH EMAIL VERIFICATION
   Future<Map<String, dynamic>> registerUser(
       String email,
       String password,
@@ -140,6 +162,7 @@ class AuthService {
         };
       }
 
+      // 1. Create user in Firebase Auth
       UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
         email: email,
         password: password,
@@ -147,6 +170,11 @@ class AuthService {
 
       String userId = userCredential.user!.uid;
 
+      // 2. Send email verification
+      await userCredential.user!.sendEmailVerification();
+      print('Verification email sent to $email');
+
+      // 3. Save user to Firestore (with emailVerified: false)
       UserModel user = UserModel(
         id: userId,
         email: email,
@@ -160,17 +188,59 @@ class AuthService {
 
       await _firestore.collection('users').doc(userId).set(user.toMap());
 
+      // 4. Sign out immediately (user must verify email first)
+      await _auth.signOut();
+
       return {
         'success': true,
-        'message': 'Registration successful. Waiting for admin approval.',
+        'message': 'Registration successful! Please check your email to verify your account. After verification, wait for admin approval.',
         'userId': userId,
+        'requiresVerification': true,
       };
     } catch (e) {
+      print('Registration error: $e');
       return {
         'success': false,
         'message': e.toString(),
       };
     }
+  }
+
+  // ✅ NEW: Resend verification email
+  Future<Map<String, dynamic>> resendVerificationEmail(String email) async {
+    try {
+      // Sign in temporarily to resend
+      // Note: You might need to implement this differently
+      User? user = _auth.currentUser;
+      if (user != null && user.email == email && !user.emailVerified) {
+        await user.sendEmailVerification();
+        return {
+          'success': true,
+          'message': 'Verification email sent to $email',
+        };
+      }
+
+      return {
+        'success': false,
+        'message': 'Unable to send verification email. Please try registering again.',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Error: $e',
+      };
+    }
+  }
+
+  // ✅ NEW: Check if email is verified
+  Future<bool> isEmailVerified() async {
+    User? user = _auth.currentUser;
+    if (user != null) {
+      await user.reload();
+      user = _auth.currentUser;
+      return user?.emailVerified ?? false;
+    }
+    return false;
   }
 
   // Approve user (admin only)

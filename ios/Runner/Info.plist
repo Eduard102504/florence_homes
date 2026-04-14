@@ -17,7 +17,7 @@
 	<key>CFBundleName</key>
 	<string>florence_homes</string>
 	<key>CFBundlePackageType</key>
-	<string>APPL</string>
+	<string>APPLE</string>
 	<key>CFBundleShortVersionString</key>
 	<string>$(FLUTTER_BUILD_NAME)</string>
 	<key>CFBundleSignature</key>
@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+
+	<!-- Camera Permission for QR Scanner -->
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access to scan QR codes for gate entry</string>
 </dict>
 </plist>

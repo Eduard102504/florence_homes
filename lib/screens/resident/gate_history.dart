@@ -29,21 +29,59 @@ class _GateHistoryState extends State<GateHistory> {
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final residentId = authProvider.currentUser?.id;
 
-    if (residentId == null) return;
+    if (residentId == null) {
+      setState(() => _isLoading = false);
+      return;
+    }
 
-    QuerySnapshot snapshot = await _firestore
-        .collection('gate_entries')
-        .where('residentId', isEqualTo: residentId)
-        .orderBy('timestamp', descending: true)
-        .limit(50)
-        .get();
+    print('Loading gate history for resident: $residentId');
 
-    setState(() {
-      _entries = snapshot.docs.map((doc) {
+    try {
+      // Get entries without orderBy
+      QuerySnapshot snapshot = await _firestore
+          .collection('gate_entries')
+          .where('residentId', isEqualTo: residentId)
+          .limit(50)
+          .get();
+
+      print('Found ${snapshot.docs.length} entries');
+
+      // Convert to models
+      List<GateEntryModel> entries = snapshot.docs.map((doc) {
         return GateEntryModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
       }).toList();
-      _isLoading = false;
-    });
+
+      // Sort manually (newest first)
+      entries.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+
+      setState(() {
+        _entries = entries;
+        _isLoading = false;
+      });
+
+    } catch (e) {
+      print('Error loading gate history: $e');
+      setState(() {
+        _isLoading = false;
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error loading history: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  String _getDisplayEntryType(String type) {
+    final lowerType = type.toLowerCase();
+    if (lowerType == 'qr_resident') return 'QR (Self)';
+    if (lowerType == 'qr_visitor') return 'QR (Visitor)';
+    if (lowerType == 'rfid') return 'RFID';
+    if (lowerType == 'manual') return 'Manual Entry';
+    return type.toUpperCase();
   }
 
   @override
@@ -92,22 +130,29 @@ class _GateHistoryState extends State<GateHistory> {
                   color: Colors.white,
                 ),
               ),
-              title: Text(entry.entryType.toUpperCase()),
-              subtitle: Text(
-                DateFormat('MMM dd, yyyy • hh:mm a').format(entry.timestamp),
+              title: Text(_getDisplayEntryType(entry.entryType)),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    DateFormat('MMM dd, yyyy • hh:mm a').format(entry.timestamp),
+                  ),
+                  if (entry.visitorName != null)
+                    Text('Visitor: ${entry.visitorName}'),
+                ],
               ),
               trailing: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
-                  color: entry.status == 'entry'
+                  color: entry.status == 'success' || entry.status == 'entry'
                       ? Colors.green.shade50
                       : Colors.red.shade50,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  entry.status.toUpperCase(),
+                  (entry.status == 'success' || entry.status == 'entry' ? 'ENTRY' : entry.status).toUpperCase(),
                   style: TextStyle(
-                    color: entry.status == 'entry' ? Colors.green : Colors.red,
+                    color: entry.status == 'success' || entry.status == 'entry' ? Colors.green : Colors.red,
                     fontSize: 12,
                   ),
                 ),
@@ -120,28 +165,18 @@ class _GateHistoryState extends State<GateHistory> {
   }
 
   IconData _getTypeIcon(String type) {
-    switch (type) {
-      case 'rfid':
-        return Icons.nfc;
-      case 'qr':
-        return Icons.qr_code;
-      case 'manual':
-        return Icons.person;
-      default:
-        return Icons.door_front_door;
-    }
+    final lowerType = type.toLowerCase();
+    if (lowerType.contains('rfid')) return Icons.nfc;
+    if (lowerType.contains('qr')) return Icons.qr_code;
+    if (lowerType == 'manual') return Icons.person;
+    return Icons.door_front_door;
   }
 
   Color _getTypeColor(String type) {
-    switch (type) {
-      case 'rfid':
-        return Colors.green;
-      case 'qr':
-        return Colors.purple;
-      case 'manual':
-        return Colors.orange;
-      default:
-        return Colors.blue;
-    }
+    final lowerType = type.toLowerCase();
+    if (lowerType.contains('rfid')) return Colors.green;
+    if (lowerType.contains('qr')) return Colors.purple;
+    if (lowerType == 'manual') return Colors.orange;
+    return Colors.blue;
   }
 }

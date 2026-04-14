@@ -180,12 +180,17 @@ class _LoginScreenState extends State<LoginScreen> {
                       Navigator.pushReplacementNamed(context, '/resident');
                     }
                   } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Invalid email or password'),
-                        backgroundColor: Colors.red,
-                      ),
-                    );
+                    // ✅ CHECK IF VERIFICATION IS NEEDED
+                    if (authProvider.requiresVerification) {
+                      _showVerificationDialog(_emailController.text, authProvider);
+                    } else {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Invalid email or password'),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
                   }
                 }
               },
@@ -195,6 +200,92 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               child: const Text('Login'),
             ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ NEW METHOD: Show verification dialog
+  void _showVerificationDialog(String email, AuthProvider authProvider) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.email, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Email Verification Required'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Please verify your email address before logging in.',
+              style: TextStyle(fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.mail_outline, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      email,
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              '📧 Check your inbox (including Spam folder)',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const Text(
+              '🔗 Click the verification link in the email',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+            const Text(
+              '✅ After verification, try logging in again',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              authProvider.clearVerificationFlag();
+            },
+            child: const Text('OK'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              final result = await authProvider.resendVerificationEmail(email);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(result['message']),
+                  backgroundColor: result['success'] ? Colors.green : Colors.red,
+                  duration: const Duration(seconds: 3),
+                ),
+              );
+              if (result['success']) {
+                authProvider.clearVerificationFlag();
+              }
+            },
+            child: const Text('Resend Email'),
+          ),
         ],
       ),
     );
@@ -317,12 +408,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   );
 
                   if (result['success']) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(result['message']),
-                        backgroundColor: Colors.green,
-                      ),
-                    );
+                    // ✅ Show success message with verification instructions
+                    _showRegistrationSuccessDialog(result['message']);
 
                     setState(() {
                       _isRegistering = false;
@@ -349,6 +436,46 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               child: const Text('Register as Resident'),
             ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ NEW METHOD: Show registration success dialog
+  void _showRegistrationSuccessDialog(String message) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green),
+            SizedBox(width: 8),
+            Text('Registration Successful!'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(message),
+            const SizedBox(height: 16),
+            const Text(
+              'Next steps:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text('1️⃣ Check your email for verification link'),
+            const Text('2️⃣ Click the link to verify your email'),
+            const Text('3️⃣ Wait for admin approval'),
+            const Text('4️⃣ Login to the app'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
         ],
       ),
     );

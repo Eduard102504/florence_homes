@@ -41,46 +41,54 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyABntTAi9jhJ2gDZ4xPYyFXehZxTKC8Avg',
-    appId: '1:748107057461:web:ae43bcde876c9a2023247c',
-    messagingSenderId: '748107057461',
-    projectId: 'florencehomes-95f02',
-    authDomain: 'florencehomes-95f02.firebaseapp.com',
-    storageBucket: 'florencehomes-95f02.firebasestorage.app',
+    apiKey: 'AIzaSyDidjmizHdbsNh3KUKpxODfTEmcLH93GuA',
+    appId: '1:540264056673:web:1420910872d6e8d3bc2720',
+    messagingSenderId: '540264056673',
+    projectId: 'florencehomes-12a57',
+    authDomain: 'florencehomes-12a57.firebaseapp.com',
+    databaseURL: 'https://florencehomes-12a57-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'florencehomes-12a57.firebasestorage.app',
+    measurementId: 'G-78WTF0C50R',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyD20PxrcC_2mZFSTZoeDDfmv06JgSKxMrg',
-    appId: '1:748107057461:android:964ad752b467511723247c',
-    messagingSenderId: '748107057461',
-    projectId: 'florencehomes-95f02',
-    storageBucket: 'florencehomes-95f02.firebasestorage.app',
+    apiKey: 'AIzaSyB7JRxtEp6mlPAh_4fA5ExzZRPD2U0Jk4k',
+    appId: '1:540264056673:android:6b66f5f3fdb5cad7bc2720',
+    messagingSenderId: '540264056673',
+    projectId: 'florencehomes-12a57',
+    databaseURL: 'https://florencehomes-12a57-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'florencehomes-12a57.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDk1U-9ECRgQdIi_GDdX7dfr-Zpyorizxk',
-    appId: '1:748107057461:ios:deac99393a70c76a23247c',
-    messagingSenderId: '748107057461',
-    projectId: 'florencehomes-95f02',
-    storageBucket: 'florencehomes-95f02.firebasestorage.app',
+    apiKey: 'AIzaSyCZGQ5r1QvkL-U1kVrpTW1amLzNmBu6zLQ',
+    appId: '1:540264056673:ios:78ad13cf67abb808bc2720',
+    messagingSenderId: '540264056673',
+    projectId: 'florencehomes-12a57',
+    databaseURL: 'https://florencehomes-12a57-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'florencehomes-12a57.firebasestorage.app',
     iosBundleId: 'com.florence.homes',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyDk1U-9ECRgQdIi_GDdX7dfr-Zpyorizxk',
-    appId: '1:748107057461:ios:a8d1cfea982a105623247c',
-    messagingSenderId: '748107057461',
-    projectId: 'florencehomes-95f02',
-    storageBucket: 'florencehomes-95f02.firebasestorage.app',
+    apiKey: 'AIzaSyCZGQ5r1QvkL-U1kVrpTW1amLzNmBu6zLQ',
+    appId: '1:540264056673:ios:d942ca2f16946371bc2720',
+    messagingSenderId: '540264056673',
+    projectId: 'florencehomes-12a57',
+    databaseURL: 'https://florencehomes-12a57-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'florencehomes-12a57.firebasestorage.app',
     iosBundleId: 'com.example.florenceHomes',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyABntTAi9jhJ2gDZ4xPYyFXehZxTKC8Avg',
-    appId: '1:748107057461:web:7732ad3606008def23247c',
-    messagingSenderId: '748107057461',
-    projectId: 'florencehomes-95f02',
-    authDomain: 'florencehomes-95f02.firebaseapp.com',
-    storageBucket: 'florencehomes-95f02.firebasestorage.app',
+    apiKey: 'AIzaSyDidjmizHdbsNh3KUKpxODfTEmcLH93GuA',
+    appId: '1:540264056673:web:dcc3d55fa58d2511bc2720',
+    messagingSenderId: '540264056673',
+    projectId: 'florencehomes-12a57',
+    authDomain: 'florencehomes-12a57.firebaseapp.com',
+    databaseURL: 'https://florencehomes-12a57-default-rtdb.asia-southeast1.firebasedatabase.app',
+    storageBucket: 'florencehomes-12a57.firebasestorage.app',
+    measurementId: 'G-TKD70SYDD5',
   );
+
 }

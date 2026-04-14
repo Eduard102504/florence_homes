@@ -17,7 +17,7 @@ class AdminDashboard extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Admin Dashboard'),
-        backgroundColor: Colors.green,
+        backgroundColor: Colors.green, centerTitle: true,
         actions: [
           IconButton(
             icon: const Icon(Icons.logout),
@@ -42,8 +42,12 @@ class AdminDashboard extends StatelessWidget {
                     Text(
                       'Welcome, ${authProvider.currentUser?.fullName ?? 'Admin'}!',
                       style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                      textAlign: TextAlign.center,
                     ),
-                    const Text('Manage residents, gate access, and view reports'),
+                    const Text(
+                      'Manage residents, gate access, and view reports',
+                      textAlign: TextAlign.center,
+                    ),
                   ],
                 ),
               ),
