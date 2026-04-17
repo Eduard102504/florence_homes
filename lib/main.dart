@@ -7,11 +7,11 @@ import 'screens/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/resident/resident_dashboard.dart';
+import 'screens/camera_qr_scanner_screen.dart';  // ← IMPORTANTE ITO
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Firebase with your options
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
@@ -41,6 +41,7 @@ class MyApp extends StatelessWidget {
           '/login': (context) => const LoginScreen(),
           '/admin': (context) => const AdminDashboard(),
           '/resident': (context) => const ResidentDashboard(),
+          '/qr_scanner': (context) => const CameraQRScannerScreen(),  // ← IMPORTANTE ITO
         },
       ),
     );

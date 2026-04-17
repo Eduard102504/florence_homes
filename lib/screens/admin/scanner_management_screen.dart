@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/background_nfc_service.dart';
 import 'package:intl/intl.dart';
+import 'camera_qr_scanner_screen.dart';
 
 class ScannerManagementScreen extends StatefulWidget {
   const ScannerManagementScreen({super.key});
@@ -373,7 +374,7 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen> {
                   const SizedBox(height: 16),
                 ],
 
-                // External Scanners
+                // External Scanners Title
                 Row(
                   children: [
                     Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: const Color(0xFFD4C4A8).withOpacity(0.3), borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.devices, color: Color(0xFF8D6E63), size: 18)),
@@ -381,35 +382,294 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen> {
                     const Text('External Scanners', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F))),
                   ],
                 ),
+                const SizedBox(height: 20),
+
+                // CAMERA QR SCANNER - MANUAL ADD (SURE NA LALABAS)
+                GestureDetector(
+                  onTap: () async {
+                    print("🎯 CAMERA QR SCANNER TAPPED!");
+                    final result = await Navigator.pushNamed(
+                      context,
+                      '/qr_scanner',
+                    );
+                    if (result != null) {
+                      print("✅ SCAN RESULT: $result");
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('QR Code scanned successfully!'),
+                          backgroundColor: Color(0xFF8D6E63),
+                        ),
+                      );
+                      setState(() {});
+                    }
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Colors.purple, Colors.deepPurple],
+                      ),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.purple.withOpacity(0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 5),
+                        ),
+                      ],
+                    ),
+                    child: Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white.withOpacity(0.3), width: 1),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.qr_code_scanner, size: 40, color: Colors.white),
+                          SizedBox(width: 20),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Camera QR Scanner',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                SizedBox(height: 4),
+                                Text(
+                                  'Tap to scan visitor QR codes',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: Colors.white70,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Icon(Icons.arrow_forward_ios, color: Colors.white),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
                 const SizedBox(height: 10),
 
-                _buildScannerCard(title: 'Bluetooth', icon: Icons.bluetooth, emoji: '🔷', color: const Color(0xFF8D6E63), enabled: _bluetoothEnabled, onChanged: (v) async { setState(() => _bluetoothEnabled = v); await _saveSetting('bt_scanner', v); }, subtitle: 'Wireless RFID scanners', status: _bluetoothEnabled ? '✓ Ready' : '○ Disabled'),
+                // Bluetooth Scanner
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [BoxShadow(color: const Color(0xFFD4C4A8).withOpacity(0.15), blurRadius: 6)],
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [const Color(0xFF8D6E63), const Color(0xFF8D6E63).withOpacity(0.7)],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              children: [
+                                Text('🔷', style: TextStyle(fontSize: 14)),
+                                SizedBox(width: 2),
+                                Icon(Icons.bluetooth, color: Color(0xFFFFF8F0), size: 16),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Bluetooth', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F))),
+                                const Text('Wireless RFID scanners', style: TextStyle(fontSize: 10, color: Color(0xFFB8A99A))),
+                                Text(_bluetoothEnabled ? '✓ Ready' : '○ Disabled', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: _bluetoothEnabled ? const Color(0xFF8D6E63) : const Color(0xFFB8A99A))),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: _bluetoothEnabled,
+                            onChanged: (v) async {
+                              setState(() => _bluetoothEnabled = v);
+                              await _saveSetting('bt_scanner', v);
+                            },
+                            activeColor: const Color(0xFF8D6E63),
+                            activeTrackColor: const Color(0xFFD4C4A8),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
                 const SizedBox(height: 10),
-                _buildScannerCard(title: 'USB Scanner', icon: Icons.usb, emoji: '🔌', color: const Color(0xFFB8A99A), enabled: _usbEnabled, onChanged: (v) async { setState(() => _usbEnabled = v); await _saveSetting('usb_scanner', v); }, subtitle: 'USB-OTG connection', status: _usbEnabled ? '✓ Waiting' : '○ Disabled'),
+
+                // USB Scanner
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [BoxShadow(color: const Color(0xFFD4C4A8).withOpacity(0.15), blurRadius: 6)],
+                  ),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: [const Color(0xFFB8A99A), const Color(0xFFB8A99A).withOpacity(0.7)],
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Row(
+                              children: [
+                                Text('🔌', style: TextStyle(fontSize: 14)),
+                                SizedBox(width: 2),
+                                Icon(Icons.usb, color: Color(0xFFFFF8F0), size: 16),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('USB Scanner', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F))),
+                                const Text('USB-OTG connection', style: TextStyle(fontSize: 10, color: Color(0xFFB8A99A))),
+                                Text(_usbEnabled ? '✓ Waiting' : '○ Disabled', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: _usbEnabled ? const Color(0xFF8D6E63) : const Color(0xFFB8A99A))),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: _usbEnabled,
+                            onChanged: (v) async {
+                              setState(() => _usbEnabled = v);
+                              await _saveSetting('usb_scanner', v);
+                            },
+                            activeColor: const Color(0xFF8D6E63),
+                            activeTrackColor: const Color(0xFFD4C4A8),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
                 const SizedBox(height: 10),
 
                 // Network Scanner
                 Container(
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: [BoxShadow(color: const Color(0xFFD4C4A8).withOpacity(0.15), blurRadius: 6)]),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [BoxShadow(color: const Color(0xFFD4C4A8).withOpacity(0.15), blurRadius: 6)],
+                  ),
                   child: Container(
-                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5)),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5),
+                    ),
                     child: ExpansionTile(
-                      leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFD4C4A8), Color(0xFFC4A882)]), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.wifi, color: Color(0xFFFFF8F0), size: 20)),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(colors: [Color(0xFFD4C4A8), Color(0xFFC4A882)]),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.wifi, color: Color(0xFFFFF8F0), size: 20),
+                      ),
                       title: const Text('🌐 Network Scanner', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F), fontSize: 13)),
-                      subtitle: Text(_networkEnabled ? '✓ Connected to $_networkIp' : '○ Disabled', style: TextStyle(color: _networkEnabled ? const Color(0xFF8D6E63) : const Color(0xFFB8A99A), fontSize: 10)),
+                      subtitle: Text(
+                        _networkEnabled ? '✓ Connected to $_networkIp' : '○ Disabled',
+                        style: TextStyle(color: _networkEnabled ? const Color(0xFF8D6E63) : const Color(0xFFB8A99A), fontSize: 10),
+                      ),
                       children: [
                         Padding(
                           padding: const EdgeInsets.all(12),
                           child: Column(
                             children: [
-                              SwitchListTile(title: const Text('Enable', style: TextStyle(color: Color(0xFF6B5B4F), fontSize: 12)), value: _networkEnabled, onChanged: (v) async { setState(() => _networkEnabled = v); await _saveSetting('net_scanner', v); }, activeColor: const Color(0xFF8D6E63)),
+                              SwitchListTile(
+                                title: const Text('Enable', style: TextStyle(color: Color(0xFF6B5B4F), fontSize: 12)),
+                                value: _networkEnabled,
+                                onChanged: (v) async {
+                                  setState(() => _networkEnabled = v);
+                                  await _saveSetting('net_scanner', v);
+                                },
+                                activeColor: const Color(0xFF8D6E63),
+                              ),
                               if (_networkEnabled) ...[
                                 const SizedBox(height: 8),
-                                TextField(decoration: InputDecoration(labelText: 'IP Address', labelStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 11), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: const Color(0xFFFFF8F0), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)), onChanged: (v) => _networkIp = v),
+                                TextField(
+                                  decoration: InputDecoration(
+                                    labelText: 'IP Address',
+                                    labelStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 11),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                    filled: true,
+                                    fillColor: const Color(0xFFFFF8F0),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
+                                  onChanged: (v) => _networkIp = v,
+                                ),
                                 const SizedBox(height: 8),
-                                TextField(decoration: InputDecoration(labelText: 'Port', labelStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 11), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), filled: true, fillColor: const Color(0xFFFFF8F0), contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)), keyboardType: TextInputType.number, onChanged: (v) => _networkPort = v),
+                                TextField(
+                                  decoration: InputDecoration(
+                                    labelText: 'Port',
+                                    labelStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 11),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                                    filled: true,
+                                    fillColor: const Color(0xFFFFF8F0),
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                  ),
+                                  keyboardType: TextInputType.number,
+                                  onChanged: (v) => _networkPort = v,
+                                ),
                                 const SizedBox(height: 12),
-                                ElevatedButton.icon(onPressed: () async { if (_networkIp != null) { await _saveSetting('network_ip', _networkIp); await _saveSetting('network_port', _networkPort); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Connecting...'), backgroundColor: Color(0xFF8D6E63), behavior: SnackBarBehavior.floating)); } }, icon: const Icon(Icons.link, size: 14), label: const Text('Connect', style: TextStyle(fontSize: 12)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4C4A8), foregroundColor: const Color(0xFF6B5B4F), padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))),
+                                ElevatedButton.icon(
+                                  onPressed: () async {
+                                    if (_networkIp != null) {
+                                      await _saveSetting('network_ip', _networkIp);
+                                      await _saveSetting('network_port', _networkPort);
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Connecting...'),
+                                          backgroundColor: Color(0xFF8D6E63),
+                                          behavior: SnackBarBehavior.floating,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(Icons.link, size: 14),
+                                  label: const Text('Connect', style: TextStyle(fontSize: 12)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFFD4C4A8),
+                                    foregroundColor: const Color(0xFF6B5B4F),
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                ),
                               ],
                             ],
                           ),
@@ -423,15 +683,32 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen> {
 
                 // Auto Gate Control
                 Container(
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: [BoxShadow(color: const Color(0xFFD4C4A8).withOpacity(0.15), blurRadius: 6)]),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(18),
+                    boxShadow: [BoxShadow(color: const Color(0xFFD4C4A8).withOpacity(0.15), blurRadius: 6)],
+                  ),
                   child: Container(
-                    decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5)),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5),
+                    ),
                     child: SwitchListTile(
                       title: const Text('🚪 Auto Gate Control', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F), fontSize: 13)),
                       subtitle: const Text('Auto-open gate on success', style: TextStyle(color: Color(0xFFB8A99A), fontSize: 11)),
                       value: _autoGate,
-                      onChanged: (v) async { setState(() => _autoGate = v); await _saveSetting('auto_gate', v); },
-                      secondary: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFD4C4A8), Color(0xFFC4A882)]), borderRadius: BorderRadius.circular(12)), child: Icon(Icons.door_front_door, color: _autoGate ? const Color(0xFFFFF8F0) : const Color(0xFFE0D5C1), size: 20)),
+                      onChanged: (v) async {
+                        setState(() => _autoGate = v);
+                        await _saveSetting('auto_gate', v);
+                      },
+                      secondary: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(colors: [Color(0xFFD4C4A8), Color(0xFFC4A882)]),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(Icons.door_front_door, color: _autoGate ? const Color(0xFFFFF8F0) : const Color(0xFFE0D5C1), size: 20),
+                      ),
                       activeColor: const Color(0xFF8D6E63),
                     ),
                   ),
@@ -440,26 +717,6 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen> {
                 const SizedBox(height: 20),
               ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildScannerCard({required String title, required IconData icon, required String emoji, required Color color, required bool enabled, required Function(bool)? onChanged, required String subtitle, required String status}) {
-    return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: [BoxShadow(color: const Color(0xFFD4C4A8).withOpacity(0.15), blurRadius: 6)]),
-      child: Container(
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5)),
-        child: Padding(
-          padding: const EdgeInsets.all(12.0),
-          child: Row(
-            children: [
-              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(gradient: LinearGradient(colors: [color, color.withOpacity(0.7)]), borderRadius: BorderRadius.circular(12)), child: Row(children: [Text(emoji, style: const TextStyle(fontSize: 14)), const SizedBox(width: 2), Icon(icon, color: const Color(0xFFFFF8F0), size: 16)])),
-              const SizedBox(width: 10),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F))), Text(subtitle, style: TextStyle(fontSize: 10, color: const Color(0xFFB8A99A))), Text(status, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: enabled ? const Color(0xFF8D6E63) : const Color(0xFFB8A99A)))])),
-              Switch(value: enabled, onChanged: onChanged, activeColor: const Color(0xFF8D6E63), activeTrackColor: const Color(0xFFD4C4A8)),
-            ],
           ),
         ),
       ),

@@ -1,13 +1,33 @@
 {
   "project_info": {
-    "project_number": "748107057461",
-    "project_id": "florencehomes-95f02",
-    "storage_bucket": "florencehomes-95f02.firebasestorage.app"
+    "project_number": "540264056673",
+    "firebase_url": "https://florencehomes-12a57-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "florencehomes-12a57",
+    "storage_bucket": "florencehomes-12a57.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:748107057461:android:964ad752b467511723247c",
+        "mobilesdk_app_id": "1:540264056673:android:6b66f5f3fdb5cad7bc2720",
+        "android_client_info": {
+          "package_name": "com.example.florence_homes"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB7JRxtEp6mlPAh_4fA5ExzZRPD2U0Jk4k"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:540264056673:android:ac1c7a92fff26315bc2720",
         "android_client_info": {
           "package_name": "com.florence.homes"
         }
@@ -15,7 +35,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyD20PxrcC_2mZFSTZoeDDfmv06JgSKxMrg"
+          "current_key": "AIzaSyB7JRxtEp6mlPAh_4fA5ExzZRPD2U0Jk4k"
         }
       ],
       "services": {

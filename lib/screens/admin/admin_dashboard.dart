@@ -132,7 +132,7 @@ class AdminDashboard extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  '🌸 Welcome, ${authProvider.currentUser?.fullName ?? 'Admin'}!',
+                                  'Welcome, ${authProvider.currentUser?.fullName ?? 'Admin'}!',
                                   style: TextStyle(
                                     fontSize: kIsWeb ? 16 : 14,
                                     fontWeight: FontWeight.bold,

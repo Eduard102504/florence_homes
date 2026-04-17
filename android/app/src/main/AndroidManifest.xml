@@ -1,12 +1,17 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.florence.homes">
 
+    <!-- CAMERA Permissions -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
+
     <!-- NFC Permissions -->
     <uses-permission android:name="android.permission.NFC" />
     <uses-feature android:name="android.hardware.nfc" android:required="true" />
 
     <!-- Internet Permission -->
     <uses-permission android:name="android.permission.INTERNET" />
+
 
     <application
         android:label="Florence Homes"

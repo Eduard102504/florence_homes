@@ -15,14 +15,16 @@ dependencies:
   firebase_auth: ^4.16.0
   cloud_firestore: ^4.14.0
 
+  # Camera & QR Scanner
+  mobile_scanner: ^3.5.7
+
+  # Permissions
+  permission_handler: ^11.0.1
+
   # NFC & Bluetooth & USB
-  nfc_manager: ^3.4.0  # Use this specific version
+  nfc_manager: ^4.2.1
   flutter_blue_plus: ^1.32.0
   usb_serial: ^0.5.0
-
-  # QR Code
-  qr_flutter: ^4.1.0
-  mobile_scanner: ^3.5.0
 
   # UI & State Management
   provider: ^6.1.1
@@ -32,7 +34,6 @@ dependencies:
   # File & Share
   path_provider: ^2.1.1
   share_plus: ^7.2.1
-  permission_handler: ^11.0.1
 
   # CSV & Network
   csv: ^5.1.1
@@ -47,31 +48,10 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # ADD THIS SECTION - Assets declaration for images
   assets:
-    # Background images for login screen
     - assets/images/gate_background.jpg
     - assets/images/gate_background_2.jpg
     - assets/images/gate_background_3.jpg
-
-    # App icons and logos
     - assets/images/logo.png
     - assets/images/gate_icon.png
     - assets/images/florence_logo.png
-
-    # You can also add entire folders
-    # - assets/images/
-    # - assets/icons/
-
-  # Optional: Add custom fonts (if needed)
-  # fonts:
-  #   - family: Poppins
-  #     fonts:
-  #       - asset: assets/fonts/Poppins-Regular.ttf
-  #       - asset: assets/fonts/Poppins-Bold.ttf
-  #         weight: 700
-  #   - family: Montserrat
-  #     fonts:
-  #       - asset: assets/fonts/Montserrat-Regular.ttf
-  #       - asset: assets/fonts/Montserrat-Bold.ttf
-  #         weight: 700

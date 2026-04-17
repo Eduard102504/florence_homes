@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../services/unified_scanner_service.dart';
+import 'camera_qr_scanner_screen.dart';
 
 class ScannerDashboard extends StatefulWidget {
   const ScannerDashboard({super.key});
@@ -57,6 +59,21 @@ class _ScannerDashboardState extends State<ScannerDashboard> {
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 children: [
+                  // Camera QR Scanner Card (CLICKABLE)
+                  _buildClickableScannerCard(
+                    title: 'Camera QR',
+                    icon: Icons.qr_code_scanner,
+                    color: const Color(0xFF9C27B0),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CameraQRScannerScreen(),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 12),
                   _buildStatusCard('Bluetooth', Icons.bluetooth, const Color(0xFF5D4037), true),
                   const SizedBox(width: 12),
                   _buildStatusCard('USB', Icons.usb, const Color(0xFF8D6E63), false),
@@ -277,6 +294,63 @@ class _ScannerDashboardState extends State<ScannerDashboard> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildClickableScannerCard({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 110,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [color.withOpacity(0.15), color.withOpacity(0.05)],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: color.withOpacity(0.5),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, color: color, size: 32),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Container(
+              width: 10,
+              height: 10,
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Color(0xFF4CAF50),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
