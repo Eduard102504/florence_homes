@@ -1,0 +1,119 @@
+{
+  "project_info": {
+    "project_number": "748107057461",
+    "firebase_url": "https://florencehomes-95f02-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "florencehomes-95f02",
+    "storage_bucket": "florencehomes-95f02.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:748107057461:android:90f917cb9bbf236223247c",
+        "android_client_info": {
+          "package_name": "com.example.florence_homes"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "748107057461-vcdtsvjtisfqaf63ruj76hiovr4tumnv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD20PxrcC_2mZFSTZoeDDfmv06JgSKxMrg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "748107057461-vcdtsvjtisfqaf63ruj76hiovr4tumnv.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "748107057461-acqjbga2v2i6uc0t9rqracho37mp9u5d.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.florenceHomes"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:748107057461:android:964ad752b467511723247c",
+        "android_client_info": {
+          "package_name": "com.florence.homes"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "748107057461-vcdtsvjtisfqaf63ruj76hiovr4tumnv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD20PxrcC_2mZFSTZoeDDfmv06JgSKxMrg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "748107057461-vcdtsvjtisfqaf63ruj76hiovr4tumnv.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "748107057461-acqjbga2v2i6uc0t9rqracho37mp9u5d.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.florenceHomes"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:748107057461:android:bcee1cbc86f91a6223247c",
+        "android_client_info": {
+          "package_name": "com.florence.homess"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "748107057461-vcdtsvjtisfqaf63ruj76hiovr4tumnv.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyD20PxrcC_2mZFSTZoeDDfmv06JgSKxMrg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "748107057461-vcdtsvjtisfqaf63ruj76hiovr4tumnv.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "748107057461-acqjbga2v2i6uc0t9rqracho37mp9u5d.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.florenceHomes"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

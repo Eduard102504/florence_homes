@@ -1,0 +1,43 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "gate_entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "residentId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "timestamp",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    },
+    {
+      "collectionGroup": "visitor_qrs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "residentId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "generatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    }
+  ],
+  "fieldOverrides": []
+}

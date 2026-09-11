@@ -1,0 +1,67 @@
+name: florence_homes
+description: Florence Homes Village Gate System
+publish_to: 'none'
+version: 4.0.1+4
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Firebase
+  firebase_core: ^3.12.0
+  firebase_auth: ^5.5.0
+  cloud_firestore: ^5.6.0
+
+  # QR Code
+  qr_flutter: ^4.1.0
+  mobile_scanner: ^3.5.0
+
+  # UI & State Management
+  provider: ^6.1.1
+  intl: ^0.18.1
+  shared_preferences: ^2.2.2
+
+  # File & Share
+  path_provider: ^2.1.1
+  share_plus: ^7.2.1
+  permission_handler: ^11.0.1
+
+  # CSV & Network
+  csv: ^5.1.1
+  http: ^1.6.0
+  web_socket_channel: ^2.4.0
+
+  # Email Service
+  printing: ^5.13.1
+  pdf: ^3.12.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    # Background images for login screen
+    - assets/images/gate_background.jpg
+    - assets/images/gate_background_2.jpg
+    - assets/images/gate_background_3.jpg
+
+    # App icons and logos
+    - assets/images/logo.png
+    - assets/images/gate_icon.png
+    - assets/images/florence_logo.png
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/logo.png"
+  adaptive_icon_background: "#D4C4A8"
+  adaptive_icon_foreground: "assets/images/logo.png"
+  remove_alpha_ios: true
