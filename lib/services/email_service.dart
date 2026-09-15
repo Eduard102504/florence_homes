@@ -15,7 +15,9 @@ class EmailService {
       subject: '🔐 Your Verification Code - Florence Homes',
       htmlBody: _buildVerificationEmailTemplate(code),
     );
-    print(success ? '✅ OTP sent to $toEmail' : '❌ Failed to send OTP to $toEmail');
+    print(success
+        ? '✅ OTP sent to $toEmail'
+        : '❌ Failed to send OTP to $toEmail');
     return success;
   }
 
@@ -25,7 +27,9 @@ class EmailService {
       subject: '✅ Account Approved - Welcome to Florence Homes!',
       htmlBody: _buildApprovalEmailTemplate(fullName),
     );
-    print(success ? '✅ Approval email sent to $toEmail' : '❌ Failed to send approval email to $toEmail');
+    print(success
+        ? '✅ Approval email sent to $toEmail'
+        : '❌ Failed to send approval email to $toEmail');
     return success;
   }
 
@@ -36,10 +40,40 @@ class EmailService {
       subject: '❌ Account Update - Florence Homes',
       htmlBody: _buildRejectionEmailTemplate(fullName, reason),
     );
-    print(success ? '✅ Rejection email sent to $toEmail' : '❌ Failed to send rejection email to $toEmail');
+    print(success
+        ? '✅ Rejection email sent to $toEmail'
+        : '❌ Failed to send rejection email to $toEmail');
     return success;
   }
 
+  // ============================================================
+  // Sends Resident ID + Password credentials after approval
+  // ============================================================
+  static Future<bool> sendResidentCredentialsEmail({
+    required String email,
+    required String fullName,
+    required String residentId,
+    required String password,
+  }) async {
+    final success = await _send(
+      toEmail: email,
+      subject: '🎉 Your Florence Homes Account is Approved!',
+      htmlBody: _buildCredentialsEmailTemplate(
+        fullName: fullName,
+        residentId: residentId,
+        email: email,
+        password: password,
+      ),
+    );
+    print(success
+        ? '✅ Credentials email sent to $email ($residentId)'
+        : '❌ Failed to send credentials email to $email');
+    return success;
+  }
+
+  // ============================================================
+  // CORE SENDER
+  // ============================================================
   static Future<bool> _send({
     required String toEmail,
     required String subject,
@@ -53,7 +87,9 @@ class EmailService {
     return sender.sendEmail(scriptUrl, payload);
   }
 
-  // ---- Templates ----
+  // ============================================================
+  // TEMPLATES
+  // ============================================================
 
   static String _buildVerificationEmailTemplate(String code) {
     return '''
@@ -186,6 +222,129 @@ class EmailService {
           </div>
           <div class="footer">
             <p class="footer-text">© 2024 Florence Homes. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    ''';
+  }
+
+  // ============================================================
+  // RESIDENT CREDENTIALS (ID + PASSWORD)
+  // ============================================================
+  static String _buildCredentialsEmailTemplate({
+    required String fullName,
+    required String residentId,
+    required String email,
+    required String password,
+  }) {
+    return '''
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 0; background-color: #FFF8F0; }
+          .container { max-width: 600px; margin: 20px auto; background: white; border-radius: 20px; overflow: hidden; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+          .header { background: linear-gradient(135deg, #C4A882 0%, #D4C4A8 100%); padding: 30px; text-align: center; }
+          .success-icon { font-size: 64px; margin-bottom: 10px; }
+          .title { color: #FFF8F0; font-size: 28px; font-weight: bold; margin: 0; }
+          .subtitle { color: #FFF8F0; font-size: 14px; margin-top: 8px; opacity: 0.9; }
+          .content { padding: 40px 30px; background: white; }
+          .greeting { color: #5D4037; font-size: 20px; font-weight: bold; margin-bottom: 20px; }
+          .message { color: #6B5B4F; font-size: 14px; line-height: 1.6; margin-bottom: 20px; }
+          .credentials-box {
+            background: #FFF8F0;
+            border: 2px solid #D4C4A8;
+            border-radius: 12px;
+            padding: 24px;
+            margin: 24px 0;
+          }
+          .cred-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 1px dashed #E0D5C1;
+          }
+          .cred-row:last-child { border-bottom: none; }
+          .cred-label {
+            color: #8D6E63;
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          }
+          .cred-value {
+            color: #5D4037;
+            font-size: 16px;
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+            background: white;
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid #E0D5C1;
+          }
+          .id-highlight {
+            color: #C4A882;
+            font-size: 18px;
+          }
+          .notice {
+            background: #FFF3E0;
+            border-left: 4px solid #FF9800;
+            padding: 14px 16px;
+            border-radius: 8px;
+            margin: 20px 0;
+            color: #5D4037;
+            font-size: 13px;
+            line-height: 1.5;
+          }
+          .footer { background: #F5F0E8; padding: 20px; text-align: center; border-top: 1px solid #E0D5C1; }
+          .footer-text { color: #8D6E63; font-size: 12px; margin: 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="success-icon">🎉</div>
+            <h1 class="title">Welcome to Florence Homes!</h1>
+            <p class="subtitle">Your Account Has Been Approved</p>
+          </div>
+          <div class="content">
+            <div class="greeting">Dear $fullName,</div>
+            <div class="message">
+              Great news! Your Florence Homes account has been <strong>approved</strong> by the administration.
+              Below are your login credentials. Please keep them safe.
+            </div>
+
+            <div class="credentials-box">
+              <div class="cred-row">
+                <span class="cred-label">Resident ID</span>
+                <span class="cred-value id-highlight">$residentId</span>
+              </div>
+              <div class="cred-row">
+                <span class="cred-label">Email</span>
+                <span class="cred-value">$email</span>
+              </div>
+              <div class="cred-row">
+                <span class="cred-label">Password</span>
+                <span class="cred-value">$password</span>
+              </div>
+            </div>
+
+            <div class="notice">
+              💡 <strong>You can log in with EITHER your Resident ID or your Email address</strong>
+              along with the password above.
+            </div>
+
+            <div class="message">
+              For your security, please change your password after your first login.
+            </div>
+          </div>
+          <div class="footer">
+            <p class="footer-text">© 2024 Florence Homes. All rights reserved.</p>
+            <p class="footer-text">Secure access to your village community</p>
           </div>
         </div>
       </body>

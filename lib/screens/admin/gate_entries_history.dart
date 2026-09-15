@@ -7,6 +7,7 @@ import 'package:path_provider/path_provider.dart';
 import 'dart:io';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
+import 'dart:async';
 
 class GateEntriesHistory extends StatefulWidget {
   const GateEntriesHistory({super.key});
@@ -17,18 +18,22 @@ class GateEntriesHistory extends StatefulWidget {
 
 class _GateEntriesHistoryState extends State<GateEntriesHistory> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // UI state
   List<Map<String, dynamic>> _entries = [];
   List<Map<String, dynamic>> _allEntries = [];
-  bool _isLoading = true;
   String? _errorMessage;
   DateTimeRange? _dateRange;
   String _selectedResident = 'all';
   String _selectedEntryType = 'all';
-  List<String> _residents = [];
   Map<String, String> _residentNames = {};
   bool _isExporting = false;
 
-  // FIXED: Convert UTC timestamp to LOCAL time
+  // Live streams
+  StreamSubscription<QuerySnapshot>? _entriesSub;
+  StreamSubscription<QuerySnapshot>? _residentsSub;
+
+  // ==================== TIMESTAMP HELPERS ====================
   DateTime _parseTimestamp(dynamic timestamp) {
     if (timestamp == null) return DateTime.now();
 
@@ -42,136 +47,123 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     } else {
       return DateTime.now();
     }
-
-    // Convert UTC to LOCAL time (this fixes the 8-hour difference)
     return utcTime.toLocal();
   }
 
-  // Helper to get timestamp from entry (tries multiple field names)
   DateTime _getEntryTimestamp(Map<String, dynamic> entry) {
-    // Try different possible field names
-    if (entry['timestamp'] != null) {
-      return _parseTimestamp(entry['timestamp']);
-    }
-    if (entry['createdAt'] != null) {
-      return _parseTimestamp(entry['createdAt']);
-    }
-    if (entry['date'] != null) {
-      return _parseTimestamp(entry['date']);
-    }
-    if (entry['time'] != null) {
-      return _parseTimestamp(entry['time']);
-    }
+    if (entry['timestamp'] != null) return _parseTimestamp(entry['timestamp']);
+    if (entry['createdAt'] != null) return _parseTimestamp(entry['createdAt']);
+    if (entry['date'] != null) return _parseTimestamp(entry['date']);
+    if (entry['time'] != null) return _parseTimestamp(entry['time']);
     return DateTime.now();
   }
 
-  List<Map<String, dynamic>> _sortEntriesByDate(List<Map<String, dynamic>> entries) {
-    entries.sort((a, b) {
-      DateTime timeA = _getEntryTimestamp(a);
-      DateTime timeB = _getEntryTimestamp(b);
-      return timeB.compareTo(timeA);
-    });
-    return entries;
+  // ==================== LIFECYCLE ====================
+  @override
+  void initState() {
+    super.initState();
+    _startResidentsStream();
+    _startEntriesStream();
   }
 
-  void _applyFilters() {
+  @override
+  void dispose() {
+    _entriesSub?.cancel();
+    _residentsSub?.cancel();
+    super.dispose();
+  }
+
+  // ==================== LIVE RESIDENTS STREAM ====================
+  void _startResidentsStream() {
+    _residentsSub = _firestore
+        .collection('users')
+        .where('userType', isEqualTo: 'resident')
+        .snapshots()
+        .listen(
+          (snapshot) {
+        final names = <String, String>{};
+        for (var doc in snapshot.docs) {
+          names[doc.id] = (doc.get('fullName') as String?) ?? 'Unknown';
+        }
+        if (mounted) {
+          setState(() => _residentNames = names);
+        }
+      },
+      onError: (e) => print('Residents stream error: $e'),
+    );
+  }
+
+  // ==================== LIVE ENTRIES STREAM ====================
+  void _startEntriesStream() {
+    _entriesSub = _firestore
+        .collection('gate_entries')
+        .snapshots()
+        .listen(
+          (snapshot) {
+        final list = snapshot.docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          data['id'] = doc.id;
+          return data;
+        }).toList();
+
+        // Newest first
+        list.sort((a, b) {
+          return _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a));
+        });
+
+        if (mounted) {
+          setState(() {
+            _allEntries = list;
+            _applyFiltersInternal();
+            _errorMessage = null;
+          });
+        }
+      },
+      onError: (e) {
+        print('Entries stream error: $e');
+        if (mounted) {
+          setState(() => _errorMessage = 'Error: $e');
+        }
+      },
+    );
+  }
+
+  // ==================== FILTER LOGIC ====================
+  void _applyFiltersInternal() {
     List<Map<String, dynamic>> filtered = List.from(_allEntries);
 
     if (_selectedResident != 'all') {
-      filtered = filtered.where((entry) => entry['residentId'] == _selectedResident).toList();
+      filtered = filtered
+          .where((e) => e['residentId'] == _selectedResident)
+          .toList();
     }
 
     if (_selectedEntryType != 'all') {
-      filtered = filtered.where((entry) => entry['entryType'] == _selectedEntryType).toList();
+      filtered = filtered
+          .where((e) => e['entryType'] == _selectedEntryType)
+          .toList();
     }
 
     if (_dateRange != null) {
       filtered = filtered.where((entry) {
-        DateTime timestamp = _getEntryTimestamp(entry);
-        return timestamp.isAfter(_dateRange!.start) &&
-            timestamp.isBefore(_dateRange!.end.add(const Duration(days: 1)));
+        final t = _getEntryTimestamp(entry);
+        return t.isAfter(_dateRange!.start) &&
+            t.isBefore(_dateRange!.end.add(const Duration(days: 1)));
       }).toList();
     }
 
-    filtered = _sortEntriesByDate(filtered);
-
-    setState(() {
-      _entries = filtered;
-    });
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _loadResidents();
-    _loadEntries();
-  }
-
-  Future<void> _loadResidents() async {
-    try {
-      QuerySnapshot snapshot = await _firestore
-          .collection('users')
-          .where('userType', isEqualTo: 'resident')
-          .get();
-
-      setState(() {
-        _residents = ['all'];
-        for (var doc in snapshot.docs) {
-          String id = doc.id;
-          String name = doc.get('fullName');
-          _residents.add(id);
-          _residentNames[id] = name;
-        }
-      });
-    } catch (e) {
-      print('Error loading residents: $e');
-    }
-  }
-
-  Future<void> _loadEntries() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
+    filtered.sort((a, b) {
+      return _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a));
     });
 
-    try {
-      // Get all entries and sort locally
-      QuerySnapshot snapshot = await _firestore
-          .collection('gate_entries')
-          .get();
-
-      List<Map<String, dynamic>> allEntries = snapshot.docs.map((doc) {
-        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id;
-        return data;
-      }).toList();
-
-      // Sort locally by timestamp (newest first)
-      allEntries.sort((a, b) {
-        DateTime timeA = _getEntryTimestamp(a);
-        DateTime timeB = _getEntryTimestamp(b);
-        return timeB.compareTo(timeA);
-      });
-
-      setState(() {
-        _allEntries = allEntries;
-        _entries = List.from(allEntries);
-        _isLoading = false;
-      });
-
-    } catch (e) {
-      print('Error loading entries: $e');
-      setState(() {
-        _errorMessage = 'Error: $e';
-        _isLoading = false;
-      });
-    }
+    _entries = filtered;
   }
 
-  void _updateFilters() {
-    _applyFilters();
+  void _applyFilters() {
+    setState(_applyFiltersInternal);
   }
 
+  // ==================== DISPLAY HELPERS ====================
   String _getEntryTypeDisplay(String? type) {
     switch (type) {
       case 'uhf_rfid':
@@ -186,11 +178,13 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     }
   }
 
-  // Generate PDF Report
+  // ==================== EXPORT PDF ====================
   Future<void> _exportToPDF() async {
     if (_entries.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No entries to export'), backgroundColor: Color(0xFFFF9800)),
+        const SnackBar(
+            content: Text('No entries to export'),
+            backgroundColor: Color(0xFFFF9800)),
       );
       return;
     }
@@ -201,9 +195,14 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
       final pdf = pw.Document();
 
       int totalEntries = _entries.length;
-      int rfidEntries = _entries.where((e) => e['entryType'] == 'uhf_rfid' || e['entryType'] == 'rfid').length;
-      int qrEntries = _entries.where((e) => e['entryType'] == 'qr_visitor').length;
-      int manualEntries = _entries.where((e) => e['entryType'] == 'manual').length;
+      int rfidEntries = _entries
+          .where((e) =>
+      e['entryType'] == 'uhf_rfid' || e['entryType'] == 'rfid')
+          .length;
+      int qrEntries =
+          _entries.where((e) => e['entryType'] == 'qr_visitor').length;
+      int manualEntries =
+          _entries.where((e) => e['entryType'] == 'manual').length;
 
       String dateRange = _dateRange != null
           ? '${DateFormat('MMM dd, yyyy').format(_dateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(_dateRange!.end)}'
@@ -227,7 +226,8 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                   mainAxisAlignment: pw.MainAxisAlignment.center,
                   children: [
                     pw.SizedBox(height: 100),
-                    pw.Icon(pw.IconData(0xe3c9), size: 80, color: PdfColors.brown),
+                    pw.Icon(pw.IconData(0xe3c9),
+                        size: 80, color: PdfColors.brown),
                     pw.SizedBox(height: 20),
                     pw.Text(
                       'Florence Homes',
@@ -241,14 +241,13 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                     pw.Text(
                       'Gate Entry Report',
                       style: pw.TextStyle(
-                        fontSize: 18,
-                        color: PdfColors.grey,
-                      ),
+                          fontSize: 18, color: PdfColors.grey),
                     ),
                     pw.SizedBox(height: 40),
                     pw.Text(
                       'Generated: ${DateFormat('MMMM dd, yyyy hh:mm a').format(DateTime.now())}',
-                      style: pw.TextStyle(fontSize: 12, color: PdfColors.grey),
+                      style: pw.TextStyle(
+                          fontSize: 12, color: PdfColors.grey),
                     ),
                   ],
                 ),
@@ -263,7 +262,11 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
           pageFormat: PdfPageFormat.a4,
           build: (pw.Context context) {
             return [
-              pw.Header(level: 0, child: pw.Text('Report Summary', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold))),
+              pw.Header(
+                  level: 0,
+                  child: pw.Text('Report Summary',
+                      style: pw.TextStyle(
+                          fontSize: 20, fontWeight: pw.FontWeight.bold))),
               pw.SizedBox(height: 20),
               pw.Container(
                 padding: pw.EdgeInsets.all(15),
@@ -277,7 +280,10 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('Date Range:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('Date Range:',
+                            style: pw.TextStyle(
+                                fontSize: 12,
+                                fontWeight: pw.FontWeight.bold)),
                         pw.Text(dateRange, style: pw.TextStyle(fontSize: 12)),
                       ],
                     ),
@@ -285,16 +291,24 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('Resident Filter:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                        pw.Text(residentFilter, style: pw.TextStyle(fontSize: 12)),
+                        pw.Text('Resident Filter:',
+                            style: pw.TextStyle(
+                                fontSize: 12,
+                                fontWeight: pw.FontWeight.bold)),
+                        pw.Text(residentFilter,
+                            style: pw.TextStyle(fontSize: 12)),
                       ],
                     ),
                     pw.SizedBox(height: 8),
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('Entry Type Filter:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                        pw.Text(entryTypeFilter, style: pw.TextStyle(fontSize: 12)),
+                        pw.Text('Entry Type Filter:',
+                            style: pw.TextStyle(
+                                fontSize: 12,
+                                fontWeight: pw.FontWeight.bold)),
+                        pw.Text(entryTypeFilter,
+                            style: pw.TextStyle(fontSize: 12)),
                       ],
                     ),
                     pw.SizedBox(height: 16),
@@ -303,37 +317,55 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('Total Entries:', style: pw.TextStyle(fontSize: 12, fontWeight: pw.FontWeight.bold)),
-                        pw.Text(totalEntries.toString(), style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold, color: PdfColors.brown)),
+                        pw.Text('Total Entries:',
+                            style: pw.TextStyle(
+                                fontSize: 12,
+                                fontWeight: pw.FontWeight.bold)),
+                        pw.Text(totalEntries.toString(),
+                            style: pw.TextStyle(
+                                fontSize: 16,
+                                fontWeight: pw.FontWeight.bold,
+                                color: PdfColors.brown)),
                       ],
                     ),
                     pw.SizedBox(height: 8),
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('RFID Scans:', style: pw.TextStyle(fontSize: 12)),
-                        pw.Text(rfidEntries.toString(), style: pw.TextStyle(fontSize: 12, color: PdfColors.green)),
+                        pw.Text('RFID Scans:',
+                            style: pw.TextStyle(fontSize: 12)),
+                        pw.Text(rfidEntries.toString(),
+                            style: pw.TextStyle(
+                                fontSize: 12, color: PdfColors.green)),
                       ],
                     ),
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('QR Visitor Scans:', style: pw.TextStyle(fontSize: 12)),
-                        pw.Text(qrEntries.toString(), style: pw.TextStyle(fontSize: 12, color: PdfColors.purple)),
+                        pw.Text('QR Visitor Scans:',
+                            style: pw.TextStyle(fontSize: 12)),
+                        pw.Text(qrEntries.toString(),
+                            style: pw.TextStyle(
+                                fontSize: 12, color: PdfColors.purple)),
                       ],
                     ),
                     pw.Row(
                       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                       children: [
-                        pw.Text('Manual Entries:', style: pw.TextStyle(fontSize: 12)),
-                        pw.Text(manualEntries.toString(), style: pw.TextStyle(fontSize: 12, color: PdfColors.orange)),
+                        pw.Text('Manual Entries:',
+                            style: pw.TextStyle(fontSize: 12)),
+                        pw.Text(manualEntries.toString(),
+                            style: pw.TextStyle(
+                                fontSize: 12, color: PdfColors.orange)),
                       ],
                     ),
                   ],
                 ),
               ),
               pw.SizedBox(height: 20),
-              pw.Text('Generated by: Florence Homes Gate System', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+              pw.Text('Generated by: Florence Homes Gate System',
+                  style:
+                  pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
             ];
           },
         ),
@@ -345,18 +377,30 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
           orientation: pw.PageOrientation.landscape,
           build: (pw.Context context) {
             return [
-              pw.Header(level: 0, child: pw.Text('Gate Entry Details', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold))),
+              pw.Header(
+                  level: 0,
+                  child: pw.Text('Gate Entry Details',
+                      style: pw.TextStyle(
+                          fontSize: 20, fontWeight: pw.FontWeight.bold))),
               pw.SizedBox(height: 20),
               pw.Table.fromTextArray(
-                headers: ['Date', 'Time', 'Resident', 'Type', 'Visitor', 'Status'],
+                headers: [
+                  'Date',
+                  'Time',
+                  'Resident',
+                  'Type',
+                  'Visitor',
+                  'Status'
+                ],
                 headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                headerDecoration: pw.BoxDecoration(color: PdfColors.brown100),
+                headerDecoration:
+                pw.BoxDecoration(color: PdfColors.brown100),
                 cellAlignment: pw.Alignment.centerLeft,
                 data: _entries.map((entry) {
-                  DateTime timestamp = _getEntryTimestamp(entry);
+                  final ts = _getEntryTimestamp(entry);
                   return [
-                    DateFormat('yyyy-MM-dd').format(timestamp),
-                    DateFormat('hh:mm:ss a').format(timestamp),
+                    DateFormat('yyyy-MM-dd').format(ts),
+                    DateFormat('hh:mm:ss a').format(ts),
                     entry['residentName'] ?? 'Unknown',
                     _getEntryTypeDisplay(entry['entryType']),
                     entry['visitorName'] ?? '-',
@@ -365,7 +409,8 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                 }).toList(),
               ),
               pw.SizedBox(height: 20),
-              pw.Text('Total Records: ${_entries.length}', style: pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+              pw.Text('Total Records: ${_entries.length}',
+                  style: pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
             ];
           },
         ),
@@ -373,17 +418,23 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
 
       final bytes = await pdf.save();
       final tempDir = await getTemporaryDirectory();
-      final file = File('${tempDir.path}/gate_history_${DateTime.now().millisecondsSinceEpoch}.pdf');
+      final file = File(
+          '${tempDir.path}/gate_history_${DateTime.now().millisecondsSinceEpoch}.pdf');
       await file.writeAsBytes(bytes);
-      await Share.shareXFiles([XFile(file.path)], text: 'Florence Homes - Gate Entry Report');
+      await Share.shareXFiles([XFile(file.path)],
+          text: 'Florence Homes - Gate Entry Report');
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PDF generated and shared successfully'), backgroundColor: Color(0xFF8D6E63)),
+        const SnackBar(
+            content: Text('PDF generated and shared successfully'),
+            backgroundColor: Color(0xFF8D6E63)),
       );
     } catch (e) {
       print('PDF generation error: $e');
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error generating PDF: $e'), backgroundColor: const Color(0xFFD32F2F)),
+        SnackBar(
+            content: Text('Error generating PDF: $e'),
+            backgroundColor: const Color(0xFFD32F2F)),
       );
     } finally {
       setState(() => _isExporting = false);
@@ -398,10 +449,10 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     ];
 
     for (var entry in _entries) {
-      DateTime timestamp = _getEntryTimestamp(entry);
+      final ts = _getEntryTimestamp(entry);
       rows.add([
-        DateFormat('yyyy-MM-dd').format(timestamp),
-        DateFormat('hh:mm:ss a').format(timestamp),
+        DateFormat('yyyy-MM-dd').format(ts),
+        DateFormat('hh:mm:ss a').format(ts),
         entry['residentName'] ?? 'Unknown',
         _getEntryTypeDisplay(entry['entryType']),
         entry['visitorName'] ?? '-',
@@ -411,11 +462,14 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
 
     String csv = const ListToCsvConverter().convert(rows);
     final tempDir = await getTemporaryDirectory();
-    final file = File('${tempDir.path}/gate_entries_${DateTime.now().millisecondsSinceEpoch}.csv');
+    final file = File(
+        '${tempDir.path}/gate_entries_${DateTime.now().millisecondsSinceEpoch}.csv');
     await file.writeAsString(csv);
-    await Share.shareXFiles([XFile(file.path)], text: 'Gate Entries Export');
+    await Share.shareXFiles([XFile(file.path)],
+        text: 'Gate Entries Export');
   }
 
+  // ==================== BUILD ====================
   @override
   Widget build(BuildContext context) {
     final screenWidth = MediaQuery.of(context).size.width;
@@ -423,10 +477,10 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     return Scaffold(
       appBar: AppBar(
         title: Row(
-          children: [
-            const Icon(Icons.history, size: 20, color: Color(0xFFFFF8F0)),
-            const SizedBox(width: 8),
-            const Text(
+          children: const [
+            Icon(Icons.history, size: 20, color: Color(0xFFFFF8F0)),
+            SizedBox(width: 8),
+            Text(
               'Gate History',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
@@ -458,7 +512,8 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
               height: 20,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFF8F0)),
+                valueColor:
+                AlwaysStoppedAnimation<Color>(Color(0xFFFFF8F0)),
               ),
             )
                 : const Icon(Icons.download, color: Color(0xFFFFF8F0)),
@@ -467,57 +522,86 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
               borderRadius: BorderRadius.circular(12),
               side: const BorderSide(color: Color(0xFFE0D5C1)),
             ),
-            itemBuilder: (BuildContext context) => [
-              const PopupMenuItem(
+            itemBuilder: (BuildContext context) => const [
+              PopupMenuItem(
                 value: 'csv',
                 child: Row(
                   children: [
-                    Icon(Icons.table_chart, size: 18, color: Color(0xFF8D6E63)),
+                    Icon(Icons.table_chart,
+                        size: 18, color: Color(0xFF8D6E63)),
                     SizedBox(width: 8),
-                    Text('Export CSV', style: TextStyle(fontSize: 13, color: Color(0xFF6B5B4F))),
+                    Text('Export CSV',
+                        style: TextStyle(
+                            fontSize: 13, color: Color(0xFF6B5B4F))),
                   ],
                 ),
               ),
-              const PopupMenuItem(
+              PopupMenuItem(
                 value: 'pdf',
                 child: Row(
                   children: [
-                    Icon(Icons.picture_as_pdf, size: 18, color: Color(0xFFD32F2F)),
+                    Icon(Icons.picture_as_pdf,
+                        size: 18, color: Color(0xFFD32F2F)),
                     SizedBox(width: 8),
-                    Text('Export PDF', style: TextStyle(fontSize: 13, color: Color(0xFF6B5B4F))),
+                    Text('Export PDF',
+                        style: TextStyle(
+                            fontSize: 13, color: Color(0xFF6B5B4F))),
                   ],
                 ),
               ),
             ],
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 20),
-            onPressed: _loadEntries,
-            color: const Color(0xFFFFF8F0),
+          // Live indicator (replaces reload button)
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF8D6E63).withOpacity(0.2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF4CAF50),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Text('LIVE',
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFFFFF8F0),
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5)),
+              ],
+            ),
           ),
         ],
       ),
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFFFFF8F0),
-              const Color(0xFFF5F0E8),
-              const Color(0xFFEDE5D8),
+              Color(0xFFFFF8F0),
+              Color(0xFFF5F0E8),
+              Color(0xFFEDE5D8),
             ],
           ),
         ),
-        child: SafeArea(
-          child: _buildBody(screenWidth),
-        ),
+        child: SafeArea(child: _buildBody(screenWidth)),
       ),
     );
   }
 
   Widget _buildBody(double screenWidth) {
-    if (_isLoading) {
+    // Only show full-screen spinner if we've never received data yet
+    if (_allEntries.isEmpty && _errorMessage == null) {
       return const Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -526,23 +610,28 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
               valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8)),
             ),
             SizedBox(height: 16),
-            Text('Loading gate entries...', style: TextStyle(color: Color(0xFFB8A99A))),
+            Text('Loading gate entries...',
+                style: TextStyle(color: Color(0xFFB8A99A))),
           ],
         ),
       );
     }
 
-    if (_errorMessage != null) {
+    if (_errorMessage != null && _allEntries.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Icon(Icons.error, size: 48, color: Color(0xFFD32F2F)),
             const SizedBox(height: 16),
-            Text(_errorMessage!, style: const TextStyle(color: Color(0xFF8D6E63))),
+            Text(_errorMessage!,
+                style: const TextStyle(color: Color(0xFF8D6E63))),
             const SizedBox(height: 16),
             ElevatedButton(
-              onPressed: _loadEntries,
+              onPressed: () {
+                _entriesSub?.cancel();
+                _startEntriesStream();
+              },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFD4C4A8),
                 foregroundColor: const Color(0xFF6B5B4F),
@@ -563,7 +652,10 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
             SizedBox(height: 16),
             Text(
               'No gate entries found',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500, color: Color(0xFF6B5B4F)),
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF6B5B4F)),
             ),
             SizedBox(height: 8),
             Text(
@@ -578,7 +670,9 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     return Column(
       children: [
         // Filter chips
-        if (_dateRange != null || _selectedResident != 'all' || _selectedEntryType != 'all')
+        if (_dateRange != null ||
+            _selectedResident != 'all' ||
+            _selectedEntryType != 'all')
           Container(
             padding: const EdgeInsets.all(10),
             color: const Color(0xFFD4C4A8).withOpacity(0.15),
@@ -586,19 +680,21 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  const Icon(Icons.filter_alt, size: 14, color: Color(0xFF8D6E63)),
+                  const Icon(Icons.filter_alt,
+                      size: 14, color: Color(0xFF8D6E63)),
                   const SizedBox(width: 6),
                   if (_dateRange != null)
                     Chip(
                       backgroundColor: Colors.white,
                       label: Text(
                         '📅 ${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}',
-                        style: const TextStyle(color: Color(0xFF6B5B4F), fontSize: 11),
+                        style: const TextStyle(
+                            color: Color(0xFF6B5B4F), fontSize: 11),
                       ),
                       deleteIconColor: const Color(0xFFB8A99A),
                       onDeleted: () {
-                        setState(() { _dateRange = null; });
-                        _updateFilters();
+                        setState(() => _dateRange = null);
+                        _applyFilters();
                       },
                     ),
                   if (_selectedResident != 'all')
@@ -606,12 +702,13 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                       backgroundColor: Colors.white,
                       label: Text(
                         '👤 ${_residentNames[_selectedResident] ?? 'Unknown'}',
-                        style: const TextStyle(color: Color(0xFF6B5B4F), fontSize: 11),
+                        style: const TextStyle(
+                            color: Color(0xFF6B5B4F), fontSize: 11),
                       ),
                       deleteIconColor: const Color(0xFFB8A99A),
                       onDeleted: () {
-                        setState(() { _selectedResident = 'all'; });
-                        _updateFilters();
+                        setState(() => _selectedResident = 'all');
+                        _applyFilters();
                       },
                     ),
                   if (_selectedEntryType != 'all')
@@ -619,12 +716,13 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                       backgroundColor: Colors.white,
                       label: Text(
                         '🔖 ${_selectedEntryType.toUpperCase().replaceFirst('UHF_', '')}',
-                        style: const TextStyle(color: Color(0xFF6B5B4F), fontSize: 11),
+                        style: const TextStyle(
+                            color: Color(0xFF6B5B4F), fontSize: 11),
                       ),
                       deleteIconColor: const Color(0xFFB8A99A),
                       onDeleted: () {
-                        setState(() { _selectedEntryType = 'all'; });
-                        _updateFilters();
+                        setState(() => _selectedEntryType = 'all');
+                        _applyFilters();
                       },
                     ),
                   const SizedBox(width: 6),
@@ -635,21 +733,22 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                         _selectedResident = 'all';
                         _selectedEntryType = 'all';
                       });
-                      _updateFilters();
+                      _applyFilters();
                     },
                     style: TextButton.styleFrom(
                       foregroundColor: const Color(0xFF8D6E63),
                       padding: const EdgeInsets.symmetric(horizontal: 8),
                       minimumSize: Size.zero,
                     ),
-                    child: const Text('Clear All', style: TextStyle(fontSize: 11)),
+                    child: const Text('Clear All',
+                        style: TextStyle(fontSize: 11)),
                   ),
                 ],
               ),
             ),
           ),
 
-        // Stats Cards
+        // Stats
         Padding(
           padding: const EdgeInsets.all(12),
           child: Wrap(
@@ -657,25 +756,44 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
             runSpacing: 8,
             alignment: WrapAlignment.center,
             children: [
-              _buildStatCard('📊 Total', _entries.length.toString(), Icons.door_front_door, const Color(0xFFD4C4A8), screenWidth),
-              _buildStatCard('📡 RFID', _entries.where((e) => e['entryType'] == 'uhf_rfid' || e['entryType'] == 'rfid').length.toString(), Icons.nfc, const Color(0xFFC4A882), screenWidth),
-              _buildStatCard('👥 Visitors', _entries.where((e) => e['entryType'] == 'qr_visitor').length.toString(), Icons.people, const Color(0xFFB8A99A), screenWidth),
+              _buildStatCard('📊 Total', _entries.length.toString(),
+                  Icons.door_front_door, const Color(0xFFD4C4A8), screenWidth),
+              _buildStatCard(
+                  '📡 RFID',
+                  _entries
+                      .where((e) =>
+                  e['entryType'] == 'uhf_rfid' ||
+                      e['entryType'] == 'rfid')
+                      .length
+                      .toString(),
+                  Icons.nfc,
+                  const Color(0xFFC4A882),
+                  screenWidth),
+              _buildStatCard(
+                  '👥 Visitors',
+                  _entries
+                      .where((e) => e['entryType'] == 'qr_visitor')
+                      .length
+                      .toString(),
+                  Icons.people,
+                  const Color(0xFFB8A99A),
+                  screenWidth),
             ],
           ),
         ),
 
-        // Entries List
+        // List
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.all(12),
             itemCount: _entries.length,
             itemBuilder: (context, index) {
               final entry = _entries[index];
-              DateTime timestamp = _getEntryTimestamp(entry);
-              String entryType = entry['entryType'] ?? 'unknown';
-              String residentName = entry['residentName'] ?? 'Unknown';
-              String status = entry['status'] ?? 'entry';
-              String? visitorName = entry['visitorName'];
+              final timestamp = _getEntryTimestamp(entry);
+              final entryType = entry['entryType'] ?? 'unknown';
+              final residentName = entry['residentName'] ?? 'Unknown';
+              final status = entry['status'] ?? 'entry';
+              final visitorName = entry['visitorName'];
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
@@ -693,10 +811,12 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+                    border:
+                    Border.all(color: const Color(0xFFE0D5C1), width: 1),
                   ),
                   child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 6),
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
@@ -729,9 +849,11 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                       children: [
                         const SizedBox(height: 2),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                            color:
+                            const Color(0xFFD4C4A8).withOpacity(0.15),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -748,17 +870,20 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                             padding: const EdgeInsets.only(top: 2),
                             child: Text(
                               '👤 $visitorName',
-                              style: const TextStyle(fontSize: 10, color: Color(0xFFB8A99A)),
+                              style: const TextStyle(
+                                  fontSize: 10, color: Color(0xFFB8A99A)),
                             ),
                           ),
                         Text(
                           '🕐 ${DateFormat('MMM dd, yyyy • hh:mm a').format(timestamp)}',
-                          style: const TextStyle(fontSize: 10, color: Color(0xFFD4C4A8)),
+                          style: const TextStyle(
+                              fontSize: 10, color: Color(0xFFD4C4A8)),
                         ),
                       ],
                     ),
                     trailing: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: status == 'entry'
                             ? const Color(0xFF8D6E63).withOpacity(0.15)
@@ -785,7 +910,8 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color, double screenWidth) {
+  Widget _buildStatCard(String title, String value, IconData icon,
+      Color color, double screenWidth) {
     double cardWidth = screenWidth < 600 ? (screenWidth / 3) - 16 : 100;
     double iconSize = screenWidth < 600 ? 14 : 16;
     double fontSize = screenWidth < 600 ? 11 : 13;
@@ -803,8 +929,16 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
         children: [
           Icon(icon, color: color, size: iconSize),
           const SizedBox(height: 2),
-          Text(value, style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, color: color)),
-          Text(title, style: TextStyle(fontSize: labelSize, color: color, fontWeight: FontWeight.w500)),
+          Text(value,
+              style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.bold,
+                  color: color)),
+          Text(title,
+              style: TextStyle(
+                  fontSize: labelSize,
+                  color: color,
+                  fontWeight: FontWeight.w500)),
         ],
       ),
     );
@@ -812,34 +946,51 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
 
   IconData _getTypeIcon(String type) {
     switch (type) {
-      case 'rfid': case 'uhf_rfid': return Icons.nfc;
-      case 'qr_visitor': return Icons.qr_code;
-      case 'manual': return Icons.person;
-      default: return Icons.door_front_door;
+      case 'rfid':
+      case 'uhf_rfid':
+        return Icons.nfc;
+      case 'qr_visitor':
+        return Icons.qr_code;
+      case 'manual':
+        return Icons.person;
+      default:
+        return Icons.door_front_door;
     }
   }
 
   Color _getTypeColor(String type) {
     switch (type) {
-      case 'rfid': case 'uhf_rfid': return const Color(0xFFD4C4A8);
-      case 'qr_visitor': return const Color(0xFFC4A882);
-      case 'manual': return const Color(0xFFB8A99A);
-      default: return const Color(0xFF8D6E63);
+      case 'rfid':
+      case 'uhf_rfid':
+        return const Color(0xFFD4C4A8);
+      case 'qr_visitor':
+        return const Color(0xFFC4A882);
+      case 'manual':
+        return const Color(0xFFB8A99A);
+      default:
+        return const Color(0xFF8D6E63);
     }
   }
 
   void _showFilterDialog() {
+    final residentIds = _residentNames.keys.toList()..sort();
+
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setStateDialog) {
             return AlertDialog(
-              title: const Text('🔍 Filter Entries', style: TextStyle(color: Color(0xFF6B5B4F), fontWeight: FontWeight.bold, fontSize: 15)),
+              title: const Text('🔍 Filter Entries',
+                  style: TextStyle(
+                      color: Color(0xFF6B5B4F),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15)),
               backgroundColor: const Color(0xFFFFF8F0),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(18),
-                side: const BorderSide(color: Color(0xFFE0D5C1), width: 1.5),
+                side:
+                const BorderSide(color: Color(0xFFE0D5C1), width: 1.5),
               ),
               content: SizedBox(
                 width: 300,
@@ -847,14 +998,18 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     ListTile(
-                      title: const Text('📅 Date Range', style: TextStyle(color: Color(0xFF6B5B4F), fontSize: 12)),
+                      title: const Text('📅 Date Range',
+                          style: TextStyle(
+                              color: Color(0xFF6B5B4F), fontSize: 12)),
                       subtitle: Text(
                         _dateRange == null
                             ? 'Select range'
                             : '${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}',
-                        style: const TextStyle(color: Color(0xFFB8A99A), fontSize: 11),
+                        style: const TextStyle(
+                            color: Color(0xFFB8A99A), fontSize: 11),
                       ),
-                      trailing: const Icon(Icons.calendar_today, color: Color(0xFFD4C4A8), size: 16),
+                      trailing: const Icon(Icons.calendar_today,
+                          color: Color(0xFFD4C4A8), size: 16),
                       onTap: () async {
                         final picked = await showDateRangePicker(
                           context: context,
@@ -873,7 +1028,9 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                             );
                           },
                         );
-                        if (picked != null) setStateDialog(() => _dateRange = picked);
+                        if (picked != null) {
+                          setStateDialog(() => _dateRange = picked);
+                        }
                       },
                     ),
                     const SizedBox(height: 8),
@@ -881,57 +1038,85 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                       value: _selectedResident,
                       decoration: InputDecoration(
                         labelText: '👤 Resident',
-                        labelStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 11),
+                        labelStyle: const TextStyle(
+                            color: Color(0xFFB8A99A), fontSize: 11),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                          borderSide:
+                          const BorderSide(color: Color(0xFFE0D5C1)),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                          borderSide:
+                          const BorderSide(color: Color(0xFFE0D5C1)),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFD4C4A8), width: 2),
+                          borderSide: const BorderSide(
+                              color: Color(0xFFD4C4A8), width: 2),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 8),
                       ),
                       items: [
-                        const DropdownMenuItem(value: 'all', child: Text('All Residents', style: TextStyle(fontSize: 12))),
-                        ..._residents.where((id) => id != 'all').map((id) => DropdownMenuItem(
+                        const DropdownMenuItem(
+                            value: 'all',
+                            child: Text('All Residents',
+                                style: TextStyle(fontSize: 12))),
+                        ...residentIds.map((id) => DropdownMenuItem(
                           value: id,
-                          child: Text(_residentNames[id] ?? 'Unknown', style: const TextStyle(fontSize: 12)),
+                          child: Text(_residentNames[id] ?? 'Unknown',
+                              style: const TextStyle(fontSize: 12)),
                         )),
                       ],
-                      onChanged: (value) => setStateDialog(() => _selectedResident = value!),
+                      onChanged: (value) =>
+                          setStateDialog(() => _selectedResident = value!),
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
                       value: _selectedEntryType,
                       decoration: InputDecoration(
                         labelText: '🔖 Entry Type',
-                        labelStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 11),
+                        labelStyle: const TextStyle(
+                            color: Color(0xFFB8A99A), fontSize: 11),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                          borderSide:
+                          const BorderSide(color: Color(0xFFE0D5C1)),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                          borderSide:
+                          const BorderSide(color: Color(0xFFE0D5C1)),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(color: Color(0xFFD4C4A8), width: 2),
+                          borderSide: const BorderSide(
+                              color: Color(0xFFD4C4A8), width: 2),
                         ),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 8),
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'all', child: Text('All Types', style: TextStyle(fontSize: 12))),
-                        DropdownMenuItem(value: 'uhf_rfid', child: Text('RFID 📡', style: TextStyle(fontSize: 12))),
-                        DropdownMenuItem(value: 'qr_visitor', child: Text('QR Visitor 📱', style: TextStyle(fontSize: 12))),
-                        DropdownMenuItem(value: 'manual', child: Text('Manual Entry ✏️', style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(
+                            value: 'all',
+                            child: Text('All Types',
+                                style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(
+                            value: 'uhf_rfid',
+                            child: Text('RFID 📡',
+                                style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(
+                            value: 'qr_visitor',
+                            child: Text('QR Visitor 📱',
+                                style: TextStyle(fontSize: 12))),
+                        DropdownMenuItem(
+                            value: 'manual',
+                            child: Text('Manual Entry ✏️',
+                                style: TextStyle(fontSize: 12))),
                       ],
-                      onChanged: (value) => setStateDialog(() => _selectedEntryType = value!),
+                      onChanged: (value) =>
+                          setStateDialog(() => _selectedEntryType = value!),
                     ),
                   ],
                 ),
@@ -939,17 +1124,24 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(context),
-                  style: TextButton.styleFrom(foregroundColor: const Color(0xFFB8A99A)),
-                  child: const Text('Cancel', style: TextStyle(fontSize: 12)),
+                  style: TextButton.styleFrom(
+                      foregroundColor: const Color(0xFFB8A99A)),
+                  child:
+                  const Text('Cancel', style: TextStyle(fontSize: 12)),
                 ),
                 ElevatedButton(
-                  onPressed: () { Navigator.pop(context); _updateFilters(); },
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _applyFilters();
+                  },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFD4C4A8),
                     foregroundColor: const Color(0xFF6B5B4F),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
                   ),
-                  child: const Text('Apply', style: TextStyle(fontSize: 12)),
+                  child:
+                  const Text('Apply', style: TextStyle(fontSize: 12)),
                 ),
               ],
             );

@@ -13,10 +13,36 @@ class AuthService {
   static const String adminPassword = 'florence123';
 
   // ==================== LOGIN ====================
-  Future<Map<String, dynamic>> login(String email, String password) async {
+  Future<Map<String, dynamic>> login(String identifier, String password) async {
     try {
+      String email = identifier.trim();
+
+      // If user typed an FHM-### ID, resolve it to the email
+      if (email.toUpperCase().startsWith('FHM-')) {
+        print('🔎 Resident ID login attempt: $email');
+        final query = await _firestore
+            .collection('users')
+            .where('residentId', isEqualTo: email.toUpperCase())
+            .limit(1)
+            .get();
+
+        if (query.docs.isEmpty) {
+          return {
+            'success': false,
+            'message': 'Resident ID not found',
+          };
+        }
+
+        final docData = query.docs.first.data() as Map<String, dynamic>;
+        email = (docData['authEmail'] as String?) ??
+            (docData['email'] as String?) ??
+            '';
+        print('✅ Resolved Resident ID to auth email: $email');
+      }
+
       // Check if it's the hardcoded admin account
-      if (email.toLowerCase().trim() == adminEmail.toLowerCase() && password == adminPassword) {
+      if (email.toLowerCase().trim() == adminEmail.toLowerCase() &&
+          password == adminPassword) {
         print('Attempting admin login...');
 
         UserCredential? userCredential;
@@ -48,10 +74,10 @@ class AuthService {
 
         if (userCredential != null) {
           String userId = userCredential.user!.uid;
-          DocumentSnapshot adminDoc = await _firestore.collection('users').doc(userId).get();
+          DocumentSnapshot adminDoc =
+          await _firestore.collection('users').doc(userId).get();
 
           if (!adminDoc.exists || isNewAdmin) {
-            print('Creating admin in Firestore...');
             UserModel adminUser = UserModel(
               id: userId,
               email: adminEmail,
@@ -60,15 +86,18 @@ class AuthService {
               isApproved: true,
               createdAt: DateTime.now(),
             );
-            await _firestore.collection('users').doc(userId).set(adminUser.toMap());
-            print('Admin created in Firestore');
+            await _firestore
+                .collection('users')
+                .doc(userId)
+                .set(adminUser.toMap());
 
             return {
               'success': true,
               'user': adminUser,
             };
           } else {
-            UserModel user = UserModel.fromMap(userId, adminDoc.data() as Map<String, dynamic>);
+            UserModel user = UserModel.fromMap(
+                userId, adminDoc.data() as Map<String, dynamic>);
             return {
               'success': true,
               'user': user,
@@ -78,14 +107,15 @@ class AuthService {
       }
 
       // Regular user login
-      print('Regular user login attempt...');
+      print('Regular user login attempt with: $email');
       UserCredential userCredential = await _auth.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
 
       String userId = userCredential.user!.uid;
-      DocumentSnapshot userDoc = await _firestore.collection('users').doc(userId).get();
+      DocumentSnapshot userDoc =
+      await _firestore.collection('users').doc(userId).get();
 
       if (!userDoc.exists) {
         return {
@@ -95,17 +125,17 @@ class AuthService {
       }
 
       bool isApproved = userDoc.get('isApproved');
-      String userType = userDoc.get('userType');
-
       if (!isApproved) {
         await _auth.signOut();
         return {
           'success': false,
-          'message': 'Your account is pending admin approval. Please wait for confirmation.',
+          'message':
+          'Your account is pending admin approval. Please wait for confirmation.',
         };
       }
 
-      UserModel user = UserModel.fromMap(userId, userDoc.data() as Map<String, dynamic>);
+      UserModel user = UserModel.fromMap(
+          userId, userDoc.data() as Map<String, dynamic>);
 
       return {
         'success': true,
@@ -115,12 +145,120 @@ class AuthService {
       print('Login error: $e');
       return {
         'success': false,
-        'message': 'Invalid email or password',
+        'message': 'Invalid credentials',
       };
     }
   }
 
-  // ==================== REGISTRATION ====================
+  // ==================== RESIDENT ID GENERATION ====================
+  Future<String> _generateResidentId() async {
+    final counterRef = _firestore.collection('system').doc('counters');
+
+    return await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(counterRef);
+      int nextNumber = 1;
+
+      if (snapshot.exists) {
+        nextNumber = ((snapshot.data()?['residentCounter'] ?? 0) as int) + 1;
+      }
+
+      transaction.set(
+        counterRef,
+        {'residentCounter': nextNumber},
+        SetOptions(merge: true),
+      );
+
+      return 'FHM-${nextNumber.toString().padLeft(3, '0')}';
+    });
+  }
+
+  // ==================== MANUAL REGISTRATION (ADMIN) ====================
+  Future<Map<String, dynamic>> registerResidentManually({
+    required String fullName,
+    required String password,
+    required String houseNumber,
+    String? email,
+    String? phoneNumber,
+  }) async {
+    try {
+      final residentId = await _generateResidentId();
+      print('🆔 Generated Resident ID: $residentId');
+
+      String? normalizedEmail = email?.trim().toLowerCase();
+      bool hasRealEmail =
+          normalizedEmail != null && normalizedEmail.isNotEmpty;
+
+      String authEmail;
+      if (hasRealEmail) {
+        if (normalizedEmail == adminEmail.toLowerCase()) {
+          return {
+            'success': false,
+            'message': 'This email is reserved for system administrator.',
+          };
+        }
+        List<String> signInMethods =
+        await _auth.fetchSignInMethodsForEmail(normalizedEmail);
+        if (signInMethods.isNotEmpty) {
+          return {
+            'success': false,
+            'message': 'An account with this email already exists.',
+          };
+        }
+        authEmail = normalizedEmail;
+      } else {
+        authEmail = '${residentId.toLowerCase()}@florencehomes.local';
+      }
+
+      UserCredential userCredential =
+      await _auth.createUserWithEmailAndPassword(
+        email: authEmail,
+        password: password,
+      );
+
+      String userId = userCredential.user!.uid;
+      print('✅ Auth user created: $userId ($authEmail)');
+
+      UserModel user = UserModel(
+        id: userId,
+        residentId: residentId,
+        email: hasRealEmail ? authEmail : '',
+        fullName: fullName,
+        userType: 'resident',
+        isApproved: false,
+        createdAt: DateTime.now(),
+        houseNumber: houseNumber,
+        phoneNumber: phoneNumber,
+      );
+
+      await _firestore.collection('users').doc(userId).set({
+        ...user.toMap(),
+        'authEmail': authEmail,
+        'hasRealEmail': hasRealEmail,
+        'isManualRegistration': true,
+        'plaintextPassword': password,
+      });
+      print('✅ Firestore user created for: $residentId');
+
+      await _auth.signOut();
+
+      return {
+        'success': true,
+        'message': 'Resident added. Pending admin approval.',
+        'userId': userId,
+        'residentId': residentId,
+        'password': password,
+      };
+    } catch (e) {
+      print('❌ Manual registration error: $e');
+      return {
+        'success': false,
+        'message': e.toString(),
+      };
+    }
+  }
+
+  // ==================== SELF-REGISTRATION (EMAIL VERIFIED) ====================
+  // 🆕 Also generates FHM ID and stores password for the approval email
   Future<Map<String, dynamic>> registerUser(
       String email,
       String password,
@@ -130,14 +268,17 @@ class AuthService {
       String? phoneNumber,
       ) async {
     try {
-      if (email.toLowerCase().trim() == adminEmail.toLowerCase()) {
+      String normalizedEmail = email.trim().toLowerCase();
+
+      if (normalizedEmail == adminEmail.toLowerCase()) {
         return {
           'success': false,
           'message': 'This email is reserved for system administrator.',
         };
       }
 
-      List<String> signInMethods = await _auth.fetchSignInMethodsForEmail(email);
+      List<String> signInMethods =
+      await _auth.fetchSignInMethodsForEmail(normalizedEmail);
       if (signInMethods.isNotEmpty) {
         return {
           'success': false,
@@ -145,8 +286,13 @@ class AuthService {
         };
       }
 
-      UserCredential userCredential = await _auth.createUserWithEmailAndPassword(
-        email: email,
+      // 🆕 Generate Resident ID for self-registered users too
+      final residentId = await _generateResidentId();
+      print('🆔 Generated Resident ID (self-reg): $residentId');
+
+      UserCredential userCredential =
+      await _auth.createUserWithEmailAndPassword(
+        email: normalizedEmail,
         password: password,
       );
 
@@ -156,7 +302,8 @@ class AuthService {
 
       UserModel user = UserModel(
         id: userId,
-        email: email,
+        residentId: residentId,
+        email: normalizedEmail,
         fullName: fullName,
         userType: 'resident',
         isApproved: false,
@@ -165,16 +312,22 @@ class AuthService {
         phoneNumber: phoneNumber,
       );
 
-      await _firestore.collection('users').doc(userId).set(user.toMap());
-      print('✅ Firestore user created for: $email');
+      await _firestore.collection('users').doc(userId).set({
+        ...user.toMap(),
+        'authEmail': normalizedEmail,
+        'hasRealEmail': true,
+        'isManualRegistration': false,
+        'plaintextPassword': password, // so we can email it on approval
+      });
+      print('✅ Firestore user created for: $normalizedEmail');
 
       await _auth.signOut();
-      print('✅ Signed out user - pending approval required');
 
       return {
         'success': true,
         'message': 'Registration successful. Waiting for admin approval.',
         'userId': userId,
+        'residentId': residentId,
       };
     } catch (e) {
       print('❌ Registration error: $e');
@@ -185,51 +338,42 @@ class AuthService {
     }
   }
 
-  // ==================== PASSWORD RESET WITH OTP ====================
-
-  // Step 1: Send password reset code (OTP)
+  // ==================== PASSWORD RESET ====================
   Future<Map<String, dynamic>> sendPasswordResetCode(String email) async {
     try {
-      print('🔍 Checking account for email: $email');
-
       String normalizedEmail = email.trim().toLowerCase();
 
-      // Check if user exists and is APPROVED in Firestore
       QuerySnapshot approvedCheck = await _firestore
           .collection('users')
           .where('email', isEqualTo: normalizedEmail)
           .limit(1)
           .get();
 
-      print('📋 Firestore users found: ${approvedCheck.docs.length}');
-
       if (approvedCheck.docs.isEmpty) {
-        print('❌ No account found for email: $email');
         return {
           'success': false,
           'message': 'No account found with this email address',
         };
       }
 
-      // Check if user is approved
-      Map<String, dynamic> userData = approvedCheck.docs.first.data() as Map<String, dynamic>;
+      Map<String, dynamic> userData =
+      approvedCheck.docs.first.data() as Map<String, dynamic>;
       bool isApproved = userData['isApproved'] ?? false;
 
       if (!isApproved) {
-        print('⚠️ Account exists but NOT APPROVED yet');
         return {
           'success': false,
-          'message': 'Your account is pending admin approval. Please wait for approval before resetting password.',
+          'message':
+          'Your account is pending admin approval. Please wait for approval before resetting password.',
         };
       }
 
-      print('✅ Approved account found! Generating OTP...');
-
-      // Generate 6-digit code
       String code = (100000 + Random().nextInt(900000)).toString();
 
-      // Store code in Firestore
-      await _firestore.collection('password_resets').doc(normalizedEmail).set({
+      await _firestore
+          .collection('password_resets')
+          .doc(normalizedEmail)
+          .set({
         'code': code,
         'email': normalizedEmail,
         'createdAt': DateTime.now(),
@@ -237,14 +381,14 @@ class AuthService {
         'isUsed': false,
       });
 
-      // Send email with OTP code
-      bool emailSent = await EmailService.sendVerificationCode(normalizedEmail, code);
+      bool emailSent =
+      await EmailService.sendVerificationCode(normalizedEmail, code);
 
       if (emailSent) {
-        print('✅ OTP sent to approved user: $email');
         return {
           'success': true,
-          'message': 'Verification code sent to your email. Please check your inbox (and spam folder).',
+          'message':
+          'Verification code sent to your email. Please check your inbox.',
           'email': normalizedEmail,
         };
       } else {
@@ -254,73 +398,55 @@ class AuthService {
         };
       }
     } catch (e) {
-      print('❌ Error sending reset code: $e');
-      return {
-        'success': false,
-        'message': 'Error: $e',
-      };
+      return {'success': false, 'message': 'Error: $e'};
     }
   }
 
-  // Step 2: Verify reset code and send Firebase reset email
-  Future<Map<String, dynamic>> verifyResetCode(String email, String code) async {
+  Future<Map<String, dynamic>> verifyResetCode(
+      String email, String code) async {
     try {
       String normalizedEmail = email.trim().toLowerCase();
-      DocumentSnapshot doc = await _firestore.collection('password_resets').doc(normalizedEmail).get();
+      DocumentSnapshot doc = await _firestore
+          .collection('password_resets')
+          .doc(normalizedEmail)
+          .get();
 
       if (!doc.exists) {
-        return {
-          'success': false,
-          'message': 'No reset request found',
-        };
+        return {'success': false, 'message': 'No reset request found'};
       }
 
       Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
 
       if (data['code'] != code) {
-        return {
-          'success': false,
-          'message': 'Invalid code',
-        };
+        return {'success': false, 'message': 'Invalid code'};
       }
-
       if (data['isUsed'] == true) {
-        return {
-          'success': false,
-          'message': 'Code has already been used',
-        };
+        return {'success': false, 'message': 'Code has already been used'};
       }
 
       DateTime expiresAt = (data['expiresAt'] as Timestamp).toDate();
       if (DateTime.now().isAfter(expiresAt)) {
-        return {
-          'success': false,
-          'message': 'Code has expired',
-        };
+        return {'success': false, 'message': 'Code has expired'};
       }
 
-      // Mark code as used
-      await _firestore.collection('password_resets').doc(normalizedEmail).update({
-        'isUsed': true,
-      });
+      await _firestore
+          .collection('password_resets')
+          .doc(normalizedEmail)
+          .update({'isUsed': true});
 
-      // Send Firebase password reset email (this works reliably)
       await _auth.sendPasswordResetEmail(email: normalizedEmail);
 
       return {
         'success': true,
-        'message': 'Code verified! Password reset email sent to your inbox. Please check your spam folder if you don\'t see it.',
+        'message':
+        'Code verified! Password reset email sent to your inbox.',
       };
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Error: $e',
-      };
+      return {'success': false, 'message': 'Error: $e'};
     }
   }
 
   // ==================== ADMIN FUNCTIONS ====================
-
   Future<bool> approveUser(String userId) async {
     try {
       await _firestore.collection('users').doc(userId).update({
@@ -335,14 +461,11 @@ class AuthService {
 
   Future<bool> rejectUser(String userId, String reason) async {
     try {
-      DocumentSnapshot userDoc = await _firestore.collection('users').doc(userId).get();
       await _firestore.collection('users').doc(userId).delete();
-
       User? user = _auth.currentUser;
       if (user != null && user.uid == userId) {
         await user.delete();
       }
-
       return true;
     } catch (e) {
       print('Error rejecting user: $e');
@@ -352,9 +475,11 @@ class AuthService {
 
   Future<UserModel?> getUser(String userId) async {
     try {
-      DocumentSnapshot userDoc = await _firestore.collection('users').doc(userId).get();
+      DocumentSnapshot userDoc =
+      await _firestore.collection('users').doc(userId).get();
       if (userDoc.exists) {
-        return UserModel.fromMap(userId, userDoc.data() as Map<String, dynamic>);
+        return UserModel.fromMap(
+            userId, userDoc.data() as Map<String, dynamic>);
       }
       return null;
     } catch (e) {
@@ -373,7 +498,8 @@ class AuthService {
           .get();
 
       return snapshot.docs.map((doc) {
-        return UserModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
+        return UserModel.fromMap(
+            doc.id, doc.data() as Map<String, dynamic>);
       }).toList();
     } catch (e) {
       print('Error getting pending users: $e');
@@ -390,7 +516,8 @@ class AuthService {
           .get();
 
       return snapshot.docs.map((doc) {
-        return UserModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
+        return UserModel.fromMap(
+            doc.id, doc.data() as Map<String, dynamic>);
       }).toList();
     } catch (e) {
       print('Error getting residents: $e');

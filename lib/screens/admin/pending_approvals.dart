@@ -45,7 +45,6 @@ class _PendingApprovalsState extends State<PendingApprovals> {
         }).toList();
         _isLoading = false;
       });
-
     } catch (e) {
       setState(() {
         _errorMessage = 'Error: $e';
@@ -54,50 +53,88 @@ class _PendingApprovalsState extends State<PendingApprovals> {
     }
   }
 
+  // ============================================================
+  // APPROVE — Unified for both signup flows
+  // ============================================================
   Future<void> _approveUser(UserModel user) async {
-    setState(() {
-      _isProcessing = true;
-    });
+    setState(() => _isProcessing = true);
 
     try {
+      final userDoc = await _firestore.collection('users').doc(user.id).get();
+      final data = userDoc.data() as Map<String, dynamic>;
+
+      final residentId = data['residentId'] as String?;
+      final plaintextPassword = data['plaintextPassword'] as String?;
+      final hasRealEmail = data['hasRealEmail'] == true;
+      final storedEmail = (data['email'] as String?) ?? '';
+
+      // Mark as approved
       await _firestore.collection('users').doc(user.id).update({
         'isApproved': true,
       });
 
-      // Send approval email
-      bool emailSent = await EmailService.sendApprovalEmail(user.email, user.fullName);
+      bool emailSent = false;
+      String message;
 
-      if (emailSent) {
+      // 🆕 Unified — works for BOTH self-registered and manual
+      if (hasRealEmail &&
+          storedEmail.isNotEmpty &&
+          residentId != null &&
+          plaintextPassword != null) {
+        emailSent = await EmailService.sendResidentCredentialsEmail(
+          email: storedEmail,
+          fullName: user.fullName,
+          residentId: residentId,
+          password: plaintextPassword,
+        );
+
+        if (emailSent) {
+          await _firestore.collection('users').doc(user.id).update({
+            'plaintextPassword': FieldValue.delete(),
+          });
+        }
+
+        message = emailSent
+            ? '✅ ${user.fullName} approved. Credentials emailed to $storedEmail.'
+            : '✅ Approved but email failed. Credentials: $residentId / $plaintextPassword';
+      } else if (!hasRealEmail || storedEmail.isEmpty) {
+        message =
+        '✅ ${user.fullName} approved. No email on file — credentials: $residentId / ${plaintextPassword ?? "N/A"}';
+      } else {
+        // Legacy accounts (created before this update)
+        emailSent = await EmailService.sendApprovalEmail(
+          storedEmail,
+          user.fullName,
+        );
+        message = emailSent
+            ? '✅ ${user.fullName} approved and notified via email.'
+            : '✅ ${user.fullName} approved but email failed.';
+      }
+
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('✅ ${user.fullName} has been approved and notified via email'),
+            content: Text(message),
             backgroundColor: const Color(0xFF8D6E63),
             behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('✅ ${user.fullName} approved but email notification failed'),
-            backgroundColor: const Color(0xFFFF9800),
-            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 6),
           ),
         );
       }
 
       _loadPendingUsers();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error approving user: $e'),
-          backgroundColor: const Color(0xFFD32F2F),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error approving user: $e'),
+            backgroundColor: const Color(0xFFD32F2F),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     } finally {
-      setState(() {
-        _isProcessing = false;
-      });
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -108,10 +145,12 @@ class _PendingApprovalsState extends State<PendingApprovals> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Text(
             'Reject Registration',
-            style: TextStyle(color: Color(0xFF5D4037), fontWeight: FontWeight.bold),
+            style: TextStyle(
+                color: Color(0xFF5D4037), fontWeight: FontWeight.bold),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -124,7 +163,8 @@ class _PendingApprovalsState extends State<PendingApprovals> {
               const SizedBox(height: 16),
               const Text(
                 'Reason (optional):',
-                style: TextStyle(color: Color(0xFF5D4037), fontWeight: FontWeight.w500),
+                style: TextStyle(
+                    color: Color(0xFF5D4037), fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 8),
               TextField(
@@ -133,14 +173,16 @@ class _PendingApprovalsState extends State<PendingApprovals> {
                 },
                 decoration: InputDecoration(
                   hintText: 'Enter reason for rejection...',
-                  hintStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 12),
+                  hintStyle: const TextStyle(
+                      color: Color(0xFFB8A99A), fontSize: 12),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: Color(0xFFC4A882), width: 2),
+                    borderSide:
+                    const BorderSide(color: Color(0xFFC4A882), width: 2),
                   ),
                   filled: true,
                   fillColor: Colors.white,
@@ -152,7 +194,8 @@ class _PendingApprovalsState extends State<PendingApprovals> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              style: TextButton.styleFrom(foregroundColor: const Color(0xFFB8A99A)),
+              style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFB8A99A)),
               child: const Text('Cancel'),
             ),
             ElevatedButton(
@@ -163,7 +206,8 @@ class _PendingApprovalsState extends State<PendingApprovals> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFD32F2F),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12)),
               ),
               child: const Text('Reject'),
             ),
@@ -174,33 +218,35 @@ class _PendingApprovalsState extends State<PendingApprovals> {
   }
 
   Future<void> _rejectUser(UserModel user) async {
-    setState(() {
-      _isProcessing = true;
-    });
+    setState(() => _isProcessing = true);
 
     try {
-      // Send rejection email before deleting
-      bool emailSent = await EmailService.sendRejectionEmail(
-          user.email,
-          user.fullName,
-          _rejectionReason
-      );
+      final userDoc = await _firestore.collection('users').doc(user.id).get();
+      final data = userDoc.data() as Map<String, dynamic>;
+      final hasRealEmail = data['hasRealEmail'] == true;
+      final storedEmail = (data['email'] as String?) ?? '';
 
-      // Delete user from Firestore
+      bool emailSent = false;
+      if (hasRealEmail && storedEmail.isNotEmpty) {
+        emailSent = await EmailService.sendRejectionEmail(
+          storedEmail,
+          user.fullName,
+          _rejectionReason,
+        );
+      }
+
       await _firestore.collection('users').doc(user.id).delete();
 
-      if (emailSent) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('❌ ${user.fullName} has been rejected and notified via email'),
-            backgroundColor: const Color(0xFFD32F2F),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('❌ ${user.fullName} rejected but email notification failed'),
+            content: Text(
+              hasRealEmail
+                  ? (emailSent
+                  ? '❌ ${user.fullName} rejected and notified via email'
+                  : '❌ ${user.fullName} rejected but email failed')
+                  : '❌ ${user.fullName} rejected (no email on file)',
+            ),
             backgroundColor: const Color(0xFFD32F2F),
             behavior: SnackBarBehavior.floating,
           ),
@@ -209,17 +255,17 @@ class _PendingApprovalsState extends State<PendingApprovals> {
 
       _loadPendingUsers();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error rejecting user: $e'),
-          backgroundColor: const Color(0xFFD32F2F),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error rejecting user: $e'),
+            backgroundColor: const Color(0xFFD32F2F),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     } finally {
-      setState(() {
-        _isProcessing = false;
-      });
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -228,10 +274,10 @@ class _PendingApprovalsState extends State<PendingApprovals> {
     return Scaffold(
       appBar: AppBar(
         title: Row(
-          children: [
-            const Icon(Icons.pending_actions, size: 24, color: Color(0xFFFFF8F0)),
-            const SizedBox(width: 10),
-            const Text(
+          children: const [
+            Icon(Icons.pending_actions, size: 24, color: Color(0xFFFFF8F0)),
+            SizedBox(width: 10),
+            Text(
               'Pending Approvals',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
@@ -252,14 +298,14 @@ class _PendingApprovalsState extends State<PendingApprovals> {
         ],
       ),
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFFFFF8F0),
-              const Color(0xFFF5F0E8),
-              const Color(0xFFEDE5D8),
+              Color(0xFFFFF8F0),
+              Color(0xFFF5F0E8),
+              Color(0xFFEDE5D8),
             ],
           ),
         ),
@@ -270,10 +316,12 @@ class _PendingApprovalsState extends State<PendingApprovals> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFC4A882)),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                      Color(0xFFC4A882)),
                 ),
                 SizedBox(height: 16),
-                Text('Processing...', style: TextStyle(color: Color(0xFF8D6E63))),
+                Text('Processing...',
+                    style: TextStyle(color: Color(0xFF8D6E63))),
               ],
             ),
           )
@@ -293,9 +341,12 @@ class _PendingApprovalsState extends State<PendingApprovals> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8))),
+            CircularProgressIndicator(
+                valueColor:
+                AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8))),
             SizedBox(height: 16),
-            Text('Loading pending approvals...', style: TextStyle(color: Color(0xFFB8A99A))),
+            Text('Loading pending approvals...',
+                style: TextStyle(color: Color(0xFFB8A99A))),
           ],
         ),
       );
@@ -308,7 +359,8 @@ class _PendingApprovalsState extends State<PendingApprovals> {
           children: [
             const Icon(Icons.error, size: 48, color: Color(0xFFD32F2F)),
             const SizedBox(height: 16),
-            Text(_errorMessage!, style: const TextStyle(color: Color(0xFFB8A99A))),
+            Text(_errorMessage!,
+                style: const TextStyle(color: Color(0xFFB8A99A))),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _loadPendingUsers,
@@ -330,9 +382,18 @@ class _PendingApprovalsState extends State<PendingApprovals> {
           children: [
             Icon(Icons.check_circle, size: 60, color: Color(0xFF8D6E63)),
             SizedBox(height: 16),
-            Text('🎉 No pending approvals!', style: TextStyle(fontSize: 16, color: Color(0xFF6B5B4F), fontWeight: FontWeight.bold)),
+            Text(
+              '🎉 No pending approvals!',
+              style: TextStyle(
+                  fontSize: 16,
+                  color: Color(0xFF6B5B4F),
+                  fontWeight: FontWeight.bold),
+            ),
             SizedBox(height: 8),
-            Text('All residents have been processed', style: TextStyle(color: Color(0xFFB8A99A), fontSize: 12)),
+            Text(
+              'All residents have been processed',
+              style: TextStyle(color: Color(0xFFB8A99A), fontSize: 12),
+            ),
           ],
         ),
       );
@@ -344,6 +405,8 @@ class _PendingApprovalsState extends State<PendingApprovals> {
       itemCount: _pendingUsers.length,
       itemBuilder: (context, index) {
         final user = _pendingUsers[index];
+        final hasEmail = user.email.isNotEmpty;
+
         return Container(
           margin: const EdgeInsets.only(bottom: 16),
           decoration: BoxDecoration(
@@ -382,63 +445,125 @@ class _PendingApprovalsState extends State<PendingApprovals> {
                           ),
                           borderRadius: BorderRadius.circular(16),
                         ),
-                        child: const Icon(Icons.person, size: 32, color: Color(0xFFFF9800)),
+                        child: const Icon(Icons.person,
+                            size: 32, color: Color(0xFFFF9800)),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(user.fullName, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F))),
+                            Text(
+                              user.fullName,
+                              style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF6B5B4F)),
+                            ),
                             const SizedBox(height: 2),
-                            Text(user.email, style: TextStyle(color: const Color(0xFFB8A99A), fontSize: 11)),
+                            Text(
+                              hasEmail ? user.email : '📭 No email on file',
+                              style: TextStyle(
+                                color: hasEmail
+                                    ? const Color(0xFFB8A99A)
+                                    : const Color(0xFFFF9800),
+                                fontSize: 11,
+                                fontStyle: hasEmail
+                                    ? FontStyle.normal
+                                    : FontStyle.italic,
+                              ),
+                            ),
+                            if (user.residentId != null) ...[
+                              const SizedBox(height: 4),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFC4A882)
+                                      .withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: Text(
+                                  'ID: ${user.residentId}',
+                                  style: const TextStyle(
+                                    color: Color(0xFF8D6E63),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
                           color: const Color(0xFFFF9800).withOpacity(0.15),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: const Color(0xFFFF9800).withOpacity(0.3)),
+                          border: Border.all(
+                              color:
+                              const Color(0xFFFF9800).withOpacity(0.3)),
                         ),
-                        child: const Text('⏳ PENDING', style: TextStyle(color: Color(0xFFFF9800), fontWeight: FontWeight.bold, fontSize: 10)),
+                        child: const Text(
+                          '⏳ PENDING',
+                          style: TextStyle(
+                              color: Color(0xFFFF9800),
+                              fontWeight: FontWeight.bold,
+                              fontSize: 10),
+                        ),
                       ),
                     ],
                   ),
                   const Divider(color: Color(0xFFE0D5C1), height: 20),
-                  _buildInfoRow(Icons.home, '🏠 House', user.houseNumber ?? 'Not provided'),
+                  _buildInfoRow(Icons.home, '🏠 House',
+                      user.houseNumber ?? 'Not provided'),
                   const SizedBox(height: 6),
-                  _buildInfoRow(Icons.phone, '📱 Phone', user.phoneNumber ?? 'Not provided'),
+                  _buildInfoRow(Icons.phone, '📱 Phone',
+                      user.phoneNumber ?? 'Not provided'),
                   const SizedBox(height: 6),
-                  _buildInfoRow(Icons.calendar_today, '📅 Registered', DateFormat('MMM dd, yyyy').format(user.createdAt)),
+                  _buildInfoRow(
+                    Icons.calendar_today,
+                    '📅 Registered',
+                    DateFormat('MMM dd, yyyy').format(user.createdAt),
+                  ),
                   const SizedBox(height: 16),
                   Row(
                     children: [
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: _isProcessing ? null : () => _approveUser(user),
+                          onPressed: _isProcessing
+                              ? null
+                              : () => _approveUser(user),
                           icon: const Icon(Icons.check, size: 16),
-                          label: const Text('Approve', style: TextStyle(fontSize: 13)),
+                          label: const Text('Approve',
+                              style: TextStyle(fontSize: 13)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF8D6E63),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
                           ),
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: ElevatedButton.icon(
-                          onPressed: _isProcessing ? null : () => _showRejectionDialog(user),
+                          onPressed: _isProcessing
+                              ? null
+                              : () => _showRejectionDialog(user),
                           icon: const Icon(Icons.close, size: 16),
-                          label: const Text('Reject', style: TextStyle(fontSize: 13)),
+                          label: const Text('Reject',
+                              style: TextStyle(fontSize: 13)),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFFD32F2F),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 10),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12)),
                           ),
                         ),
                       ),
@@ -458,8 +583,22 @@ class _PendingApprovalsState extends State<PendingApprovals> {
       children: [
         Icon(icon, size: 14, color: const Color(0xFFD4C4A8)),
         const SizedBox(width: 8),
-        SizedBox(width: 60, child: Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFFB8A99A), fontWeight: FontWeight.w500))),
-        Expanded(child: Text(value, style: const TextStyle(fontSize: 11, color: Color(0xFF6B5B4F)))),
+        SizedBox(
+          width: 70,
+          child: Text(
+            label,
+            style: const TextStyle(
+                fontSize: 11,
+                color: Color(0xFFB8A99A),
+                fontWeight: FontWeight.w500),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 11, color: Color(0xFF6B5B4F)),
+          ),
+        ),
       ],
     );
   }

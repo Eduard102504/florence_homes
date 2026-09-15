@@ -4,7 +4,7 @@ import '../../providers/auth_provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'verify_email_screen.dart';
-import 'forgot_password_screen.dart';  // Add this import
+import 'forgot_password_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -15,7 +15,7 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
+  final _identifierController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isPasswordVisible = false;
   bool _imageLoaded = true;
@@ -29,16 +29,19 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _checkImageAsset() async {
     try {
       await rootBundle.load('assets/images/gate_background.jpg');
-      setState(() {
-        _imageLoaded = true;
-      });
+      setState(() => _imageLoaded = true);
       print('✅ Background image loaded successfully');
     } catch (e) {
       print('❌ Background image not found: $e');
-      setState(() {
-        _imageLoaded = false;
-      });
+      setState(() => _imageLoaded = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _identifierController.dispose();
+    _passwordController.dispose();
+    super.dispose();
   }
 
   @override
@@ -55,13 +58,13 @@ class _LoginScreenState extends State<LoginScreen> {
           )
               : null,
           gradient: !_imageLoaded
-              ? LinearGradient(
+              ? const LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFFFFF8F0),
-              const Color(0xFFF5F0E8),
-              const Color(0xFFEDE5D8),
+              Color(0xFFFFF8F0),
+              Color(0xFFF5F0E8),
+              Color(0xFFEDE5D8),
             ],
           )
               : null,
@@ -81,7 +84,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      // Logo Section
                       Container(
                         padding: const EdgeInsets.all(20),
                         decoration: BoxDecoration(
@@ -110,7 +112,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 24),
 
-                      // Title
                       const Text(
                         'Florence Homes',
                         style: TextStyle(
@@ -130,9 +131,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 8),
 
-                      // Subtitle
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 20, vertical: 8),
                         decoration: BoxDecoration(
                           color: Colors.black.withOpacity(0.4),
                           borderRadius: BorderRadius.circular(30),
@@ -150,7 +151,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 48),
 
-                      // Form Card
                       Container(
                         decoration: BoxDecoration(
                           color: Colors.white.withOpacity(0.95),
@@ -180,18 +180,20 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       const SizedBox(height: 16),
 
-                      // Create Account Button - Navigates to Email Verification
                       TextButton(
                         onPressed: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const VerifyEmailScreen()),
+                            MaterialPageRoute(
+                                builder: (context) =>
+                                const VerifyEmailScreen()),
                           );
                         },
                         style: TextButton.styleFrom(
                           foregroundColor: const Color(0xFF5D4037),
                           backgroundColor: Colors.white.withOpacity(0.9),
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 20),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 12, horizontal: 20),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(30),
                           ),
@@ -232,7 +234,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           const SizedBox(height: 8),
           const Text(
-            'Please enter your credentials to continue',
+            'Enter your credentials to continue',
             style: TextStyle(
               color: Color(0xFF8D6E63),
               fontSize: 13,
@@ -241,11 +243,23 @@ class _LoginScreenState extends State<LoginScreen> {
           const SizedBox(height: 32),
 
           TextFormField(
-            controller: _emailController,
+            controller: _identifierController,
             decoration: InputDecoration(
-              labelText: 'Email Address',
-              labelStyle: const TextStyle(color: Color(0xFF8D6E63), fontWeight: FontWeight.w500),
-              prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFFC4A882), size: 22),
+              labelText: 'Email or Resident ID',
+              hintText: 'e.g., you@email.com or FHM-001',
+              hintStyle: const TextStyle(
+                color: Color(0xFFD4C4A8),
+                fontSize: 12,
+              ),
+              labelStyle: const TextStyle(
+                color: Color(0xFF8D6E63),
+                fontWeight: FontWeight.w500,
+              ),
+              prefixIcon: const Icon(
+                Icons.person_outline,
+                color: Color(0xFFC4A882),
+                size: 22,
+              ),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
                 borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
@@ -256,16 +270,19 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFC4A882), width: 2),
+                borderSide:
+                const BorderSide(color: Color(0xFFC4A882), width: 2),
               ),
               filled: true,
               fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
             keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Please enter your email';
+                return 'Please enter your email or Resident ID';
               }
               return null;
             },
@@ -276,8 +293,15 @@ class _LoginScreenState extends State<LoginScreen> {
             controller: _passwordController,
             decoration: InputDecoration(
               labelText: 'Password',
-              labelStyle: const TextStyle(color: Color(0xFF8D6E63), fontWeight: FontWeight.w500),
-              prefixIcon: const Icon(Icons.lock_outline, color: Color(0xFFC4A882), size: 22),
+              labelStyle: const TextStyle(
+                color: Color(0xFF8D6E63),
+                fontWeight: FontWeight.w500,
+              ),
+              prefixIcon: const Icon(
+                Icons.lock_outline,
+                color: Color(0xFFC4A882),
+                size: 22,
+              ),
               suffixIcon: IconButton(
                 icon: Icon(
                   _isPasswordVisible
@@ -302,11 +326,13 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Color(0xFFC4A882), width: 2),
+                borderSide:
+                const BorderSide(color: Color(0xFFC4A882), width: 2),
               ),
               filled: true,
               fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              contentPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
             obscureText: !_isPasswordVisible,
             validator: (value) {
@@ -319,18 +345,19 @@ class _LoginScreenState extends State<LoginScreen> {
 
           const SizedBox(height: 8),
 
-          // ==================== FORGOT PASSWORD LINK ====================
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
+                  MaterialPageRoute(
+                      builder: (context) => const ForgotPasswordScreen()),
                 );
               },
               style: TextButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 minimumSize: Size.zero,
               ),
               child: const Text(
@@ -349,33 +376,38 @@ class _LoginScreenState extends State<LoginScreen> {
           if (authProvider.isLoading)
             const Center(
               child: CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFC4A882)),
+                valueColor:
+                AlwaysStoppedAnimation<Color>(Color(0xFFC4A882)),
               ),
             )
           else
             ElevatedButton(
               onPressed: () async {
-                if (_formKey.currentState!.validate()) {
-                  bool success = await authProvider.login(
-                    _emailController.text,
-                    _passwordController.text,
-                  );
+                if (!_formKey.currentState!.validate()) return;
 
-                  if (success) {
-                    if (authProvider.isAdmin) {
-                      Navigator.pushReplacementNamed(context, '/admin');
-                    } else {
-                      Navigator.pushReplacementNamed(context, '/resident');
-                    }
+                final identifier = _identifierController.text.trim();
+                final password = _passwordController.text;
+
+                bool success =
+                await authProvider.login(identifier, password);
+
+                if (!mounted) return;
+
+                if (success) {
+                  if (authProvider.isAdmin) {
+                    Navigator.pushReplacementNamed(context, '/admin');
                   } else {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Invalid email or password'),
-                        backgroundColor: Color(0xFFD32F2F),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
+                    Navigator.pushReplacementNamed(context, '/resident');
                   }
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content:
+                      Text('Invalid credentials. Please try again.'),
+                      backgroundColor: Color(0xFFD32F2F),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
                 }
               },
               style: ElevatedButton.styleFrom(

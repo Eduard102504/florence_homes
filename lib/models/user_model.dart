@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class UserModel {
   String? id;
+  String? residentId; // FHM-### format
   String email;
   String fullName;
   String userType;
@@ -13,6 +14,7 @@ class UserModel {
 
   UserModel({
     this.id,
+    this.residentId,
     required this.email,
     required this.fullName,
     required this.userType,
@@ -25,6 +27,7 @@ class UserModel {
 
   Map<String, dynamic> toMap() {
     return {
+      'residentId': residentId,
       'email': email,
       'fullName': fullName,
       'userType': userType,
@@ -39,6 +42,7 @@ class UserModel {
   factory UserModel.fromMap(String id, Map<String, dynamic> map) {
     return UserModel(
       id: id,
+      residentId: map['residentId'],
       email: map['email'] ?? '',
       fullName: map['fullName'] ?? '',
       userType: map['userType'] ?? 'resident',

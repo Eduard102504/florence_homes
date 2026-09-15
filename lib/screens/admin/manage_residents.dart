@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
+import '../../services/email_service.dart';
 import '../../services/tcp_service.dart';
 import '../../models/user_model.dart';
 
@@ -50,7 +51,6 @@ class _ManageResidentsState extends State<ManageResidents> {
         }).toList();
         _isLoading = false;
       });
-
     } catch (e) {
       print('ERROR loading residents: $e');
       setState(() {
@@ -61,7 +61,6 @@ class _ManageResidentsState extends State<ManageResidents> {
   }
 
   // ==================== RFID REGISTRATION ====================
-
   Future<void> _registerRFID(UserModel resident) async {
     if (!_tcpService.isConnected) {
       _showMessage('Not connected to RFID scanner', isError: true);
@@ -72,7 +71,8 @@ class _ManageResidentsState extends State<ManageResidents> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Register RFID', style: TextStyle(color: Color(0xFF6B5B4F))),
+        title: const Text('Register RFID',
+            style: TextStyle(color: Color(0xFF6B5B4F))),
         backgroundColor: const Color(0xFFFFF8F0),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
@@ -83,20 +83,29 @@ class _ManageResidentsState extends State<ManageResidents> {
           children: [
             const Icon(Icons.nfc, size: 80, color: Color(0xFFD4C4A8)),
             const SizedBox(height: 16),
-            const Text('Please tap RFID tag for:', style: TextStyle(color: Color(0xFF8D6E63))),
+            const Text('Please tap RFID tag for:',
+                style: TextStyle(color: Color(0xFF8D6E63))),
             const SizedBox(height: 8),
-            Text(resident.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF5D4037))),
+            Text(resident.fullName,
+                style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: Color(0xFF5D4037))),
             const SizedBox(height: 24),
-            const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8))),
+            const CircularProgressIndicator(
+                valueColor:
+                AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8))),
             const SizedBox(height: 16),
-            const Text('Waiting for tag...', style: TextStyle(fontSize: 12, color: Color(0xFFB8A99A))),
+            const Text('Waiting for tag...',
+                style: TextStyle(fontSize: 12, color: Color(0xFFB8A99A))),
             const SizedBox(height: 8),
             TextButton(
               onPressed: () {
                 _tcpService.sendCommand("CANCEL_REGISTRATION");
                 Navigator.pop(context);
               },
-              style: TextButton.styleFrom(foregroundColor: const Color(0xFFD32F2F)),
+              style: TextButton.styleFrom(
+                  foregroundColor: const Color(0xFFD32F2F)),
               child: const Text('Cancel'),
             ),
           ],
@@ -104,17 +113,16 @@ class _ManageResidentsState extends State<ManageResidents> {
       ),
     );
 
-    String response = await _tcpService.sendCommand("REGISTER:${resident.id}:${resident.fullName}");
+    String response = await _tcpService
+        .sendCommand("REGISTER:${resident.id}:${resident.fullName}");
 
     if (response == "WAITING_FOR_TAG") {
       bool registered = false;
       for (int i = 0; i < 30; i++) {
         await Future.delayed(const Duration(seconds: 1));
 
-        DocumentSnapshot updatedDoc = await _firestore
-            .collection('users')
-            .doc(resident.id)
-            .get();
+        DocumentSnapshot updatedDoc =
+        await _firestore.collection('users').doc(resident.id).get();
 
         String? rfidTag = updatedDoc.get('rfidTag');
         if (rfidTag != null && rfidTag.isNotEmpty) {
@@ -127,10 +135,12 @@ class _ManageResidentsState extends State<ManageResidents> {
         Navigator.pop(context);
 
         if (registered) {
-          _showMessage('✅ RFID registered for ${resident.fullName}', isSuccess: true);
+          _showMessage('✅ RFID registered for ${resident.fullName}',
+              isSuccess: true);
           _loadResidents();
         } else {
-          _showMessage('❌ Registration timeout. Please try again.', isError: true);
+          _showMessage('❌ Registration timeout. Please try again.',
+              isError: true);
         }
       }
     } else {
@@ -147,8 +157,10 @@ class _ManageResidentsState extends State<ManageResidents> {
     bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove RFID', style: TextStyle(color: Color(0xFF6B5B4F))),
-        content: Text('Remove RFID tag from ${resident.fullName}?', style: const TextStyle(color: Color(0xFF8D6E63))),
+        title: const Text('Remove RFID',
+            style: TextStyle(color: Color(0xFF6B5B4F))),
+        content: Text('Remove RFID tag from ${resident.fullName}?',
+            style: const TextStyle(color: Color(0xFF8D6E63))),
         backgroundColor: const Color(0xFFFFF8F0),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
@@ -157,12 +169,14 @@ class _ManageResidentsState extends State<ManageResidents> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFB8A99A)),
+            style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFB8A99A)),
             child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFD32F2F)),
+            style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFD32F2F)),
             child: const Text('Remove'),
           ),
         ],
@@ -171,12 +185,16 @@ class _ManageResidentsState extends State<ManageResidents> {
 
     if (confirm == true) {
       try {
-        await _firestore.collection('rfid_tags').doc(resident.rfidTag).delete();
+        await _firestore
+            .collection('rfid_tags')
+            .doc(resident.rfidTag)
+            .delete();
         await _firestore.collection('users').doc(resident.id).update({
           'rfidTag': FieldValue.delete(),
         });
 
-        _showMessage('RFID removed from ${resident.fullName}', isSuccess: true);
+        _showMessage('RFID removed from ${resident.fullName}',
+            isSuccess: true);
         _loadResidents();
       } catch (e) {
         _showMessage('Error: $e', isError: true);
@@ -184,25 +202,30 @@ class _ManageResidentsState extends State<ManageResidents> {
     }
   }
 
-  void _showMessage(String message, {bool isSuccess = false, bool isError = false}) {
+  void _showMessage(String message,
+      {bool isSuccess = false, bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isSuccess ? const Color(0xFF8D6E63) : (isError ? const Color(0xFFD32F2F) : const Color(0xFFD4C4A8)),
+        backgroundColor: isSuccess
+            ? const Color(0xFF8D6E63)
+            : (isError ? const Color(0xFFD32F2F) : const Color(0xFFD4C4A8)),
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
+        duration: const Duration(seconds: 3),
       ),
     );
   }
 
-  // ==================== ADD/EDIT RESIDENT ====================
-
+  // ==================== ADD / EDIT RESIDENT ====================
   Future<void> _addEditResident({UserModel? resident}) async {
     final isEditing = resident != null;
-    final nameController = TextEditingController(text: resident?.fullName ?? '');
+    final nameController =
+    TextEditingController(text: resident?.fullName ?? '');
     final emailController = TextEditingController(text: resident?.email ?? '');
-    final houseController = TextEditingController(text: resident?.houseNumber ?? '');
-    final phoneController = TextEditingController(text: resident?.phoneNumber ?? '');
+    final houseController =
+    TextEditingController(text: resident?.houseNumber ?? '');
+    final phoneController =
+    TextEditingController(text: resident?.phoneNumber ?? '');
     final passwordController = TextEditingController();
 
     final formKey = GlobalKey<FormState>();
@@ -212,7 +235,8 @@ class _ManageResidentsState extends State<ManageResidents> {
       builder: (context) => AlertDialog(
         title: Text(
           isEditing ? '✏️ Edit Resident' : '➕ Add New Resident',
-          style: const TextStyle(color: Color(0xFF6B5B4F), fontWeight: FontWeight.bold),
+          style: const TextStyle(
+              color: Color(0xFF6B5B4F), fontWeight: FontWeight.bold),
         ),
         backgroundColor: const Color(0xFFFFF8F0),
         shape: RoundedRectangleBorder(
@@ -230,87 +254,114 @@ class _ManageResidentsState extends State<ManageResidents> {
                   TextFormField(
                     controller: nameController,
                     decoration: InputDecoration(
-                      labelText: '👤 Full Name',
+                      labelText: '👤 Full Name *',
                       labelStyle: const TextStyle(color: Color(0xFFB8A99A)),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                        borderSide:
+                        const BorderSide(color: Color(0xFFE0D5C1)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                        borderSide:
+                        const BorderSide(color: Color(0xFFE0D5C1)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFD4C4A8), width: 2),
+                        borderSide:
+                        const BorderSide(color: Color(0xFFD4C4A8), width: 2),
                       ),
                       filled: true,
                       fillColor: Colors.white,
                     ),
-                    validator: (v) => v?.isEmpty == true ? 'Required' : null,
+                    validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Required' : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: emailController,
+                    keyboardType: TextInputType.emailAddress,
                     decoration: InputDecoration(
-                      labelText: '📧 Email',
+                      labelText: '📧 Email (Optional)',
                       labelStyle: const TextStyle(color: Color(0xFFB8A99A)),
+                      helperText: 'Leave blank if resident has no email',
+                      helperStyle: const TextStyle(
+                          color: Color(0xFFB8A99A), fontSize: 11),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                        borderSide:
+                        const BorderSide(color: Color(0xFFE0D5C1)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                        borderSide:
+                        const BorderSide(color: Color(0xFFE0D5C1)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFD4C4A8), width: 2),
+                        borderSide:
+                        const BorderSide(color: Color(0xFFD4C4A8), width: 2),
                       ),
                       filled: true,
                       fillColor: Colors.white,
                     ),
-                    validator: (v) => v?.isEmpty == true ? 'Required' : null,
+                    validator: (v) {
+                      if (v != null &&
+                          v.trim().isNotEmpty &&
+                          !v.contains('@')) {
+                        return 'Enter a valid email or leave blank';
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: houseController,
                     decoration: InputDecoration(
-                      labelText: '🏠 House Number',
+                      labelText: '🏠 House Number *',
                       labelStyle: const TextStyle(color: Color(0xFFB8A99A)),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                        borderSide:
+                        const BorderSide(color: Color(0xFFE0D5C1)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                        borderSide:
+                        const BorderSide(color: Color(0xFFE0D5C1)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFD4C4A8), width: 2),
+                        borderSide:
+                        const BorderSide(color: Color(0xFFD4C4A8), width: 2),
                       ),
                       filled: true,
                       fillColor: Colors.white,
                     ),
+                    validator: (v) =>
+                    (v == null || v.trim().isEmpty) ? 'Required' : null,
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: phoneController,
+                    keyboardType: TextInputType.phone,
                     decoration: InputDecoration(
-                      labelText: '📱 Phone Number',
+                      labelText: '📱 Phone Number (Optional)',
                       labelStyle: const TextStyle(color: Color(0xFFB8A99A)),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                        borderSide:
+                        const BorderSide(color: Color(0xFFE0D5C1)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                        borderSide:
+                        const BorderSide(color: Color(0xFFE0D5C1)),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
-                        borderSide: const BorderSide(color: Color(0xFFD4C4A8), width: 2),
+                        borderSide:
+                        const BorderSide(color: Color(0xFFD4C4A8), width: 2),
                       ),
                       filled: true,
                       fillColor: Colors.white,
@@ -320,26 +371,59 @@ class _ManageResidentsState extends State<ManageResidents> {
                     const SizedBox(height: 12),
                     TextFormField(
                       controller: passwordController,
+                      obscureText: true,
                       decoration: InputDecoration(
-                        labelText: '🔒 Password',
+                        labelText: '🔒 Password *',
                         labelStyle: const TextStyle(color: Color(0xFFB8A99A)),
+                        helperText:
+                        'Shown after saving & emailed upon approval',
+                        helperStyle: const TextStyle(
+                            color: Color(0xFFB8A99A), fontSize: 11),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                          borderSide:
+                          const BorderSide(color: Color(0xFFE0D5C1)),
                         ),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                          borderSide:
+                          const BorderSide(color: Color(0xFFE0D5C1)),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(14),
-                          borderSide: const BorderSide(color: Color(0xFFD4C4A8), width: 2),
+                          borderSide: const BorderSide(
+                              color: Color(0xFFD4C4A8), width: 2),
                         ),
                         filled: true,
                         fillColor: Colors.white,
                       ),
-                      obscureText: true,
-                      validator: (v) => v?.isEmpty == true ? 'Required' : null,
+                      validator: (v) {
+                        if (v == null || v.isEmpty) return 'Required';
+                        if (v.length < 6) return 'Min 6 characters';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD4C4A8).withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: const [
+                          Icon(Icons.info_outline,
+                              size: 16, color: Color(0xFF8D6E63)),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'An FHM-### Resident ID will be auto-generated after saving.',
+                              style: TextStyle(
+                                  fontSize: 11, color: Color(0xFF6B5B4F)),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ],
@@ -350,39 +434,57 @@ class _ManageResidentsState extends State<ManageResidents> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFB8A99A)),
+            style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFB8A99A)),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () async {
-              if (formKey.currentState!.validate()) {
-                Navigator.pop(context);
+              if (!formKey.currentState!.validate()) return;
+              Navigator.pop(context);
 
-                if (isEditing) {
-                  await _firestore.collection('users').doc(resident.id).update({
-                    'fullName': nameController.text,
-                    'email': emailController.text,
-                    'houseNumber': houseController.text,
-                    'phoneNumber': phoneController.text,
-                  });
-                  _showMessage('Resident updated', isSuccess: true);
-                } else {
-                  final result = await _authService.registerUser(
-                    emailController.text,
-                    passwordController.text,
-                    nameController.text,
-                    'resident',
-                    houseController.text,
-                    phoneController.text,
-                  );
-
-                  if (result['success']) {
-                    _showMessage('Resident added', isSuccess: true);
-                  } else {
-                    _showMessage(result['message'], isError: true);
-                  }
-                }
+              if (isEditing) {
+                await _firestore
+                    .collection('users')
+                    .doc(resident.id)
+                    .update({
+                  'fullName': nameController.text.trim(),
+                  'email': emailController.text.trim().toLowerCase(),
+                  'houseNumber': houseController.text.trim(),
+                  'phoneNumber': phoneController.text.trim(),
+                  if (emailController.text.trim().isNotEmpty)
+                    'hasRealEmail': true,
+                });
+                _showMessage('Resident updated', isSuccess: true);
                 _loadResidents();
+              } else {
+                final result = await _authService.registerResidentManually(
+                  fullName: nameController.text.trim(),
+                  password: passwordController.text.trim(),
+                  houseNumber: houseController.text.trim(),
+                  email: emailController.text.trim().isNotEmpty
+                      ? emailController.text.trim()
+                      : null,
+                  phoneNumber: phoneController.text.trim().isNotEmpty
+                      ? phoneController.text.trim()
+                      : null,
+                );
+
+                if (result['success'] == true) {
+                  if (mounted) {
+                    await _showCredentialsDialog(
+                      residentId: result['residentId'] as String,
+                      password: result['password'] as String,
+                      fullName: nameController.text.trim(),
+                      emailProvided:
+                      emailController.text.trim().isNotEmpty,
+                    );
+                  }
+                  _loadResidents();
+                } else {
+                  _showMessage(result['message'] ?? 'Failed to add resident',
+                      isError: true);
+                }
               }
             },
             style: ElevatedButton.styleFrom(
@@ -399,12 +501,142 @@ class _ManageResidentsState extends State<ManageResidents> {
     );
   }
 
+  Future<void> _showCredentialsDialog({
+    required String residentId,
+    required String password,
+    required String fullName,
+    required bool emailProvided,
+  }) async {
+    return showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFFFFF8F0),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: Color(0xFFE0D5C1), width: 1.5),
+        ),
+        title: Row(
+          children: const [
+            Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 26),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Resident Added',
+                style: TextStyle(
+                  color: Color(0xFF5D4037),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '$fullName has been added and is pending approval.',
+                style:
+                const TextStyle(color: Color(0xFF6B5B4F), fontSize: 13),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border:
+                  Border.all(color: const Color(0xFFD4C4A8), width: 1.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'LOGIN CREDENTIALS',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                        color: Color(0xFF8D6E63),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _credRow('Resident ID', residentId, highlight: true),
+                    const SizedBox(height: 8),
+                    _credRow('Password', password),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                emailProvided
+                    ? '⚠️ These credentials will be emailed to the resident upon approval.'
+                    : '⚠️ No email provided. Give these credentials to the resident manually after approval.',
+                style: const TextStyle(
+                  color: Color(0xFF8D6E63),
+                  fontSize: 11,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF8D6E63)),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _credRow(String label, String value, {bool highlight = false}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 90,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Color(0xFF8D6E63),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: highlight ? 16 : 14,
+              fontWeight: FontWeight.bold,
+              fontFamily: 'monospace',
+              color: highlight
+                  ? const Color(0xFFC4A882)
+                  : const Color(0xFF5D4037),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ==================== DELETE RESIDENT ====================
   Future<void> _deleteResident(UserModel resident) async {
     bool? confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Resident', style: TextStyle(color: Color(0xFF6B5B4F))),
-        content: Text('Are you sure you want to delete ${resident.fullName}?', style: const TextStyle(color: Color(0xFF8D6E63))),
+        title: const Text('Delete Resident',
+            style: TextStyle(color: Color(0xFF6B5B4F))),
+        content: Text('Are you sure you want to delete ${resident.fullName}?',
+            style: const TextStyle(color: Color(0xFF8D6E63))),
         backgroundColor: const Color(0xFFFFF8F0),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
@@ -413,12 +645,14 @@ class _ManageResidentsState extends State<ManageResidents> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFB8A99A)),
+            style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFB8A99A)),
             child: const Text('Cancel'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFD32F2F)),
+            style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFFD32F2F)),
             child: const Text('Delete'),
           ),
         ],
@@ -430,7 +664,10 @@ class _ManageResidentsState extends State<ManageResidents> {
 
       try {
         if (resident.rfidTag != null) {
-          await _firestore.collection('rfid_tags').doc(resident.rfidTag).delete();
+          await _firestore
+              .collection('rfid_tags')
+              .doc(resident.rfidTag)
+              .delete();
         }
 
         await _firestore.collection('users').doc(resident.id).delete();
@@ -444,17 +681,64 @@ class _ManageResidentsState extends State<ManageResidents> {
     }
   }
 
+  // ==================== APPROVE RESIDENT ====================
+  // Unified — same logic as pending_approvals.dart
   Future<void> _approveResident(UserModel resident) async {
     if (resident.isApproved) return;
 
     setState(() => _isLoading = true);
 
     try {
+      final userDoc =
+      await _firestore.collection('users').doc(resident.id).get();
+      final data = userDoc.data() as Map<String, dynamic>;
+
+      final residentId = data['residentId'] as String?;
+      final plaintextPassword = data['plaintextPassword'] as String?;
+      final hasRealEmail = data['hasRealEmail'] == true;
+      final storedEmail = (data['email'] as String?) ?? '';
+
       await _firestore.collection('users').doc(resident.id).update({
         'isApproved': true,
       });
 
-      _showMessage('${resident.fullName} has been approved', isSuccess: true);
+      bool emailSent = false;
+      String message;
+
+      if (hasRealEmail &&
+          storedEmail.isNotEmpty &&
+          residentId != null &&
+          plaintextPassword != null) {
+        emailSent = await EmailService.sendResidentCredentialsEmail(
+          email: storedEmail,
+          fullName: resident.fullName,
+          residentId: residentId,
+          password: plaintextPassword,
+        );
+
+        if (emailSent) {
+          await _firestore.collection('users').doc(resident.id).update({
+            'plaintextPassword': FieldValue.delete(),
+          });
+        }
+
+        message = emailSent
+            ? '✅ ${resident.fullName} approved. Credentials emailed.'
+            : '✅ Approved but email failed. Credentials: $residentId / $plaintextPassword';
+      } else if (!hasRealEmail || storedEmail.isEmpty) {
+        message =
+        '✅ ${resident.fullName} approved. No email on file — credentials: $residentId / ${plaintextPassword ?? "N/A"}';
+      } else {
+        emailSent = await EmailService.sendApprovalEmail(
+          storedEmail,
+          resident.fullName,
+        );
+        message = emailSent
+            ? '✅ ${resident.fullName} approved and notified via email.'
+            : '✅ ${resident.fullName} approved but email failed.';
+      }
+
+      _showMessage(message, isSuccess: true);
       _loadResidents();
     } catch (e) {
       _showMessage('Error: $e', isError: true);
@@ -466,9 +750,18 @@ class _ManageResidentsState extends State<ManageResidents> {
     if (_searchQuery.isEmpty) return _residents;
 
     return _residents.where((resident) {
-      return resident.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          (resident.houseNumber?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false) ||
-          resident.email.toLowerCase().contains(_searchQuery.toLowerCase());
+      return resident.fullName
+          .toLowerCase()
+          .contains(_searchQuery.toLowerCase()) ||
+          (resident.houseNumber
+              ?.toLowerCase()
+              .contains(_searchQuery.toLowerCase()) ??
+              false) ||
+          resident.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (resident.residentId
+              ?.toLowerCase()
+              .contains(_searchQuery.toLowerCase()) ??
+              false);
     }).toList();
   }
 
@@ -480,10 +773,10 @@ class _ManageResidentsState extends State<ManageResidents> {
     return Scaffold(
       appBar: AppBar(
         title: Row(
-          children: [
-            const Icon(Icons.people, size: 20, color: Color(0xFFFFF8F0)),
-            const SizedBox(width: 8),
-            const Text(
+          children: const [
+            Icon(Icons.people, size: 20, color: Color(0xFFFFF8F0)),
+            SizedBox(width: 8),
+            Text(
               'Manage Residents',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
@@ -509,14 +802,14 @@ class _ManageResidentsState extends State<ManageResidents> {
         ],
       ),
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFFFFF8F0),
-              const Color(0xFFF5F0E8),
-              const Color(0xFFEDE5D8),
+              Color(0xFFFFF8F0),
+              Color(0xFFF5F0E8),
+              Color(0xFFEDE5D8),
             ],
           ),
         ),
@@ -543,9 +836,12 @@ class _ManageResidentsState extends State<ManageResidents> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8))),
+            CircularProgressIndicator(
+                valueColor:
+                AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8))),
             SizedBox(height: 16),
-            Text('Loading residents...', style: TextStyle(color: Color(0xFFB8A99A))),
+            Text('Loading residents...',
+                style: TextStyle(color: Color(0xFFB8A99A))),
           ],
         ),
       );
@@ -558,7 +854,8 @@ class _ManageResidentsState extends State<ManageResidents> {
           children: [
             const Icon(Icons.error, size: 48, color: Color(0xFFD32F2F)),
             const SizedBox(height: 16),
-            Text(_errorMessage!, style: const TextStyle(color: Color(0xFF8D6E63))),
+            Text(_errorMessage!,
+                style: const TextStyle(color: Color(0xFF8D6E63))),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _loadResidents,
@@ -576,12 +873,13 @@ class _ManageResidentsState extends State<ManageResidents> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Search Bar
         TextField(
           decoration: InputDecoration(
-            hintText: '🔍 Search...',
-            hintStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 12),
-            prefixIcon: const Icon(Icons.search, color: Color(0xFFD4C4A8), size: 18),
+            hintText: '🔍 Search by name, ID, or house...',
+            hintStyle:
+            const TextStyle(color: Color(0xFFB8A99A), fontSize: 12),
+            prefixIcon: const Icon(Icons.search,
+                color: Color(0xFFD4C4A8), size: 18),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
               borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
@@ -592,39 +890,50 @@ class _ManageResidentsState extends State<ManageResidents> {
             ),
             focusedBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: Color(0xFFD4C4A8), width: 2),
+              borderSide:
+              const BorderSide(color: Color(0xFFD4C4A8), width: 2),
             ),
             filled: true,
             fillColor: Colors.white,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            contentPadding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           ),
           onChanged: (value) {
-            setState(() {
-              _searchQuery = value;
-            });
+            setState(() => _searchQuery = value);
           },
         ),
         const SizedBox(height: 12),
 
-        // Stats Cards - USING FLEXIBLE WRAP (FIXES LINE 482 OVERFLOW)
-        // This is the fix for line 482 - using Wrap instead of Row
         Center(
           child: Wrap(
             spacing: 8,
             runSpacing: 8,
             alignment: WrapAlignment.center,
             children: [
-              _buildStatCard('Total', filteredResidents.length.toString(), Icons.people, const Color(0xFFD4C4A8), screenWidth),
+              _buildStatCard('Total', filteredResidents.length.toString(),
+                  Icons.people, const Color(0xFFD4C4A8), screenWidth),
               const SizedBox(width: 8),
-              _buildStatCard('Approved', filteredResidents.where((r) => r.isApproved).length.toString(), Icons.check_circle, const Color(0xFF8D6E63), screenWidth),
+              _buildStatCard(
+                  'Approved',
+                  filteredResidents.where((r) => r.isApproved).length.toString(),
+                  Icons.check_circle,
+                  const Color(0xFF8D6E63),
+                  screenWidth),
               const SizedBox(width: 8),
-              _buildStatCard('RFID', filteredResidents.where((r) => r.rfidTag != null).length.toString(), Icons.nfc, const Color(0xFFC4A882), screenWidth),
+              _buildStatCard(
+                  'RFID',
+                  filteredResidents
+                      .where((r) => r.rfidTag != null)
+                      .length
+                      .toString(),
+                  Icons.nfc,
+                  const Color(0xFFC4A882),
+                  screenWidth),
             ],
           ),
         ),
         const SizedBox(height: 16),
 
-        // Residents List
         filteredResidents.isEmpty
             ? SizedBox(
           height: 300,
@@ -632,9 +941,12 @@ class _ManageResidentsState extends State<ManageResidents> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.people, size: 60, color: Color(0xFFE0D5C1)),
+                const Icon(Icons.people,
+                    size: 60, color: Color(0xFFE0D5C1)),
                 const SizedBox(height: 12),
-                Text('No residents found', style: TextStyle(fontSize: 14, color: Color(0xFFB8A99A))),
+                const Text('No residents found',
+                    style: TextStyle(
+                        fontSize: 14, color: Color(0xFFB8A99A))),
               ],
             ),
           ),
@@ -661,10 +973,12 @@ class _ManageResidentsState extends State<ManageResidents> {
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+                  border: Border.all(
+                      color: const Color(0xFFE0D5C1), width: 1),
                 ),
                 child: ExpansionTile(
-                  tilePadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                  tilePadding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 0),
                   childrenPadding: const EdgeInsets.all(10),
                   leading: CircleAvatar(
                     radius: 18,
@@ -674,33 +988,54 @@ class _ManageResidentsState extends State<ManageResidents> {
                     child: Icon(
                       Icons.person,
                       size: 18,
-                      color: resident.isApproved ? const Color(0xFF8D6E63) : const Color(0xFFB8A99A),
+                      color: resident.isApproved
+                          ? const Color(0xFF8D6E63)
+                          : const Color(0xFFB8A99A),
                     ),
                   ),
                   title: Text(
                     resident.fullName,
-                    style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF6B5B4F), fontSize: 13),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF6B5B4F),
+                        fontSize: 13),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   subtitle: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (resident.residentId != null)
+                        Text(
+                          resident.residentId!,
+                          style: const TextStyle(
+                            color: Color(0xFF8D6E63),
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            fontFamily: 'monospace',
+                          ),
+                        ),
                       Text(
                         resident.houseNumber ?? 'No house',
-                        style: const TextStyle(color: Color(0xFFB8A99A), fontSize: 11),
+                        style: const TextStyle(
+                            color: Color(0xFFB8A99A), fontSize: 11),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                       if (resident.rfidTag != null)
                         Container(
                           margin: const EdgeInsets.only(top: 2),
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: const Color(0xFFC4A882).withOpacity(0.2),
+                            color: const Color(0xFFC4A882)
+                                .withOpacity(0.2),
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Text('📡 RFID', style: TextStyle(fontSize: 8, color: Color(0xFF8D6E63))),
+                          child: const Text('📡 RFID',
+                              style: TextStyle(
+                                  fontSize: 8,
+                                  color: Color(0xFF8D6E63))),
                         ),
                     ],
                   ),
@@ -711,14 +1046,53 @@ class _ManageResidentsState extends State<ManageResidents> {
                       side: const BorderSide(color: Color(0xFFE0D5C1)),
                     ),
                     itemBuilder: (context) => [
-                      const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit, size: 16, color: Color(0xFFD4C4A8)), SizedBox(width: 8), Text('Edit', style: TextStyle(fontSize: 12))])),
+                      const PopupMenuItem(
+                          value: 'edit',
+                          child: Row(children: [
+                            Icon(Icons.edit,
+                                size: 16, color: Color(0xFFD4C4A8)),
+                            SizedBox(width: 8),
+                            Text('Edit', style: TextStyle(fontSize: 12))
+                          ])),
                       if (!resident.isApproved)
-                        const PopupMenuItem(value: 'approve', child: Row(children: [Icon(Icons.check, size: 16, color: Color(0xFF8D6E63)), SizedBox(width: 8), Text('Approve', style: TextStyle(fontSize: 12))])),
+                        const PopupMenuItem(
+                            value: 'approve',
+                            child: Row(children: [
+                              Icon(Icons.check,
+                                  size: 16, color: Color(0xFF8D6E63)),
+                              SizedBox(width: 8),
+                              Text('Approve',
+                                  style: TextStyle(fontSize: 12))
+                            ])),
                       if (resident.rfidTag == null)
-                        const PopupMenuItem(value: 'register_rfid', child: Row(children: [Icon(Icons.nfc, size: 16, color: Color(0xFFD4C4A8)), SizedBox(width: 8), Text('Register RFID', style: TextStyle(fontSize: 12))])),
+                        const PopupMenuItem(
+                            value: 'register_rfid',
+                            child: Row(children: [
+                              Icon(Icons.nfc,
+                                  size: 16, color: Color(0xFFD4C4A8)),
+                              SizedBox(width: 8),
+                              Text('Register RFID',
+                                  style: TextStyle(fontSize: 12))
+                            ])),
                       if (resident.rfidTag != null)
-                        const PopupMenuItem(value: 'remove_rfid', child: Row(children: [Icon(Icons.nfc, size: 16, color: Color(0xFFD32F2F)), SizedBox(width: 8), Text('Remove RFID', style: TextStyle(fontSize: 12))])),
-                      const PopupMenuItem(value: 'delete', child: Row(children: [Icon(Icons.delete, size: 16, color: Color(0xFFD32F2F)), SizedBox(width: 8), Text('Delete', style: TextStyle(fontSize: 12))])),
+                        const PopupMenuItem(
+                            value: 'remove_rfid',
+                            child: Row(children: [
+                              Icon(Icons.nfc,
+                                  size: 16, color: Color(0xFFD32F2F)),
+                              SizedBox(width: 8),
+                              Text('Remove RFID',
+                                  style: TextStyle(fontSize: 12))
+                            ])),
+                      const PopupMenuItem(
+                          value: 'delete',
+                          child: Row(children: [
+                            Icon(Icons.delete,
+                                size: 16, color: Color(0xFFD32F2F)),
+                            SizedBox(width: 8),
+                            Text('Delete',
+                                style: TextStyle(fontSize: 12))
+                          ])),
                     ],
                     onSelected: (value) async {
                       if (value == 'edit') {
@@ -738,17 +1112,34 @@ class _ManageResidentsState extends State<ManageResidents> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _buildInfoRow(Icons.email, 'Email', resident.email),
+                        if (resident.residentId != null) ...[
+                          _buildInfoRow(Icons.badge, 'Resident ID',
+                              resident.residentId!),
+                          const SizedBox(height: 4),
+                        ],
+                        _buildInfoRow(
+                            Icons.email,
+                            'Email',
+                            resident.email.isEmpty
+                                ? 'Not provided'
+                                : resident.email),
                         const SizedBox(height: 4),
-                        _buildInfoRow(Icons.phone, 'Phone', resident.phoneNumber ?? 'Not provided'),
+                        _buildInfoRow(Icons.phone, 'Phone',
+                            resident.phoneNumber ?? 'Not provided'),
                         const SizedBox(height: 4),
-                        _buildInfoRow(Icons.home, 'House', resident.houseNumber ?? 'Not assigned'),
+                        _buildInfoRow(Icons.home, 'House',
+                            resident.houseNumber ?? 'Not assigned'),
                         const SizedBox(height: 4),
-                        _buildInfoRow(Icons.nfc, 'RFID', resident.rfidTag ?? 'Not registered'),
+                        _buildInfoRow(Icons.nfc, 'RFID',
+                            resident.rfidTag ?? 'Not registered'),
                         const SizedBox(height: 4),
-                        _buildInfoRow(Icons.calendar_today, 'Registered', _formatDate(resident.createdAt)),
+                        _buildInfoRow(Icons.calendar_today,
+                            'Registered', _formatDate(resident.createdAt)),
                         const SizedBox(height: 4),
-                        _buildInfoRow(Icons.verified, 'Status', resident.isApproved ? '✅ Approved' : '⏳ Pending'),
+                        _buildInfoRow(Icons.verified, 'Status',
+                            resident.isApproved
+                                ? '✅ Approved'
+                                : '⏳ Pending'),
                       ],
                     ),
                   ],
@@ -761,7 +1152,8 @@ class _ManageResidentsState extends State<ManageResidents> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, IconData icon, Color color, double screenWidth) {
+  Widget _buildStatCard(String title, String value, IconData icon,
+      Color color, double screenWidth) {
     double cardWidth = screenWidth < 600 ? (screenWidth / 3) - 12 : 85;
     double iconSize = screenWidth < 600 ? 14 : 16;
     double fontSize = screenWidth < 600 ? 11 : 13;
@@ -780,8 +1172,16 @@ class _ManageResidentsState extends State<ManageResidents> {
           children: [
             Icon(icon, color: color, size: iconSize),
             const SizedBox(height: 2),
-            Text(value, style: TextStyle(fontSize: fontSize, fontWeight: FontWeight.bold, color: color)),
-            Text(title, style: TextStyle(fontSize: labelSize, color: color, fontWeight: FontWeight.w500)),
+            Text(value,
+                style: TextStyle(
+                    fontSize: fontSize,
+                    fontWeight: FontWeight.bold,
+                    color: color)),
+            Text(title,
+                style: TextStyle(
+                    fontSize: labelSize,
+                    color: color,
+                    fontWeight: FontWeight.w500)),
           ],
         ),
       ),
@@ -793,7 +1193,13 @@ class _ManageResidentsState extends State<ManageResidents> {
       children: [
         Icon(icon, size: 12, color: const Color(0xFFD4C4A8)),
         const SizedBox(width: 6),
-        SizedBox(width: 50, child: Text(label, style: const TextStyle(fontSize: 10, color: Color(0xFFB8A99A), fontWeight: FontWeight.w500))),
+        SizedBox(
+            width: 70,
+            child: Text(label,
+                style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xFFB8A99A),
+                    fontWeight: FontWeight.w500))),
         Expanded(
           child: Text(
             value,

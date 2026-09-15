@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import '../../models/gate_entry_model.dart';
-import '../../providers/auth_provider.dart';
 import 'package:provider/provider.dart';
-
+import '../../providers/auth_provider.dart';
+import 'dart:async';
 class GateHistory extends StatefulWidget {
   const GateHistory({super.key});
 
@@ -15,17 +14,17 @@ class GateHistory extends StatefulWidget {
 class _GateHistoryState extends State<GateHistory> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   List<Map<String, dynamic>> _entries = [];
-  bool _isLoading = true;
+  bool _hasLoadedOnce = false;
   String? _errorMessage;
+  StreamSubscription<QuerySnapshot>? _sub;
 
-  // Helper to parse timestamp (supports String, Timestamp, DateTime)
   DateTime _parseTimestamp(dynamic timestamp) {
     if (timestamp == null) return DateTime.now();
-    if (timestamp is Timestamp) return timestamp.toDate();
-    if (timestamp is DateTime) return timestamp;
+    if (timestamp is Timestamp) return timestamp.toDate().toLocal();
+    if (timestamp is DateTime) return timestamp.toLocal();
     if (timestamp is String) {
       try {
-        return DateTime.parse(timestamp);
+        return DateTime.parse(timestamp).toLocal();
       } catch (e) {
         return DateTime.now();
       }
@@ -36,69 +35,79 @@ class _GateHistoryState extends State<GateHistory> {
   @override
   void initState() {
     super.initState();
-    _loadHistory();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startStream());
   }
 
-  Future<void> _loadHistory() async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
+  @override
+  void dispose() {
+    _sub?.cancel();
+    super.dispose();
+  }
 
-    try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
-      final residentId = authProvider.currentUser?.id;
+  // ==================== LIVE STREAM ====================
+  void _startStream() {
+    final authProvider =
+    Provider.of<AuthProvider>(context, listen: false);
+    final residentId = authProvider.currentUser?.id;
 
-      if (residentId == null) {
-        setState(() {
-          _errorMessage = 'User not logged in';
-          _isLoading = false;
-        });
-        return;
-      }
-
-      QuerySnapshot snapshot = await _firestore
-          .collection('gate_entries')
-          .where('residentId', isEqualTo: residentId)
-          .limit(50)
-          .get();
-
-      List<Map<String, dynamic>> entries = snapshot.docs.map((doc) {
-        Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
-        data['id'] = doc.id;
-        return data;
-      }).toList();
-
-      // Sort by timestamp (newest first)
-      entries.sort((a, b) {
-        DateTime timeA = _parseTimestamp(a['timestamp']);
-        DateTime timeB = _parseTimestamp(b['timestamp']);
-        return timeB.compareTo(timeA);
-      });
-
+    if (residentId == null) {
       setState(() {
-        _entries = entries;
-        _isLoading = false;
+        _errorMessage = 'User not logged in';
+        _hasLoadedOnce = true;
       });
-
-    } catch (e) {
-      print('Error loading history: $e');
-      setState(() {
-        _errorMessage = 'Error: $e';
-        _isLoading = false;
-      });
+      return;
     }
+
+    _sub?.cancel();
+    _sub = _firestore
+        .collection('gate_entries')
+        .where('residentId', isEqualTo: residentId)
+        .limit(50)
+        .snapshots()
+        .listen(
+          (snapshot) {
+        final entries = snapshot.docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          data['id'] = doc.id;
+          return data;
+        }).toList();
+
+        entries.sort((a, b) {
+          final ta = _parseTimestamp(a['timestamp']);
+          final tb = _parseTimestamp(b['timestamp']);
+          return tb.compareTo(ta);
+        });
+
+        if (mounted) {
+          setState(() {
+            _entries = entries;
+            _hasLoadedOnce = true;
+            _errorMessage = null;
+          });
+        }
+      },
+      onError: (e) {
+        print('History stream error: $e');
+        if (mounted) {
+          setState(() {
+            _errorMessage = 'Error: $e';
+            _hasLoadedOnce = true;
+          });
+        }
+      },
+    );
   }
 
+  // ==================== BUILD ====================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Row(
-          children: [
-            const Icon(Icons.history, size: 22, color: Color(0xFFFFF8F0)),
-            const SizedBox(width: 8),
-            const Text(
+          children: const [
+            Icon(Icons.history, size: 22, color: Color(0xFFFFF8F0)),
+            SizedBox(width: 8),
+            Text(
               'Gate History',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
@@ -111,57 +120,82 @@ class _GateHistoryState extends State<GateHistory> {
         backgroundColor: const Color(0xFFD4C4A8),
         elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 20),
-            onPressed: _loadHistory,
-            color: const Color(0xFFFFF8F0),
+          // Live indicator
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF8D6E63).withOpacity(0.2),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF4CAF50),
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                const Text('LIVE',
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFFFFF8F0),
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5)),
+              ],
+            ),
           ),
         ],
       ),
       body: Container(
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFFFFF8F0),
-              const Color(0xFFF5F0E8),
-              const Color(0xFFEDE5D8),
+              Color(0xFFFFF8F0),
+              Color(0xFFF5F0E8),
+              Color(0xFFEDE5D8),
             ],
           ),
         ),
         child: SafeArea(
-          child: _isLoading
+          child: !_hasLoadedOnce
               ? const Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8)),
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                      Color(0xFFD4C4A8)),
                 ),
                 SizedBox(height: 16),
-                Text(
-                  'Loading history...',
-                  style: TextStyle(color: Color(0xFFB8A99A)),
-                ),
+                Text('Loading history...',
+                    style: TextStyle(color: Color(0xFFB8A99A))),
               ],
             ),
           )
-              : _errorMessage != null
+              : _errorMessage != null && _entries.isEmpty
               ? Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error, size: 48, color: Color(0xFFD32F2F)),
+                const Icon(Icons.error,
+                    size: 48, color: Color(0xFFD32F2F)),
                 const SizedBox(height: 16),
                 Text(
                   _errorMessage!,
-                  style: const TextStyle(color: Color(0xFF6B5B4F)),
+                  style:
+                  const TextStyle(color: Color(0xFF6B5B4F)),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: _loadHistory,
+                  onPressed: _startStream,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: const Color(0xFFD4C4A8),
                     foregroundColor: const Color(0xFF6B5B4F),
@@ -176,7 +210,8 @@ class _GateHistoryState extends State<GateHistory> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.history, size: 70, color: Color(0xFFE0D5C1)),
+                Icon(Icons.history,
+                    size: 70, color: Color(0xFFE0D5C1)),
                 SizedBox(height: 16),
                 Text(
                   'No gate entries found',
@@ -189,7 +224,9 @@ class _GateHistoryState extends State<GateHistory> {
                 SizedBox(height: 8),
                 Text(
                   'Your gate access history will appear here',
-                  style: TextStyle(color: Color(0xFFB8A99A), fontSize: 12),
+                  style: TextStyle(
+                      color: Color(0xFFB8A99A),
+                      fontSize: 12),
                 ),
               ],
             ),
@@ -199,7 +236,7 @@ class _GateHistoryState extends State<GateHistory> {
             padding: const EdgeInsets.all(12),
             child: Column(
               children: [
-                // Stats Card
+                // Stats card
                 Container(
                   width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 16),
@@ -207,10 +244,13 @@ class _GateHistoryState extends State<GateHistory> {
                   decoration: BoxDecoration(
                     color: Colors.white,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+                    border: Border.all(
+                        color: const Color(0xFFE0D5C1),
+                        width: 1),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                        color: const Color(0xFFD4C4A8)
+                            .withOpacity(0.15),
                         blurRadius: 6,
                         offset: const Offset(0, 2),
                       ),
@@ -224,16 +264,23 @@ class _GateHistoryState extends State<GateHistory> {
                           gradient: const LinearGradient(
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
-                            colors: [Color(0xFFD4C4A8), Color(0xFFC4A882)],
+                            colors: [
+                              Color(0xFFD4C4A8),
+                              Color(0xFFC4A882)
+                            ],
                           ),
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius:
+                          BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.history, color: Color(0xFFFFF8F0), size: 28),
+                        child: const Icon(Icons.history,
+                            color: Color(0xFFFFF8F0),
+                            size: 28),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                          crossAxisAlignment:
+                          CrossAxisAlignment.start,
                           children: [
                             const Text(
                               'Total Gate Entries',
@@ -256,21 +303,26 @@ class _GateHistoryState extends State<GateHistory> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFD4C4A8).withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(20),
+                          color: const Color(0xFFD4C4A8)
+                              .withOpacity(0.15),
+                          borderRadius:
+                          BorderRadius.circular(20),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.check_circle, size: 14, color: Color(0xFF8D6E63)),
-                            const SizedBox(width: 4),
+                          children: const [
+                            Icon(Icons.check_circle,
+                                size: 14,
+                                color: Color(0xFF8D6E63)),
+                            SizedBox(width: 4),
                             Text(
                               'Last 50',
                               style: TextStyle(
                                 fontSize: 11,
-                                color: const Color(0xFF8D6E63),
+                                color: Color(0xFF8D6E63),
                                 fontWeight: FontWeight.w500,
                               ),
                             ),
@@ -281,27 +333,31 @@ class _GateHistoryState extends State<GateHistory> {
                   ),
                 ),
 
-                // Entries List
+                // Entries list
                 ListView.builder(
                   shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
+                  physics:
+                  const NeverScrollableScrollPhysics(),
                   itemCount: _entries.length,
                   itemBuilder: (context, index) {
                     final entry = _entries[index];
-                    DateTime timestamp = _parseTimestamp(entry['timestamp']);
-                    String entryType = entry['entryType'] ?? 'unknown';
-                    String residentName = entry['residentName'] ?? 'Unknown';
-                    String status = entry['status'] ?? 'entry';
-                    String? visitorName = entry['visitorName'];
+                    final timestamp = _parseTimestamp(
+                        entry['timestamp']);
+                    final entryType =
+                        entry['entryType'] ?? 'unknown';
+                    final status = entry['status'] ?? 'entry';
+                    final visitorName = entry['visitorName'];
 
                     return Container(
                       margin: const EdgeInsets.only(bottom: 10),
                       decoration: BoxDecoration(
                         color: Colors.white,
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius:
+                        BorderRadius.circular(14),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                            color: const Color(0xFFD4C4A8)
+                                .withOpacity(0.15),
                             blurRadius: 4,
                             offset: const Offset(0, 2),
                           ),
@@ -309,11 +365,16 @@ class _GateHistoryState extends State<GateHistory> {
                       ),
                       child: Container(
                         decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+                          borderRadius:
+                          BorderRadius.circular(14),
+                          border: Border.all(
+                              color: const Color(0xFFE0D5C1),
+                              width: 1),
                         ),
                         child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          contentPadding:
+                          const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
                           leading: Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
@@ -322,10 +383,12 @@ class _GateHistoryState extends State<GateHistory> {
                                 end: Alignment.bottomRight,
                                 colors: [
                                   _getTypeColor(entryType),
-                                  _getTypeColor(entryType).withOpacity(0.7),
+                                  _getTypeColor(entryType)
+                                      .withOpacity(0.7),
                                 ],
                               ),
-                              borderRadius: BorderRadius.circular(10),
+                              borderRadius:
+                              BorderRadius.circular(10),
                             ),
                             child: Icon(
                               _getTypeIcon(entryType),
@@ -342,11 +405,14 @@ class _GateHistoryState extends State<GateHistory> {
                             ),
                           ),
                           subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                            crossAxisAlignment:
+                            CrossAxisAlignment.start,
                             children: [
                               const SizedBox(height: 2),
                               Text(
-                                DateFormat('MMM dd, yyyy • hh:mm a').format(timestamp),
+                                DateFormat(
+                                    'MMM dd, yyyy • hh:mm a')
+                                    .format(timestamp),
                                 style: const TextStyle(
                                   fontSize: 10,
                                   color: Color(0xFFB8A99A),
@@ -354,30 +420,42 @@ class _GateHistoryState extends State<GateHistory> {
                               ),
                               if (visitorName != null)
                                 Padding(
-                                  padding: const EdgeInsets.only(top: 2),
+                                  padding:
+                                  const EdgeInsets.only(
+                                      top: 2),
                                   child: Text(
                                     '👤 $visitorName',
-                                    style: const TextStyle(fontSize: 10, color: Color(0xFFD4C4A8)),
+                                    style: const TextStyle(
+                                        fontSize: 10,
+                                        color: Color(
+                                            0xFFD4C4A8)),
                                   ),
                                 ),
                             ],
                           ),
                           trailing: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
                               color: status == 'entry'
-                                  ? const Color(0xFF8D6E63).withOpacity(0.15)
-                                  : const Color(0xFFD32F2F).withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(16),
+                                  ? const Color(0xFF8D6E63)
+                                  .withOpacity(0.15)
+                                  : const Color(0xFFD32F2F)
+                                  .withOpacity(0.15),
+                              borderRadius:
+                              BorderRadius.circular(16),
                               border: Border.all(
                                 color: status == 'entry'
-                                    ? const Color(0xFF8D6E63).withOpacity(0.3)
-                                    : const Color(0xFFD32F2F).withOpacity(0.3),
+                                    ? const Color(0xFF8D6E63)
+                                    .withOpacity(0.3)
+                                    : const Color(0xFFD32F2F)
+                                    .withOpacity(0.3),
                               ),
                             ),
                             child: Text(
                               status == 'entry' ? '✅' : '❌',
-                              style: const TextStyle(fontSize: 12),
+                              style:
+                              const TextStyle(fontSize: 12),
                             ),
                           ),
                         ),

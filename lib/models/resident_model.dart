@@ -1,5 +1,6 @@
 class ResidentModel {
   String? id;
+  String? residentId;
   String fullName;
   String email;
   String houseNumber;
@@ -11,6 +12,7 @@ class ResidentModel {
 
   ResidentModel({
     this.id,
+    this.residentId,
     required this.fullName,
     required this.email,
     required this.houseNumber,
@@ -23,6 +25,7 @@ class ResidentModel {
 
   Map<String, dynamic> toMap() {
     return {
+      'residentId': residentId,
       'fullName': fullName,
       'email': email,
       'houseNumber': houseNumber,
@@ -37,6 +40,7 @@ class ResidentModel {
   factory ResidentModel.fromMap(String id, Map<String, dynamic> map) {
     return ResidentModel(
       id: id,
+      residentId: map['residentId'],
       fullName: map['fullName'] ?? '',
       email: map['email'] ?? '',
       houseNumber: map['houseNumber'] ?? '',
