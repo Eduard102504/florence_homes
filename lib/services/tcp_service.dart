@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'dart:async';
-import 'dart:typed_data';
 
 class TCPService {
   static final TCPService _instance = TCPService._internal();
@@ -9,23 +8,41 @@ class TCPService {
 
   Socket? _socket;
   bool _isConnected = false;
-  String _raspberryPiIp = '192.168.1.9'; // Change to your Raspberry Pi's IP address
+  String _raspberryPiIp = '192.168.1.9'; // Change to your Raspberry Pi's IP
   int _port = 8080;
   StreamSubscription<List<int>>? _subscription;
 
   bool get isConnected => _isConnected;
 
-  void setPiIp(String ip) {
-    _raspberryPiIp = ip;
-  }
+  void setPiIp(String ip) => _raspberryPiIp = ip;
+  void setPort(int port) => _port = port;
 
-  void setPort(int port) {
-    _port = port;
-  }
-
+  // ⭐ Recreate socket every call → listen() always works
   Future<bool> connect() async {
     try {
-      _socket = await Socket.connect(_raspberryPiIp, _port, timeout: const Duration(seconds: 5));
+      // Tear down anything old first
+      final oldSub = _subscription;
+      _subscription = null;
+      if (oldSub != null) {
+        await oldSub.cancel();
+      }
+
+      final oldSocket = _socket;
+      _socket = null;
+      if (oldSocket != null) {
+        try {
+          await oldSocket.close();
+        } catch (_) {}
+        try {
+          oldSocket.destroy();
+        } catch (_) {}
+      }
+
+      _socket = await Socket.connect(
+        _raspberryPiIp,
+        _port,
+        timeout: const Duration(seconds: 5),
+      );
       _isConnected = true;
       print('Connected to Raspberry Pi at $_raspberryPiIp:$_port');
       return true;
@@ -37,119 +54,129 @@ class TCPService {
   }
 
   Future<void> disconnect() async {
-    await _subscription?.cancel();
-    await _socket?.close();
+    final sub = _subscription;
+    _subscription = null;
+    if (sub != null) {
+      await sub.cancel();
+    }
+
+    final sock = _socket;
+    _socket = null;
+    if (sock != null) {
+      try {
+        await sock.close();
+      } catch (_) {}
+      try {
+        sock.destroy();
+      } catch (_) {}
+    }
+
     _isConnected = false;
     print('Disconnected from Raspberry Pi');
   }
 
-  // Send command and wait for response
-  Future<String> sendCommand(String command) async {
-    if (!_isConnected) {
-      bool connected = await connect();
-      if (!connected) {
-        return 'ERROR: Not connected to Raspberry Pi';
-      }
-    }
+  // ⭐ LIVE-RELIABLE COMMAND HELPER
+  Future<String> _sendAndAwait(
+      String command, {
+        Duration timeout = const Duration(seconds: 5),
+      }) async {
+    final ok = await connect();
+    if (!ok) return 'ERROR: Not connected to Raspberry Pi';
 
-    Completer<String> completer = Completer();
-    Timer? timeoutTimer;
+    final completer = Completer<String>();
+    Timer? timer;
+    final sock = _socket!;
 
     try {
-      // Send command
-      _socket!.write('$command\n');
-      await _socket!.flush();
+      sock.write('$command\n');
+      await sock.flush();
       print('Sent command: $command');
 
-      // Listen for response
-      _subscription = _socket!.listen(
+      final sub = sock.listen(
             (data) {
-          String response = String.fromCharCodes(data).trim();
-          print('Received response: $response');
-          timeoutTimer?.cancel();
-          if (!completer.isCompleted) {
-            completer.complete(response);
-          }
+          final resp = String.fromCharCodes(data).trim();
+          print('Received response: $resp');
+          timer?.cancel();
+          if (!completer.isCompleted) completer.complete(resp);
         },
-        onError: (error) {
-          print('Socket error: $error');
-          timeoutTimer?.cancel();
-          if (!completer.isCompleted) {
-            completer.complete('ERROR: $error');
-          }
+        onError: (e) {
+          print('Socket error: $e');
+          timer?.cancel();
+          if (!completer.isCompleted) completer.complete('ERROR: $e');
         },
         onDone: () {
           print('Socket done');
-          timeoutTimer?.cancel();
+          timer?.cancel();
           if (!completer.isCompleted) {
             completer.complete('ERROR: Connection closed');
           }
         },
         cancelOnError: true,
       );
+      _subscription = sub;
 
-      // Set timeout
-      timeoutTimer = Timer(const Duration(seconds: 5), () {
+      timer = Timer(timeout, () {
         print('Timeout waiting for response');
-        _subscription?.cancel();
-        if (!completer.isCompleted) {
-          completer.complete('ERROR: Timeout');
-        }
+        if (!completer.isCompleted) completer.complete('ERROR: Timeout');
+        sub.cancel();
       });
 
-      return await completer.future;
+      final result = await completer.future;
+      return result;
     } catch (e) {
       print('Send command error: $e');
-      timeoutTimer?.cancel();
+      timer?.cancel();
       _isConnected = false;
       return 'ERROR: $e';
-    }
-  }
-
-  // Dedicated method to open gate (doesn't close connection)
-  Future<bool> openGate() async {
-    if (!_isConnected) {
-      bool connected = await connect();
-      if (!connected) {
-        print('Cannot open gate: Not connected to Raspberry Pi');
-        return false;
+    } finally {
+      // Clean up so the NEXT call starts fresh
+      final sub = _subscription;
+      _subscription = null;
+      if (sub != null) {
+        await sub.cancel();
       }
-    }
 
-    try {
-      _socket!.write('GATE_OPEN\n');
-      await _socket!.flush();
-      print('Gate open command sent to Raspberry Pi');
-      return true;
-    } catch (e) {
-      print('Error sending gate open command: $e');
+      final s = _socket;
+      _socket = null;
+      if (s != null) {
+        try {
+          await s.close();
+        } catch (_) {}
+        try {
+          s.destroy();
+        } catch (_) {}
+      }
+
       _isConnected = false;
-      return false;
     }
   }
 
-  // Check if connection is alive
-  Future<bool> checkConnection() async {
-    if (!_isConnected) {
-      return false;
-    }
+  // Backward-compatible API used by other screens
+  Future<String> sendCommand(String command) => _sendAndAwait(command);
 
-    try {
-      // Send a heartbeat command
-      _socket!.write('PING\n');
-      await _socket!.flush();
-      return true;
-    } catch (e) {
-      _isConnected = false;
-      return false;
-    }
-  }
+  // ----- High-level gate commands -----
 
-  // Reconnect if needed
-  Future<bool> ensureConnection() async {
-    if (!_isConnected) {
-      return await connect();
-    }
+  Future<bool> openGate() async {
+    final r = await _sendAndAwait('GATE_OPEN');
+    if (r.startsWith('ERROR')) return false;
     return true;
   }
+
+  Future<bool> manualGateUp() async {
+    final r = await _sendAndAwait('MANUAL_UP');
+    return r.contains('GATE_UP');
+  }
+
+  Future<bool> manualGateDown() async {
+    final r = await _sendAndAwait('MANUAL_DOWN');
+    return r.contains('GATE_DOWN');
+  }
+
+  Future<bool> checkConnection() async {
+    final r = await _sendAndAwait('PING',
+        timeout: const Duration(seconds: 2));
+    return !r.startsWith('ERROR');
+  }
+
+  Future<bool> ensureConnection() async => connect();
 }

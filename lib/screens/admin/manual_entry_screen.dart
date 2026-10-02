@@ -21,51 +21,109 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
   final _reasonController = TextEditingController();
 
   String _selectedEntryType = 'delivery';
-  bool _isLoading = false;
   bool _isSubmitting = false;
-  bool _isGateOpening = false;
+
+  // ⭐ Live manual-gate state
+  bool _isGateUp = false;   // true = gate held UP manually
+  bool _isGateBusy = false; // prevents double-tap mid-command
 
   @override
   void initState() {
     super.initState();
-    _connectToPi();
+    // Warm-up connection (optional). Each button press reconnects anyway.
+    _tcpService.connect();
   }
 
-  Future<void> _connectToPi() async {
-    await _tcpService.connect();
-  }
-
-  Future<void> _openGate() async {
-    if (_isGateOpening) return;
-
-    setState(() => _isGateOpening = true);
+  // ⭐ Manual UP: gate stays up, scanning paused
+  Future<void> _manualUp() async {
+    if (_isGateBusy || _isGateUp) return;
+    setState(() => _isGateBusy = true);
 
     try {
-      bool success = await _tcpService.openGate();
+      bool success = await _tcpService.manualGateUp();
+      if (!success) {
+        // one retry with a fresh connection (helper already reconnects,
+        // but this covers transient Wi-Fi hiccups)
+        success = await _tcpService.manualGateUp();
+      }
 
       if (success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gate opened successfully'), backgroundColor: Color(0xFF8D6E63)),
-        );
-      } else {
-        await _tcpService.connect();
-        bool retry = await _tcpService.openGate();
-        if (retry) {
+        setState(() => _isGateUp = true);
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Gate opened after reconnection'), backgroundColor: Color(0xFF8D6E63)),
+            const SnackBar(
+              content:
+              Text('Gate is UP — scanning paused. Tap Manual Down to resume.'),
+              backgroundColor: Color(0xFF8D6E63),
+            ),
           );
-        } else {
+        }
+      } else {
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Failed to open gate. Check connection.'), backgroundColor: Color(0xFFD32F2F)),
+            const SnackBar(
+              content: Text('Failed to raise gate. Check connection.'),
+              backgroundColor: Color(0xFFD32F2F),
+            ),
           );
         }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFD32F2F)),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: const Color(0xFFD32F2F),
+          ),
+        );
+      }
     } finally {
-      setState(() => _isGateOpening = false);
+      if (mounted) setState(() => _isGateBusy = false);
+    }
+  }
+
+  // ⭐ Manual DOWN: always allowed, even mid-30s auto-close cycle (safety)
+  Future<void> _manualDown() async {
+    if (_isGateBusy) return;
+    setState(() => _isGateBusy = true);
+
+    try {
+      bool success = await _tcpService.manualGateDown();
+      if (!success) {
+        success = await _tcpService.manualGateDown();
+      }
+
+      if (success) {
+        setState(() => _isGateUp = false);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Gate is DOWN — scanning resumed.'),
+              backgroundColor: Color(0xFF8D6E63),
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to lower gate. Check connection.'),
+              backgroundColor: Color(0xFFD32F2F),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: const Color(0xFFD32F2F),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isGateBusy = false);
     }
   }
 
@@ -103,7 +161,8 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
         'adminId': adminId,
         'entryType': _selectedEntryType,
         'personName': _nameController.text,
-        'reason': _selectedEntryType == 'guest' ? _reasonController.text : null,
+        'reason':
+        _selectedEntryType == 'guest' ? _reasonController.text : null,
         'timestamp': DateTime.now(),
         'status': 'completed',
       });
@@ -111,24 +170,38 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       bool gateOpened = await _tcpService.openGate();
 
       if (gateOpened) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Entry recorded and gate opened'), backgroundColor: Color(0xFF8D6E63)),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Entry recorded and gate opened'),
+              backgroundColor: Color(0xFF8D6E63),
+            ),
+          );
+        }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Entry recorded but failed to open gate'), backgroundColor: Color(0xFFFF9800)),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Entry recorded but failed to open gate'),
+              backgroundColor: Color(0xFFFF9800),
+            ),
+          );
+        }
       }
 
       _nameController.clear();
       _reasonController.clear();
-
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFD32F2F)),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: const Color(0xFFD32F2F),
+          ),
+        );
+      }
     } finally {
-      setState(() => _isSubmitting = false);
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
 
@@ -174,7 +247,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Quick Open Gate Button
+                  // ⭐ Manual Gate Control Card
                   Container(
                     decoration: BoxDecoration(
                       color: Colors.white,
@@ -190,7 +263,10 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                     child: Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5),
+                        border: Border.all(
+                          color: const Color(0xFFE0D5C1),
+                          width: 1.5,
+                        ),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -205,15 +281,22 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                                     gradient: const LinearGradient(
                                       begin: Alignment.topLeft,
                                       end: Alignment.bottomRight,
-                                      colors: [Color(0xFFFF9800), Color(0xFFF5A623)],
+                                      colors: [
+                                        Color(0xFFFF9800),
+                                        Color(0xFFF5A623),
+                                      ],
                                     ),
                                     borderRadius: BorderRadius.circular(14),
                                   ),
-                                  child: const Icon(Icons.door_front_door, size: 32, color: Color(0xFFFFF8F0)),
+                                  child: const Icon(
+                                    Icons.door_front_door,
+                                    size: 32,
+                                    color: Color(0xFFFFF8F0),
+                                  ),
                                 ),
                                 const SizedBox(width: 10),
                                 const Text(
-                                  'Quick Gate Control',
+                                  'Manual Gate Control',
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -222,23 +305,106 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                                 ),
                               ],
                             ),
+                            const SizedBox(height: 10),
+
+                            // Status pill
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _isGateUp
+                                    ? const Color(0xFFFF9800).withOpacity(0.15)
+                                    : const Color(0xFFD4C4A8).withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _isGateUp
+                                        ? Icons.arrow_upward
+                                        : Icons.arrow_downward,
+                                    size: 14,
+                                    color: _isGateUp
+                                        ? const Color(0xFFFF9800)
+                                        : const Color(0xFF8D6E63),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _isGateUp
+                                        ? 'GATE UP — SCANNING PAUSED'
+                                        : 'GATE DOWN — SCANNING ACTIVE',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 0.5,
+                                      color: _isGateUp
+                                          ? const Color(0xFFFF9800)
+                                          : const Color(0xFF8D6E63),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                             const SizedBox(height: 14),
+
+                            // ⭐ Manual UP
                             ElevatedButton.icon(
-                              onPressed: _isGateOpening ? null : _openGate,
-                              icon: _isGateOpening
+                              onPressed: (_isGateBusy || _isGateUp)
+                                  ? null
+                                  : _manualUp,
+                              icon: (_isGateBusy && !_isGateUp)
                                   ? const SizedBox(
                                 width: 18,
                                 height: 18,
                                 child: CircularProgressIndicator(
                                   strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFF8F0)),
+                                  valueColor:
+                                  AlwaysStoppedAnimation<Color>(
+                                      Color(0xFFFFF8F0)),
                                 ),
                               )
-                                  : const Icon(Icons.open_in_new, size: 18),
-                              label: Text(_isGateOpening ? 'Opening...' : 'Quick Open Gate'),
+                                  : const Icon(Icons.keyboard_arrow_up,
+                                  size: 22),
+                              label: const Text('Manual Up (Hold Open)'),
                               style: ElevatedButton.styleFrom(
                                 minimumSize: const Size(double.infinity, 48),
                                 backgroundColor: const Color(0xFFFF9800),
+                                foregroundColor: const Color(0xFFFFF8F0),
+                                disabledBackgroundColor:
+                                const Color(0xFFFF9800).withOpacity(0.4),
+                                disabledForegroundColor:
+                                const Color(0xFFFFF8F0).withOpacity(0.7),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+
+                            // ⭐ Manual DOWN — always enabled for safety
+                            ElevatedButton.icon(
+                              onPressed: _isGateBusy ? null : _manualDown,
+                              icon: (_isGateBusy && _isGateUp)
+                                  ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor:
+                                  AlwaysStoppedAnimation<Color>(
+                                      Color(0xFFFFF8F0)),
+                                ),
+                              )
+                                  : const Icon(Icons.keyboard_arrow_down,
+                                  size: 22),
+                              label:
+                              const Text('Manual Down (Close & Resume)'),
+                              style: ElevatedButton.styleFrom(
+                                minimumSize: const Size(double.infinity, 48),
+                                backgroundColor: const Color(0xFF6B5B4F),
                                 foregroundColor: const Color(0xFFFFF8F0),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
@@ -269,7 +435,10 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                     child: Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5),
+                        border: Border.all(
+                          color: const Color(0xFFE0D5C1),
+                          width: 1.5,
+                        ),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -281,10 +450,15 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                                    color: const Color(0xFFD4C4A8)
+                                        .withOpacity(0.15),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  child: const Icon(Icons.category, color: Color(0xFF8D6E63), size: 20),
+                                  child: const Icon(
+                                    Icons.category,
+                                    color: Color(0xFF8D6E63),
+                                    size: 20,
+                                  ),
                                 ),
                                 const SizedBox(width: 10),
                                 const Text(
@@ -301,15 +475,18 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                             Row(
                               children: [
                                 Expanded(
-                                  child: _buildEntryTypeButton('delivery', Icons.local_shipping, '📦 Delivery'),
+                                  child: _buildEntryTypeButton('delivery',
+                                      Icons.local_shipping, '📦 Delivery'),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
-                                  child: _buildEntryTypeButton('employee', Icons.work, '👔 Employee'),
+                                  child: _buildEntryTypeButton('employee',
+                                      Icons.work, '👔 Employee'),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
-                                  child: _buildEntryTypeButton('guest', Icons.people, '👤 Guest'),
+                                  child: _buildEntryTypeButton(
+                                      'guest', Icons.people, '👤 Guest'),
                                 ),
                               ],
                             ),
@@ -337,7 +514,10 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                     child: Container(
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5),
+                        border: Border.all(
+                          color: const Color(0xFFE0D5C1),
+                          width: 1.5,
+                        ),
                       ),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
@@ -349,10 +529,15 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                                 Container(
                                   padding: const EdgeInsets.all(8),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                                    color: const Color(0xFFD4C4A8)
+                                        .withOpacity(0.15),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  child: const Icon(Icons.person, color: Color(0xFF8D6E63), size: 20),
+                                  child: const Icon(
+                                    Icons.person,
+                                    color: Color(0xFF8D6E63),
+                                    size: 20,
+                                  ),
                                 ),
                                 const SizedBox(width: 10),
                                 const Text(
@@ -370,19 +555,27 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                               controller: _nameController,
                               decoration: InputDecoration(
                                 labelText: '👤 Full Name',
-                                labelStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 12),
-                                prefixIcon: const Icon(Icons.person_outline, color: Color(0xFFD4C4A8), size: 20),
+                                labelStyle: const TextStyle(
+                                    color: Color(0xFFB8A99A), fontSize: 12),
+                                prefixIcon: const Icon(
+                                  Icons.person_outline,
+                                  color: Color(0xFFD4C4A8),
+                                  size: 20,
+                                ),
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                                  borderSide: const BorderSide(
+                                      color: Color(0xFFE0D5C1)),
                                 ),
                                 enabledBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                                  borderSide: const BorderSide(
+                                      color: Color(0xFFE0D5C1)),
                                 ),
                                 focusedBorder: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(color: Color(0xFFD4C4A8), width: 2),
+                                  borderSide: const BorderSide(
+                                      color: Color(0xFFD4C4A8), width: 2),
                                 ),
                                 filled: true,
                                 fillColor: const Color(0xFFFFF8F0),
@@ -419,7 +612,10 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                       child: Container(
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5),
+                          border: Border.all(
+                            color: const Color(0xFFE0D5C1),
+                            width: 1.5,
+                          ),
                         ),
                         child: Padding(
                           padding: const EdgeInsets.all(16),
@@ -431,10 +627,15 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                                   Container(
                                     padding: const EdgeInsets.all(8),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                                      color: const Color(0xFFD4C4A8)
+                                          .withOpacity(0.15),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
-                                    child: const Icon(Icons.info, color: Color(0xFF8D6E63), size: 20),
+                                    child: const Icon(
+                                      Icons.info,
+                                      color: Color(0xFF8D6E63),
+                                      size: 20,
+                                    ),
                                   ),
                                   const SizedBox(width: 10),
                                   const Text(
@@ -452,27 +653,37 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                                 controller: _reasonController,
                                 decoration: InputDecoration(
                                   labelText: '💡 Reason',
-                                  labelStyle: const TextStyle(color: Color(0xFFB8A99A), fontSize: 12),
-                                  prefixIcon: const Icon(Icons.description_outlined, color: Color(0xFFD4C4A8), size: 20),
+                                  labelStyle: const TextStyle(
+                                      color: Color(0xFFB8A99A), fontSize: 12),
+                                  prefixIcon: const Icon(
+                                    Icons.description_outlined,
+                                    color: Color(0xFFD4C4A8),
+                                    size: 20,
+                                  ),
                                   border: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(14),
-                                    borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                                    borderSide: const BorderSide(
+                                        color: Color(0xFFE0D5C1)),
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(14),
-                                    borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+                                    borderSide: const BorderSide(
+                                        color: Color(0xFFE0D5C1)),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: BorderRadius.circular(14),
-                                    borderSide: const BorderSide(color: Color(0xFFD4C4A8), width: 2),
+                                    borderSide: const BorderSide(
+                                        color: Color(0xFFD4C4A8), width: 2),
                                   ),
                                   filled: true,
                                   fillColor: const Color(0xFFFFF8F0),
-                                  hintText: 'e.g., Visiting family, Friend visit',
+                                  hintText:
+                                  'e.g., Visiting family, Friend visit',
                                 ),
                                 maxLines: 2,
                                 validator: (value) {
-                                  if (_selectedEntryType == 'guest' && (value == null || value.isEmpty)) {
+                                  if (_selectedEntryType == 'guest' &&
+                                      (value == null || value.isEmpty)) {
                                     return 'Please enter a reason';
                                   }
                                   return null;
@@ -494,7 +705,8 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                       backgroundColor: const Color(0xFFD4C4A8),
                       foregroundColor: const Color(0xFF6B5B4F),
                       elevation: 3,
-                      shadowColor: const Color(0xFFD4C4A8).withOpacity(0.5),
+                      shadowColor:
+                      const Color(0xFFD4C4A8).withOpacity(0.5),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
@@ -510,7 +722,8 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                       height: 22,
                       child: CircularProgressIndicator(
                         strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B5B4F)),
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFF6B5B4F)),
                       ),
                     )
                         : const Row(
@@ -532,7 +745,8 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     );
   }
 
-  Widget _buildEntryTypeButton(String value, IconData icon, String label) {
+  Widget _buildEntryTypeButton(
+      String value, IconData icon, String label) {
     bool isSelected = _selectedEntryType == value;
     return GestureDetector(
       onTap: () {
@@ -554,7 +768,9 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
           color: isSelected ? null : const Color(0xFFF5F0E8),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isSelected ? const Color(0xFFD4C4A8) : const Color(0xFFE0D5C1),
+            color: isSelected
+                ? const Color(0xFFD4C4A8)
+                : const Color(0xFFE0D5C1),
             width: 1.5,
           ),
         ),
@@ -564,7 +780,9 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
             Icon(
               icon,
               size: 28,
-              color: isSelected ? const Color(0xFFFFF8F0) : const Color(0xFF8D6E63),
+              color: isSelected
+                  ? const Color(0xFFFFF8F0)
+                  : const Color(0xFF8D6E63),
             ),
             const SizedBox(height: 6),
             Text(
@@ -572,7 +790,9 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                color: isSelected ? const Color(0xFFFFF8F0) : const Color(0xFF6B5B4F),
+                color: isSelected
+                    ? const Color(0xFFFFF8F0)
+                    : const Color(0xFF6B5B4F),
               ),
               textAlign: TextAlign.center,
             ),
