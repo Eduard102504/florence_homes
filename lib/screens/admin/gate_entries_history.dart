@@ -1,13 +1,19 @@
+// lib/screens/admin/gate_entries_history.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
-import 'package:csv/csv.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'dart:async';
+
+import 'pdf_download_stub.dart'
+if (dart.library.js_interop) 'pdf_download_web.dart' as pdf_download;
 
 class GateEntriesHistory extends StatefulWidget {
   const GateEntriesHistory({super.key});
@@ -19,7 +25,6 @@ class GateEntriesHistory extends StatefulWidget {
 class _GateEntriesHistoryState extends State<GateEntriesHistory> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // UI state
   List<Map<String, dynamic>> _entries = [];
   List<Map<String, dynamic>> _allEntries = [];
   String? _errorMessage;
@@ -29,11 +34,22 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
   Map<String, String> _residentNames = {};
   bool _isExporting = false;
 
-  // Live streams
+  int _currentPage = 1;
+  int _pageSize = 20;
+
   StreamSubscription<QuerySnapshot>? _entriesSub;
   StreamSubscription<QuerySnapshot>? _residentsSub;
 
-  // ==================== TIMESTAMP HELPERS ====================
+  // ==================== PDF BRAND COLORS ====================
+  static final PdfColor _brandBrown = PdfColor.fromHex('#5D4037');
+  static final PdfColor _brandCream = PdfColor.fromHex('#D4C4A8');
+  static final PdfColor _brandTan = PdfColor.fromHex('#C4A882');
+  static final PdfColor _brandLight = PdfColor.fromHex('#FFF8F0');
+  static final PdfColor _brandBeige = PdfColor.fromHex('#F5F0E8');
+  static final PdfColor _brandBorder = PdfColor.fromHex('#E0D5C1');
+  static final PdfColor _pdfWhite = PdfColor.fromHex('#FFFFFF');
+
+  // ==================== TIMESTAMP ====================
   DateTime _parseTimestamp(dynamic timestamp) {
     if (timestamp == null) return DateTime.now();
 
@@ -58,6 +74,34 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     return DateTime.now();
   }
 
+  // ==================== PAGINATION ====================
+  int get _totalPages {
+    if (_pageSize == 0) return 1;
+    if (_entries.isEmpty) return 1;
+    return ((_entries.length - 1) ~/ _pageSize) + 1;
+  }
+
+  List<Map<String, dynamic>> get _paginatedEntries {
+    if (_pageSize == 0) return _entries;
+    final start = (_currentPage - 1) * _pageSize;
+    if (start >= _entries.length) return [];
+    final end = (start + _pageSize).clamp(0, _entries.length);
+    return _entries.sublist(start, end);
+  }
+
+  void _goToPage(int page) {
+    final total = _totalPages;
+    if (page < 1 || page > total) return;
+    setState(() => _currentPage = page);
+  }
+
+  void _changePageSize(int newSize) {
+    setState(() {
+      _pageSize = newSize;
+      _currentPage = 1;
+    });
+  }
+
   // ==================== LIFECYCLE ====================
   @override
   void initState() {
@@ -73,7 +117,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     super.dispose();
   }
 
-  // ==================== LIVE RESIDENTS STREAM ====================
+  // ==================== LIVE RESIDENTS ====================
   void _startResidentsStream() {
     _residentsSub = _firestore
         .collection('users')
@@ -85,15 +129,13 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
         for (var doc in snapshot.docs) {
           names[doc.id] = (doc.get('fullName') as String?) ?? 'Unknown';
         }
-        if (mounted) {
-          setState(() => _residentNames = names);
-        }
+        if (mounted) setState(() => _residentNames = names);
       },
       onError: (e) => print('Residents stream error: $e'),
     );
   }
 
-  // ==================== LIVE ENTRIES STREAM ====================
+  // ==================== LIVE ENTRIES ====================
   void _startEntriesStream() {
     _entriesSub = _firestore
         .collection('gate_entries')
@@ -106,29 +148,26 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
           return data;
         }).toList();
 
-        // Newest first
-        list.sort((a, b) {
-          return _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a));
-        });
+        list.sort((a, b) =>
+            _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a)));
 
         if (mounted) {
           setState(() {
             _allEntries = list;
             _applyFiltersInternal();
+            if (_currentPage > _totalPages) _currentPage = _totalPages;
             _errorMessage = null;
           });
         }
       },
       onError: (e) {
         print('Entries stream error: $e');
-        if (mounted) {
-          setState(() => _errorMessage = 'Error: $e');
-        }
+        if (mounted) setState(() => _errorMessage = 'Error: $e');
       },
     );
   }
 
-  // ==================== FILTER LOGIC ====================
+  // ==================== FILTERS ====================
   void _applyFiltersInternal() {
     List<Map<String, dynamic>> filtered = List.from(_allEntries);
 
@@ -152,15 +191,17 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
       }).toList();
     }
 
-    filtered.sort((a, b) {
-      return _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a));
-    });
+    filtered.sort((a, b) =>
+        _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a)));
 
     _entries = filtered;
   }
 
   void _applyFilters() {
-    setState(_applyFiltersInternal);
+    setState(() {
+      _applyFiltersInternal();
+      _currentPage = 1;
+    });
   }
 
   // ==================== DISPLAY HELPERS ====================
@@ -183,8 +224,10 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     if (_entries.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content: Text('No entries to export'),
-            backgroundColor: Color(0xFFFF9800)),
+          content: Text('No entries to export'),
+          backgroundColor: Color(0xFFFF9800),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
       return;
     }
@@ -194,279 +237,571 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     try {
       final pdf = pw.Document();
 
-      int totalEntries = _entries.length;
-      int rfidEntries = _entries
+      pw.MemoryImage? logoImage;
+      try {
+        final logoBytes =
+        await rootBundle.load('assets/images/florence_logo.png');
+        logoImage = pw.MemoryImage(logoBytes.buffer.asUint8List());
+      } catch (e) {
+        print('⚠️ Could not load logo: $e');
+      }
+
+      final int totalEntries = _entries.length;
+      final int rfidEntries = _entries
           .where((e) =>
       e['entryType'] == 'uhf_rfid' || e['entryType'] == 'rfid')
           .length;
-      int qrEntries =
+      final int qrEntries =
           _entries.where((e) => e['entryType'] == 'qr_visitor').length;
-      int manualEntries =
+      final int manualEntries =
           _entries.where((e) => e['entryType'] == 'manual').length;
 
-      String dateRange = _dateRange != null
-          ? '${DateFormat('MMM dd, yyyy').format(_dateRange!.start)} - ${DateFormat('MMM dd, yyyy').format(_dateRange!.end)}'
+      final String dateRangeLabel = _dateRange != null
+          ? '${DateFormat('MMM dd, yyyy').format(_dateRange!.start)} — ${DateFormat('MMM dd, yyyy').format(_dateRange!.end)}'
           : 'All Time';
 
-      String residentFilter = _selectedResident != 'all'
-          ? _residentNames[_selectedResident] ?? 'Selected Resident'
+      final String residentLabel = _selectedResident != 'all'
+          ? _residentNames[_selectedResident] ?? 'Unknown Resident'
           : 'All Residents';
 
-      String entryTypeFilter = _selectedEntryType != 'all'
-          ? _selectedEntryType.toUpperCase()
+      final String entryTypeLabel = _selectedEntryType != 'all'
+          ? _selectedEntryType
+          .toUpperCase()
+          .replaceFirst('UHF_RFID', 'RFID')
+          .replaceFirst('QR_VISITOR', 'QR Visitor')
+          .replaceFirst('MANUAL', 'Manual')
           : 'All Types';
 
+      // COVER
       pdf.addPage(
-        pw.MultiPage(
+        pw.Page(
           pageFormat: PdfPageFormat.a4,
           build: (pw.Context context) {
-            return [
-              pw.Center(
-                child: pw.Column(
-                  mainAxisAlignment: pw.MainAxisAlignment.center,
-                  children: [
-                    pw.SizedBox(height: 100),
-                    pw.Icon(pw.IconData(0xe3c9),
-                        size: 80, color: PdfColors.brown),
-                    pw.SizedBox(height: 20),
-                    pw.Text(
-                      'Florence Homes',
-                      style: pw.TextStyle(
-                        fontSize: 32,
-                        fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.brown,
+            return pw.Container(
+              decoration: pw.BoxDecoration(color: _brandLight),
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.center,
+                children: [
+                  pw.Container(height: 12, color: _brandCream),
+                  pw.SizedBox(height: 40),
+                  if (logoImage != null)
+                    pw.Container(
+                      width: 200,
+                      height: 200,
+                      decoration: pw.BoxDecoration(
+                        border: pw.Border.all(color: _brandCream, width: 3),
+                        borderRadius: pw.BorderRadius.circular(16),
+                      ),
+                      padding: pw.EdgeInsets.all(10),
+                      child: pw.Image(logoImage, fit: pw.BoxFit.contain),
+                    )
+                  else
+                    pw.Container(
+                      width: 200,
+                      height: 200,
+                      decoration: pw.BoxDecoration(
+                        color: _brandBeige,
+                        border: pw.Border.all(color: _brandCream, width: 3),
+                        borderRadius: pw.BorderRadius.circular(16),
+                      ),
+                      child: pw.Center(
+                        child: pw.Text('🏠',
+                            style: pw.TextStyle(fontSize: 72)),
                       ),
                     ),
-                    pw.SizedBox(height: 10),
-                    pw.Text(
-                      'Gate Entry Report',
-                      style: pw.TextStyle(
-                          fontSize: 18, color: PdfColors.grey),
+                  pw.SizedBox(height: 30),
+                  pw.Text(
+                    'FLORENCE HOMES',
+                    style: pw.TextStyle(
+                      fontSize: 28,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _brandBrown,
+                      letterSpacing: 3,
                     ),
-                    pw.SizedBox(height: 40),
-                    pw.Text(
-                      'Generated: ${DateFormat('MMMM dd, yyyy hh:mm a').format(DateTime.now())}',
-                      style: pw.TextStyle(
-                          fontSize: 12, color: PdfColors.grey),
+                  ),
+                  pw.SizedBox(height: 6),
+                  pw.Text(
+                    'MAGDALENA',
+                    style: pw.TextStyle(
+                      fontSize: 18,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _brandTan,
+                      letterSpacing: 6,
                     ),
-                  ],
-                ),
+                  ),
+                  pw.SizedBox(height: 4),
+                  pw.Text(
+                    'House & Land Development Corp.',
+                    style: pw.TextStyle(
+                      fontSize: 11,
+                      color: _brandBrown,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  pw.SizedBox(height: 40),
+                  pw.Container(width: 120, height: 3, color: _brandCream),
+                  pw.SizedBox(height: 30),
+                  pw.Text(
+                    'GATE ENTRY REPORT',
+                    style: pw.TextStyle(
+                      fontSize: 22,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _brandBrown,
+                      letterSpacing: 2,
+                    ),
+                  ),
+                  pw.SizedBox(height: 20),
+                  pw.Container(
+                    width: 350,
+                    padding: pw.EdgeInsets.all(16),
+                    decoration: pw.BoxDecoration(
+                      color: _pdfWhite,
+                      border:
+                      pw.Border.all(color: _brandBorder, width: 1.5),
+                      borderRadius: pw.BorderRadius.circular(10),
+                    ),
+                    child: pw.Column(
+                      children: [
+                        _pdfMetaRow('Date Range', dateRangeLabel),
+                        pw.SizedBox(height: 6),
+                        _pdfMetaRow('Resident', residentLabel),
+                        pw.SizedBox(height: 6),
+                        _pdfMetaRow('Entry Type', entryTypeLabel),
+                        pw.SizedBox(height: 6),
+                        _pdfMetaRow('Total Records', '$totalEntries'),
+                        pw.SizedBox(height: 6),
+                        _pdfMetaRow(
+                          'Generated',
+                          DateFormat('MMM dd, yyyy • hh:mm a')
+                              .format(DateTime.now()),
+                        ),
+                      ],
+                    ),
+                  ),
+                  pw.Spacer(),
+                  pw.Container(
+                    padding: pw.EdgeInsets.all(12),
+                    color: _brandBeige,
+                    child: pw.Center(
+                      child: pw.Text(
+                        'Florence Homes Magdalena  •  Village Gate Access System',
+                        style: pw.TextStyle(
+                          fontSize: 10,
+                          color: _brandBrown,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ];
+            );
           },
         ),
       );
 
+      // SUMMARY
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
+          margin: pw.EdgeInsets.all(40),
+          header: (pw.Context context) => _pdfHeader(logoImage),
+          footer: (pw.Context context) => _pdfFooter(context),
           build: (pw.Context context) {
             return [
-              pw.Header(
-                  level: 0,
-                  child: pw.Text('Report Summary',
-                      style: pw.TextStyle(
-                          fontSize: 20, fontWeight: pw.FontWeight.bold))),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'Report Summary',
+                style: pw.TextStyle(
+                  fontSize: 20,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _brandBrown,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Container(width: 60, height: 3, color: _brandCream),
               pw.SizedBox(height: 20),
               pw.Container(
-                padding: pw.EdgeInsets.all(15),
+                padding: pw.EdgeInsets.all(14),
                 decoration: pw.BoxDecoration(
-                  border: pw.Border.all(color: PdfColors.grey300),
-                  borderRadius: pw.BorderRadius.circular(10),
+                  color: _brandLight,
+                  border: pw.Border.all(color: _brandBorder),
+                  borderRadius: pw.BorderRadius.circular(8),
                 ),
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                    pw.Text(
+                      'FILTERS APPLIED',
+                      style: pw.TextStyle(
+                        fontSize: 10,
+                        fontWeight: pw.FontWeight.bold,
+                        color: _brandTan,
+                        letterSpacing: 1,
+                      ),
+                    ),
+                    pw.SizedBox(height: 10),
+                    _pdfFilterRow(
+                        Icons.calendar_today, 'Date Range', dateRangeLabel),
+                    pw.SizedBox(height: 6),
+                    _pdfFilterRow(Icons.person, 'Resident', residentLabel),
+                    pw.SizedBox(height: 6),
+                    _pdfFilterRow(Icons.tag, 'Entry Type', entryTypeLabel),
+                  ],
+                ),
+              ),
+              pw.SizedBox(height: 24),
+              pw.Container(
+                padding: pw.EdgeInsets.all(20),
+                decoration: pw.BoxDecoration(
+                  color: _brandCream,
+                  borderRadius: pw.BorderRadius.circular(12),
+                ),
+                child: pw.Row(
+                  mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+                  children: [
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text('Date Range:',
-                            style: pw.TextStyle(
-                                fontSize: 12,
-                                fontWeight: pw.FontWeight.bold)),
-                        pw.Text(dateRange, style: pw.TextStyle(fontSize: 12)),
+                        pw.Text(
+                          'TOTAL ENTRIES',
+                          style: pw.TextStyle(
+                            fontSize: 11,
+                            fontWeight: pw.FontWeight.bold,
+                            color: _brandBrown,
+                            letterSpacing: 1.5,
+                          ),
+                        ),
+                        pw.SizedBox(height: 4),
+                        pw.Text(
+                          totalEntries.toString(),
+                          style: pw.TextStyle(
+                            fontSize: 36,
+                            fontWeight: pw.FontWeight.bold,
+                            color: _brandBrown,
+                          ),
+                        ),
                       ],
                     ),
-                    pw.SizedBox(height: 8),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('Resident Filter:',
-                            style: pw.TextStyle(
-                                fontSize: 12,
-                                fontWeight: pw.FontWeight.bold)),
-                        pw.Text(residentFilter,
-                            style: pw.TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                    pw.SizedBox(height: 8),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('Entry Type Filter:',
-                            style: pw.TextStyle(
-                                fontSize: 12,
-                                fontWeight: pw.FontWeight.bold)),
-                        pw.Text(entryTypeFilter,
-                            style: pw.TextStyle(fontSize: 12)),
-                      ],
-                    ),
-                    pw.SizedBox(height: 16),
-                    pw.Divider(),
-                    pw.SizedBox(height: 16),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('Total Entries:',
-                            style: pw.TextStyle(
-                                fontSize: 12,
-                                fontWeight: pw.FontWeight.bold)),
-                        pw.Text(totalEntries.toString(),
-                            style: pw.TextStyle(
-                                fontSize: 16,
-                                fontWeight: pw.FontWeight.bold,
-                                color: PdfColors.brown)),
-                      ],
-                    ),
-                    pw.SizedBox(height: 8),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('RFID Scans:',
-                            style: pw.TextStyle(fontSize: 12)),
-                        pw.Text(rfidEntries.toString(),
-                            style: pw.TextStyle(
-                                fontSize: 12, color: PdfColors.green)),
-                      ],
-                    ),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('QR Visitor Scans:',
-                            style: pw.TextStyle(fontSize: 12)),
-                        pw.Text(qrEntries.toString(),
-                            style: pw.TextStyle(
-                                fontSize: 12, color: PdfColors.purple)),
-                      ],
-                    ),
-                    pw.Row(
-                      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                      children: [
-                        pw.Text('Manual Entries:',
-                            style: pw.TextStyle(fontSize: 12)),
-                        pw.Text(manualEntries.toString(),
-                            style: pw.TextStyle(
-                                fontSize: 12, color: PdfColors.orange)),
-                      ],
-                    ),
+                    pw.Icon(pw.IconData(0xe1c7),
+                        size: 56, color: _brandBrown),
                   ],
                 ),
               ),
               pw.SizedBox(height: 20),
-              pw.Text('Generated by: Florence Homes Gate System',
-                  style:
-                  pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+              pw.Row(
+                children: [
+                  pw.Expanded(
+                    child: _pdfStatCard('RFID Scans',
+                        rfidEntries.toString(), PdfColor.fromHex('#4CAF50')),
+                  ),
+                  pw.SizedBox(width: 10),
+                  pw.Expanded(
+                    child: _pdfStatCard('QR Visitors',
+                        qrEntries.toString(), PdfColor.fromHex('#9C27B0')),
+                  ),
+                  pw.SizedBox(width: 10),
+                  pw.Expanded(
+                    child: _pdfStatCard('Manual',
+                        manualEntries.toString(),
+                        PdfColor.fromHex('#FF9800')),
+                  ),
+                ],
+              ),
             ];
           },
         ),
       );
 
+      // DETAILS
       pdf.addPage(
         pw.MultiPage(
-          pageFormat: PdfPageFormat.a4,
-          orientation: pw.PageOrientation.landscape,
+          pageFormat: PdfPageFormat.a4.landscape,
+          margin: pw.EdgeInsets.all(30),
+          header: (pw.Context context) => _pdfHeader(logoImage),
+          footer: (pw.Context context) => _pdfFooter(context),
           build: (pw.Context context) {
             return [
-              pw.Header(
-                  level: 0,
-                  child: pw.Text('Gate Entry Details',
-                      style: pw.TextStyle(
-                          fontSize: 20, fontWeight: pw.FontWeight.bold))),
-              pw.SizedBox(height: 20),
+              pw.SizedBox(height: 10),
+              pw.Text(
+                'Gate Entry Details',
+                style: pw.TextStyle(
+                  fontSize: 18,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _brandBrown,
+                ),
+              ),
+              pw.SizedBox(height: 4),
+              pw.Container(width: 60, height: 3, color: _brandCream),
+              pw.SizedBox(height: 16),
               pw.Table.fromTextArray(
-                headers: [
+                headers: const [
+                  '#',
                   'Date',
                   'Time',
                   'Resident',
                   'Type',
                   'Visitor',
-                  'Status'
                 ],
-                headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-                headerDecoration:
-                pw.BoxDecoration(color: PdfColors.brown100),
+                headerStyle: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  color: _brandBrown,
+                  fontSize: 10,
+                ),
+                headerDecoration: pw.BoxDecoration(color: _brandCream),
+                headerHeight: 26,
+                cellStyle: pw.TextStyle(
+                  fontSize: 9,
+                  color: _brandBrown,
+                ),
                 cellAlignment: pw.Alignment.centerLeft,
-                data: _entries.map((entry) {
+                cellPadding:
+                pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+                oddRowDecoration: pw.BoxDecoration(color: _brandLight),
+                border: pw.TableBorder.all(color: _brandBorder, width: 0.6),
+                data: _entries.asMap().entries.map((pair) {
+                  final index = pair.key + 1;
+                  final entry = pair.value;
                   final ts = _getEntryTimestamp(entry);
                   return [
+                    index.toString(),
                     DateFormat('yyyy-MM-dd').format(ts),
-                    DateFormat('hh:mm:ss a').format(ts),
+                    DateFormat('hh:mm a').format(ts),
                     entry['residentName'] ?? 'Unknown',
                     _getEntryTypeDisplay(entry['entryType']),
-                    entry['visitorName'] ?? '-',
-                    entry['status']?.toUpperCase() ?? 'ENTRY',
+                    entry['visitorName'] ?? '—',
                   ];
                 }).toList(),
               ),
-              pw.SizedBox(height: 20),
-              pw.Text('Total Records: ${_entries.length}',
-                  style: pw.TextStyle(fontSize: 10, color: PdfColors.grey)),
+              pw.SizedBox(height: 14),
+              pw.Text(
+                'Total records: ${_entries.length}',
+                style: pw.TextStyle(
+                  fontSize: 10,
+                  color: _brandTan,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
             ];
           },
         ),
       );
 
-      final bytes = await pdf.save();
-      final tempDir = await getTemporaryDirectory();
-      final file = File(
-          '${tempDir.path}/gate_history_${DateTime.now().millisecondsSinceEpoch}.pdf');
-      await file.writeAsBytes(bytes);
-      await Share.shareXFiles([XFile(file.path)],
-          text: 'Florence Homes - Gate Entry Report');
+      // SAVE
+      final Uint8List bytes = await pdf.save();
+      final fileName =
+          'gate_report_${DateTime.now().millisecondsSinceEpoch}.pdf';
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('PDF generated and shared successfully'),
-            backgroundColor: Color(0xFF8D6E63)),
-      );
+      if (kIsWeb) {
+        pdf_download.downloadPdf(bytes, fileName);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('📥 PDF downloaded'),
+              backgroundColor: Color(0xFF8D6E63),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      } else {
+        final tempDir = await getTemporaryDirectory();
+        final file = File('${tempDir.path}/$fileName');
+        await file.writeAsBytes(bytes);
+
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          subject: 'Florence Homes — Gate Entry Report',
+          text: 'Florence Homes Magdalena — Gate Entry Report',
+        );
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ PDF report generated'),
+              backgroundColor: Color(0xFF8D6E63),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
     } catch (e) {
       print('PDF generation error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
             content: Text('Error generating PDF: $e'),
-            backgroundColor: const Color(0xFFD32F2F)),
-      );
+            backgroundColor: const Color(0xFFD32F2F),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
     } finally {
-      setState(() => _isExporting = false);
+      if (mounted) setState(() => _isExporting = false);
     }
   }
 
-  Future<void> _exportToCSV() async {
-    if (_entries.isEmpty) return;
+  // ==================== PDF HELPERS ====================
+  pw.Widget _pdfHeader(pw.MemoryImage? logo) {
+    return pw.Container(
+      padding: pw.EdgeInsets.only(bottom: 10),
+      decoration: pw.BoxDecoration(
+        border: pw.Border(
+          bottom: pw.BorderSide(color: _brandCream, width: 2),
+        ),
+      ),
+      child: pw.Row(
+        crossAxisAlignment: pw.CrossAxisAlignment.center,
+        children: [
+          if (logo != null)
+            pw.Container(
+              width: 36,
+              height: 36,
+              child: pw.Image(logo, fit: pw.BoxFit.contain),
+            )
+          else
+            pw.Container(
+              width: 36,
+              height: 36,
+              decoration: pw.BoxDecoration(
+                color: _brandBeige,
+                borderRadius: pw.BorderRadius.circular(6),
+              ),
+              child: pw.Center(
+                child: pw.Text('🏠', style: pw.TextStyle(fontSize: 18)),
+              ),
+            ),
+          pw.SizedBox(width: 10),
+          pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text(
+                'FLORENCE HOMES MAGDALENA',
+                style: pw.TextStyle(
+                  fontSize: 12,
+                  fontWeight: pw.FontWeight.bold,
+                  color: _brandBrown,
+                  letterSpacing: 1,
+                ),
+              ),
+              pw.Text(
+                'Village Gate Access System',
+                style: pw.TextStyle(fontSize: 9, color: _brandTan),
+              ),
+            ],
+          ),
+          pw.Spacer(),
+          pw.Text(
+            DateFormat('MMM dd, yyyy').format(DateTime.now()),
+            style: pw.TextStyle(fontSize: 9, color: _brandTan),
+          ),
+        ],
+      ),
+    );
+  }
 
-    List<List<dynamic>> rows = [
-      ['Date', 'Time', 'Resident', 'Type', 'Visitor', 'Status']
-    ];
+  pw.Widget _pdfFooter(pw.Context context) {
+    return pw.Container(
+      padding: pw.EdgeInsets.only(top: 8),
+      decoration: pw.BoxDecoration(
+        border: pw.Border(
+          top: pw.BorderSide(color: _brandBorder, width: 0.5),
+        ),
+      ),
+      child: pw.Row(
+        mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+        children: [
+          pw.Text(
+            'Florence Homes Magdalena — Confidential',
+            style: pw.TextStyle(fontSize: 8, color: _brandTan),
+          ),
+          pw.Text(
+            'Page ${context.pageNumber} of ${context.pagesCount}',
+            style: pw.TextStyle(fontSize: 8, color: _brandTan),
+          ),
+        ],
+      ),
+    );
+  }
 
-    for (var entry in _entries) {
-      final ts = _getEntryTimestamp(entry);
-      rows.add([
-        DateFormat('yyyy-MM-dd').format(ts),
-        DateFormat('hh:mm:ss a').format(ts),
-        entry['residentName'] ?? 'Unknown',
-        _getEntryTypeDisplay(entry['entryType']),
-        entry['visitorName'] ?? '-',
-        entry['status']?.toUpperCase() ?? 'ENTRY',
-      ]);
-    }
+  pw.Widget _pdfMetaRow(String label, String value) {
+    return pw.Row(
+      mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+      children: [
+        pw.Text(
+          label,
+          style: pw.TextStyle(
+            fontSize: 10,
+            color: _brandTan,
+            fontWeight: pw.FontWeight.bold,
+            letterSpacing: 0.5,
+          ),
+        ),
+        pw.Text(
+          value,
+          style: pw.TextStyle(fontSize: 10, color: _brandBrown),
+        ),
+      ],
+    );
+  }
 
-    String csv = const ListToCsvConverter().convert(rows);
-    final tempDir = await getTemporaryDirectory();
-    final file = File(
-        '${tempDir.path}/gate_entries_${DateTime.now().millisecondsSinceEpoch}.csv');
-    await file.writeAsString(csv);
-    await Share.shareXFiles([XFile(file.path)],
-        text: 'Gate Entries Export');
+  pw.Widget _pdfFilterRow(IconData icon, String label, String value) {
+    return pw.Row(
+      children: [
+        pw.Icon(pw.IconData(icon.codePoint), size: 12, color: _brandTan),
+        pw.SizedBox(width: 8),
+        pw.SizedBox(
+          width: 90,
+          child: pw.Text(
+            label,
+            style: pw.TextStyle(
+              fontSize: 10,
+              color: _brandTan,
+              fontWeight: pw.FontWeight.bold,
+            ),
+          ),
+        ),
+        pw.Expanded(
+          child: pw.Text(
+            value,
+            style: pw.TextStyle(fontSize: 10, color: _brandBrown),
+          ),
+        ),
+      ],
+    );
+  }
+
+  pw.Widget _pdfStatCard(String label, String value, PdfColor accent) {
+    return pw.Container(
+      padding: pw.EdgeInsets.all(12),
+      decoration: pw.BoxDecoration(
+        color: _pdfWhite,
+        border: pw.Border.all(color: _brandBorder),
+        borderRadius: pw.BorderRadius.circular(8),
+      ),
+      child: pw.Column(
+        crossAxisAlignment: pw.CrossAxisAlignment.start,
+        children: [
+          pw.Text(
+            label.toUpperCase(),
+            style: pw.TextStyle(
+              fontSize: 9,
+              color: _brandTan,
+              fontWeight: pw.FontWeight.bold,
+              letterSpacing: 1,
+            ),
+          ),
+          pw.SizedBox(height: 6),
+          pw.Text(
+            value,
+            style: pw.TextStyle(
+              fontSize: 20,
+              fontWeight: pw.FontWeight.bold,
+              color: accent,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   // ==================== BUILD ====================
@@ -478,14 +813,14 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
       appBar: AppBar(
         title: Row(
           children: const [
-            Icon(Icons.history, size: 20, color: Color(0xFFFFF8F0)),
+            Icon(Icons.history, size: 17, color: Color(0xFFFFF8F0)),
             SizedBox(width: 8),
             Text(
               'Gate History',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1,
-                fontSize: 15,
+                fontSize: 12,
               ),
             ),
           ],
@@ -497,61 +832,24 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
             icon: const Icon(Icons.filter_list, size: 20),
             onPressed: _showFilterDialog,
             color: const Color(0xFFFFF8F0),
+            tooltip: 'Filter',
           ),
-          PopupMenuButton<String>(
-            onSelected: (value) {
-              if (value == 'csv') {
-                _exportToCSV();
-              } else if (value == 'pdf') {
-                _exportToPDF();
-              }
-            },
+          IconButton(
             icon: _isExporting
                 ? const SizedBox(
               width: 20,
               height: 20,
               child: CircularProgressIndicator(
                 strokeWidth: 2,
-                valueColor:
-                AlwaysStoppedAnimation<Color>(Color(0xFFFFF8F0)),
+                valueColor: AlwaysStoppedAnimation<Color>(
+                    Color(0xFFFFF8F0)),
               ),
             )
-                : const Icon(Icons.download, color: Color(0xFFFFF8F0)),
-            color: const Color(0xFFFFF8F0),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Color(0xFFE0D5C1)),
-            ),
-            itemBuilder: (BuildContext context) => const [
-              PopupMenuItem(
-                value: 'csv',
-                child: Row(
-                  children: [
-                    Icon(Icons.table_chart,
-                        size: 18, color: Color(0xFF8D6E63)),
-                    SizedBox(width: 8),
-                    Text('Export CSV',
-                        style: TextStyle(
-                            fontSize: 13, color: Color(0xFF6B5B4F))),
-                  ],
-                ),
-              ),
-              PopupMenuItem(
-                value: 'pdf',
-                child: Row(
-                  children: [
-                    Icon(Icons.picture_as_pdf,
-                        size: 18, color: Color(0xFFD32F2F)),
-                    SizedBox(width: 8),
-                    Text('Export PDF',
-                        style: TextStyle(
-                            fontSize: 13, color: Color(0xFF6B5B4F))),
-                  ],
-                ),
-              ),
-            ],
+                : const Icon(Icons.picture_as_pdf,
+                color: Color(0xFFFFF8F0)),
+            onPressed: _isExporting ? null : _exportToPDF,
+            tooltip: 'Save as PDF',
           ),
-          // Live indicator (replaces reload button)
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -583,6 +881,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
         ],
       ),
       body: Container(
+        constraints: const BoxConstraints.expand(),
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -594,13 +893,22 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
             ],
           ),
         ),
-        child: SafeArea(child: _buildBody(screenWidth)),
+        child: SafeArea(
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: kIsWeb ? 900 : double.infinity,
+              ),
+              child: _buildBody(screenWidth),
+            ),
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildBody(double screenWidth) {
-    // Only show full-screen spinner if we've never received data yet
     if (_allEntries.isEmpty && _errorMessage == null) {
       return const Center(
         child: Column(
@@ -667,6 +975,10 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
       );
     }
 
+    final paginated = _paginatedEntries;
+    final total = _totalPages;
+    final padding = kIsWeb ? 20.0 : 12.0;
+
     return Column(
       children: [
         // Filter chips
@@ -674,8 +986,20 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
             _selectedResident != 'all' ||
             _selectedEntryType != 'all')
           Container(
+            margin: EdgeInsets.fromLTRB(padding, padding, padding, 0),
             padding: const EdgeInsets.all(10),
-            color: const Color(0xFFD4C4A8).withOpacity(0.15),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
             child: SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
@@ -748,9 +1072,9 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
             ),
           ),
 
-        // Stats
+        // Stat cards
         Padding(
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(padding),
           child: Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -782,18 +1106,55 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
           ),
         ),
 
+        // Page size selector
+        Container(
+          margin: EdgeInsets.symmetric(horizontal: padding),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.list_alt,
+                  size: 14, color: Color(0xFFB8A99A)),
+              const SizedBox(width: 6),
+              const Text('Per page:',
+                  style: TextStyle(
+                      fontSize: 11,
+                      color: Color(0xFFB8A99A),
+                      fontWeight: FontWeight.w500)),
+              const Spacer(),
+              ..._pageSizeOptions(),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
         // List
         Expanded(
           child: ListView.builder(
-            padding: const EdgeInsets.all(12),
-            itemCount: _entries.length,
+            padding: EdgeInsets.symmetric(horizontal: padding),
+            itemCount: paginated.length,
             itemBuilder: (context, index) {
-              final entry = _entries[index];
+              final entry = paginated[index];
               final timestamp = _getEntryTimestamp(entry);
               final entryType = entry['entryType'] ?? 'unknown';
               final residentName = entry['residentName'] ?? 'Unknown';
-              final status = entry['status'] ?? 'entry';
               final visitorName = entry['visitorName'];
+
+              final globalIndex = _pageSize == 0
+                  ? index + 1
+                  : ((_currentPage - 1) * _pageSize) + index + 1;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
@@ -803,7 +1164,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                   boxShadow: [
                     BoxShadow(
                       color: const Color(0xFFD4C4A8).withOpacity(0.15),
-                      blurRadius: 4,
+                      blurRadius: 6,
                       offset: const Offset(0, 2),
                     ),
                   ],
@@ -836,13 +1197,37 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                         size: 20,
                       ),
                     ),
-                    title: Text(
-                      residentName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF6B5B4F),
-                        fontSize: 13,
-                      ),
+                    // ✅ Fixed-width index + Expanded name + ellipsis
+                    title: Row(
+                      children: [
+                        SizedBox(
+                          width: 32,
+                          child: Text(
+                            '#$globalIndex',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: Color(0xFFB8A99A),
+                              fontWeight: FontWeight.w600,
+                              fontFamily: 'monospace',
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            residentName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF6B5B4F),
+                              fontSize: 13,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                        ),
+                      ],
                     ),
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -852,8 +1237,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color:
-                            const Color(0xFFD4C4A8).withOpacity(0.15),
+                            color: const Color(0xFFD4C4A8).withOpacity(0.15),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           child: Text(
@@ -863,6 +1247,8 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                               fontWeight: FontWeight.w600,
                               color: Color(0xFF8D6E63),
                             ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
                           ),
                         ),
                         if (visitorName != null)
@@ -872,33 +1258,18 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                               '👤 $visitorName',
                               style: const TextStyle(
                                   fontSize: 10, color: Color(0xFFB8A99A)),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ),
                         Text(
                           '🕐 ${DateFormat('MMM dd, yyyy • hh:mm a').format(timestamp)}',
                           style: const TextStyle(
                               fontSize: 10, color: Color(0xFFD4C4A8)),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       ],
-                    ),
-                    trailing: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: status == 'entry'
-                            ? const Color(0xFF8D6E63).withOpacity(0.15)
-                            : const Color(0xFFD32F2F).withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: status == 'entry'
-                              ? const Color(0xFF8D6E63).withOpacity(0.3)
-                              : const Color(0xFFD32F2F).withOpacity(0.3),
-                        ),
-                      ),
-                      child: Text(
-                        status == 'entry' ? '✅' : '❌',
-                        style: const TextStyle(fontSize: 12),
-                      ),
                     ),
                   ),
                 ),
@@ -906,8 +1277,134 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
             },
           ),
         ),
+
+        // Pagination
+        if (_pageSize != 0 && total > 1)
+          Container(
+            margin: EdgeInsets.fromLTRB(padding, 0, padding, padding),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.first_page, size: 20),
+                  onPressed: _currentPage > 1 ? () => _goToPage(1) : null,
+                  color: const Color(0xFF8D6E63),
+                  disabledColor: const Color(0xFFE0D5C1),
+                  tooltip: 'First page',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_left, size: 20),
+                  onPressed: _currentPage > 1
+                      ? () => _goToPage(_currentPage - 1)
+                      : null,
+                  color: const Color(0xFF8D6E63),
+                  disabledColor: const Color(0xFFE0D5C1),
+                  tooltip: 'Previous page',
+                ),
+                Expanded(
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        'Page $_currentPage of $total  •  ${_entries.length} entries',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: Color(0xFF6B5B4F),
+                          fontWeight: FontWeight.w600,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right, size: 20),
+                  onPressed: _currentPage < total
+                      ? () => _goToPage(_currentPage + 1)
+                      : null,
+                  color: const Color(0xFF8D6E63),
+                  disabledColor: const Color(0xFFE0D5C1),
+                  tooltip: 'Next page',
+                ),
+                IconButton(
+                  icon: const Icon(Icons.last_page, size: 20),
+                  onPressed: _currentPage < total
+                      ? () => _goToPage(total)
+                      : null,
+                  color: const Color(0xFF8D6E63),
+                  disabledColor: const Color(0xFFE0D5C1),
+                  tooltip: 'Last page',
+                ),
+              ],
+            ),
+          ),
       ],
     );
+  }
+
+  List<Widget> _pageSizeOptions() {
+    const options = <Map<String, dynamic>>[
+      {'label': '10', 'value': 10},
+      {'label': '20', 'value': 20},
+      {'label': '50', 'value': 50},
+      {'label': '100', 'value': 100},
+      {'label': 'All', 'value': 0},
+    ];
+
+    return options.map((opt) {
+      final value = opt['value'] as int;
+      final isSelected = _pageSize == value;
+      return Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: GestureDetector(
+          onTap: () => _changePageSize(value),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? const Color(0xFFD4C4A8)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isSelected
+                    ? const Color(0xFFD4C4A8)
+                    : const Color(0xFFE0D5C1),
+                width: 1,
+              ),
+            ),
+            child: Text(
+              opt['label'] as String,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight:
+                isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected
+                    ? const Color(0xFFFFF8F0)
+                    : const Color(0xFF8D6E63),
+              ),
+            ),
+          ),
+        ),
+      );
+    }).toList();
   }
 
   Widget _buildStatCard(String title, String value, IconData icon,
@@ -924,6 +1421,13 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: color.withOpacity(0.3), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFD4C4A8).withOpacity(0.12),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         children: [
@@ -933,12 +1437,17 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
               style: TextStyle(
                   fontSize: fontSize,
                   fontWeight: FontWeight.bold,
-                  color: color)),
+                  color: color),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1),
           Text(title,
               style: TextStyle(
                   fontSize: labelSize,
                   color: color,
-                  fontWeight: FontWeight.w500)),
+                  fontWeight: FontWeight.w500),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              textAlign: TextAlign.center),
         ],
       ),
     );
@@ -972,14 +1481,33 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     }
   }
 
+  // ==================== FILTER DIALOG ====================
   void _showFilterDialog() {
-    final residentIds = _residentNames.keys.toList()..sort();
+    String searchText = '';
+    final searchController = TextEditingController();
+
+    final allResidents = <MapEntry<String, String>>[];
+    for (final entry in _residentNames.entries) {
+      if (entry.value.trim().isNotEmpty && entry.value != 'Unknown') {
+        allResidents.add(entry);
+      }
+    }
+    allResidents.sort((a, b) =>
+        a.value.toLowerCase().compareTo(b.value.toLowerCase()));
 
     showDialog(
       context: context,
       builder: (context) {
         return StatefulBuilder(
-          builder: (context, setStateDialog) {
+          builder: (context, setDialogState) {
+            final filteredResidents = searchText.isEmpty
+                ? allResidents
+                : allResidents
+                .where((r) => r.value
+                .toLowerCase()
+                .contains(searchText.toLowerCase()))
+                .toList();
+
             return AlertDialog(
               title: const Text('🔍 Filter Entries',
                   style: TextStyle(
@@ -993,132 +1521,307 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                 const BorderSide(color: Color(0xFFE0D5C1), width: 1.5),
               ),
               content: SizedBox(
-                width: 300,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ListTile(
-                      title: const Text('📅 Date Range',
-                          style: TextStyle(
-                              color: Color(0xFF6B5B4F), fontSize: 12)),
-                      subtitle: Text(
-                        _dateRange == null
-                            ? 'Select range'
-                            : '${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}',
-                        style: const TextStyle(
-                            color: Color(0xFFB8A99A), fontSize: 11),
-                      ),
-                      trailing: const Icon(Icons.calendar_today,
-                          color: Color(0xFFD4C4A8), size: 16),
-                      onTap: () async {
-                        final picked = await showDateRangePicker(
-                          context: context,
-                          firstDate: DateTime(2024),
-                          lastDate: DateTime.now(),
-                          builder: (context, child) {
-                            return Theme(
-                              data: Theme.of(context).copyWith(
-                                colorScheme: const ColorScheme.light(
-                                  primary: Color(0xFFD4C4A8),
-                                  onPrimary: Color(0xFFFFF8F0),
-                                  surface: Color(0xFFFFF8F0),
+                width: 380,
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      InkWell(
+                        onTap: () async {
+                          final picked = await showDateRangePicker(
+                            context: context,
+                            firstDate: DateTime(2024),
+                            lastDate: DateTime.now(),
+                            builder: (context, child) {
+                              return Theme(
+                                data: Theme.of(context).copyWith(
+                                  colorScheme: const ColorScheme.light(
+                                    primary: Color(0xFFD4C4A8),
+                                    onPrimary: Color(0xFFFFF8F0),
+                                    surface: Color(0xFFFFF8F0),
+                                  ),
+                                ),
+                                child: child!,
+                              );
+                            },
+                          );
+                          if (picked != null) {
+                            setDialogState(() => _dateRange = picked);
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                                color: const Color(0xFFE0D5C1), width: 1),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.calendar_today,
+                                  size: 16, color: Color(0xFFD4C4A8)),
+                              const SizedBox(width: 10),
+                              const Text(
+                                '📅 Date Range',
+                                style: TextStyle(
+                                  color: Color(0xFF6B5B4F),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
                                 ),
                               ),
-                              child: child!,
-                            );
-                          },
-                        );
-                        if (picked != null) {
-                          setStateDialog(() => _dateRange = picked);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedResident,
-                      decoration: InputDecoration(
-                        labelText: '👤 Resident',
-                        labelStyle: const TextStyle(
-                            color: Color(0xFFB8A99A), fontSize: 11),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                          const BorderSide(color: Color(0xFFE0D5C1)),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  _dateRange == null
+                                      ? 'Select range'
+                                      : '${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}',
+                                  style: TextStyle(
+                                    color: _dateRange == null
+                                        ? const Color(0xFFB8A99A)
+                                        : const Color(0xFF8D6E63),
+                                    fontSize: 11,
+                                    fontWeight: _dateRange == null
+                                        ? FontWeight.normal
+                                        : FontWeight.w600,
+                                  ),
+                                  textAlign: TextAlign.right,
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ),
+                              if (_dateRange != null) ...[
+                                const SizedBox(width: 6),
+                                GestureDetector(
+                                  onTap: () => setDialogState(
+                                          () => _dateRange = null),
+                                  child: const Icon(Icons.clear,
+                                      size: 16,
+                                      color: Color(0xFFB8A99A)),
+                                ),
+                              ],
+                            ],
+                          ),
                         ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                          const BorderSide(color: Color(0xFFE0D5C1)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                              color: Color(0xFFD4C4A8), width: 2),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
                       ),
-                      items: [
-                        const DropdownMenuItem(
-                            value: 'all',
-                            child: Text('All Residents',
-                                style: TextStyle(fontSize: 12))),
-                        ...residentIds.map((id) => DropdownMenuItem(
-                          value: id,
-                          child: Text(_residentNames[id] ?? 'Unknown',
-                              style: const TextStyle(fontSize: 12)),
-                        )),
-                      ],
-                      onChanged: (value) =>
-                          setStateDialog(() => _selectedResident = value!),
-                    ),
-                    const SizedBox(height: 8),
-                    DropdownButtonFormField<String>(
-                      value: _selectedEntryType,
-                      decoration: InputDecoration(
-                        labelText: '🔖 Entry Type',
-                        labelStyle: const TextStyle(
-                            color: Color(0xFFB8A99A), fontSize: 11),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                          const BorderSide(color: Color(0xFFE0D5C1)),
+
+                      const SizedBox(height: 12),
+
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                              color: const Color(0xFFE0D5C1), width: 1),
                         ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide:
-                          const BorderSide(color: Color(0xFFE0D5C1)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.person,
+                                    size: 14, color: Color(0xFFB8A99A)),
+                                SizedBox(width: 6),
+                                Text('Resident',
+                                    style: TextStyle(
+                                        color: Color(0xFFB8A99A),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w500)),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            TextField(
+                              controller: searchController,
+                              decoration: InputDecoration(
+                                hintText: 'Search resident name...',
+                                hintStyle: const TextStyle(
+                                    color: Color(0xFFB8A99A),
+                                    fontSize: 12),
+                                prefixIcon: const Icon(Icons.search,
+                                    size: 18, color: Color(0xFFD4C4A8)),
+                                suffixIcon: searchText.isNotEmpty
+                                    ? IconButton(
+                                  icon: const Icon(Icons.clear,
+                                      size: 16,
+                                      color: Color(0xFFB8A99A)),
+                                  onPressed: () {
+                                    searchController.clear();
+                                    setDialogState(
+                                            () => searchText = '');
+                                  },
+                                )
+                                    : null,
+                                isDense: true,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(
+                                      color: Color(0xFFE0D5C1)),
+                                ),
+                                enabledBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(
+                                      color: Color(0xFFE0D5C1)),
+                                ),
+                                focusedBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(10),
+                                  borderSide: const BorderSide(
+                                      color: Color(0xFFD4C4A8), width: 2),
+                                ),
+                                filled: true,
+                                fillColor: const Color(0xFFFFF8F0),
+                                contentPadding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 8),
+                              ),
+                              onChanged: (value) {
+                                setDialogState(() => searchText = value);
+                              },
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD4C4A8)
+                                    .withOpacity(0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.check_circle,
+                                      size: 14, color: Color(0xFF8D6E63)),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      _selectedResident == 'all'
+                                          ? 'All Residents'
+                                          : _residentNames[
+                                      _selectedResident] ??
+                                          'Unknown',
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF6B5B4F),
+                                          fontWeight: FontWeight.w600),
+                                      overflow: TextOverflow.ellipsis,
+                                      maxLines: 1,
+                                    ),
+                                  ),
+                                  if (_selectedResident != 'all')
+                                    GestureDetector(
+                                      onTap: () => setDialogState(
+                                              () => _selectedResident = 'all'),
+                                      child: const Text('Reset',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFFD32F2F),
+                                              fontWeight: FontWeight.w600)),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Container(
+                              constraints:
+                              const BoxConstraints(maxHeight: 200),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                    color: const Color(0xFFE0D5C1),
+                                    width: 1),
+                              ),
+                              child: SingleChildScrollView(
+                                child: Column(
+                                  children: [
+                                    _buildResidentOption(
+                                      id: 'all',
+                                      name: 'All Residents',
+                                      isSelected: _selectedResident == 'all',
+                                      onTap: () => setDialogState(
+                                              () => _selectedResident = 'all'),
+                                    ),
+                                    const Divider(height: 1),
+                                    if (filteredResidents.isEmpty)
+                                      const Padding(
+                                        padding: EdgeInsets.all(12),
+                                        child: Text(
+                                          'No residents match your search',
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFFB8A99A),
+                                              fontStyle: FontStyle.italic),
+                                        ),
+                                      )
+                                    else
+                                      ...filteredResidents.map((r) {
+                                        return _buildResidentOption(
+                                          id: r.key,
+                                          name: r.value,
+                                          isSelected:
+                                          _selectedResident == r.key,
+                                          onTap: () => setDialogState(
+                                                  () =>
+                                              _selectedResident = r.key),
+                                        );
+                                      }).toList(),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                              color: Color(0xFFD4C4A8), width: 2),
-                        ),
-                        contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 8),
                       ),
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'all',
-                            child: Text('All Types',
-                                style: TextStyle(fontSize: 12))),
-                        DropdownMenuItem(
-                            value: 'uhf_rfid',
-                            child: Text('RFID 📡',
-                                style: TextStyle(fontSize: 12))),
-                        DropdownMenuItem(
-                            value: 'qr_visitor',
-                            child: Text('QR Visitor 📱',
-                                style: TextStyle(fontSize: 12))),
-                        DropdownMenuItem(
-                            value: 'manual',
-                            child: Text('Manual Entry ✏️',
-                                style: TextStyle(fontSize: 12))),
-                      ],
-                      onChanged: (value) =>
-                          setStateDialog(() => _selectedEntryType = value!),
-                    ),
-                  ],
+
+                      const SizedBox(height: 12),
+
+                      DropdownButtonFormField<String>(
+                        value: _selectedEntryType,
+                        decoration: InputDecoration(
+                          labelText: '🔖 Entry Type',
+                          labelStyle: const TextStyle(
+                              color: Color(0xFFB8A99A), fontSize: 11),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide:
+                            const BorderSide(color: Color(0xFFE0D5C1)),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide:
+                            const BorderSide(color: Color(0xFFE0D5C1)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(10),
+                            borderSide: const BorderSide(
+                                color: Color(0xFFD4C4A8), width: 2),
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 8),
+                        ),
+                        items: const [
+                          DropdownMenuItem(
+                              value: 'all',
+                              child: Text('All Types',
+                                  style: TextStyle(fontSize: 12))),
+                          DropdownMenuItem(
+                              value: 'uhf_rfid',
+                              child: Text('RFID 📡',
+                                  style: TextStyle(fontSize: 12))),
+                          DropdownMenuItem(
+                              value: 'qr_visitor',
+                              child: Text('QR Visitor 📱',
+                                  style: TextStyle(fontSize: 12))),
+                          DropdownMenuItem(
+                              value: 'manual',
+                              child: Text('Manual Entry ✏️',
+                                  style: TextStyle(fontSize: 12))),
+                        ],
+                        onChanged: (value) =>
+                            setDialogState(() => _selectedEntryType = value!),
+                      ),
+                    ],
+                  ),
                 ),
               ),
               actions: [
@@ -1148,6 +1851,50 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
           },
         );
       },
+    );
+  }
+
+  Widget _buildResidentOption({
+    required String id,
+    required String name,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+        color: isSelected
+            ? const Color(0xFFD4C4A8).withOpacity(0.15)
+            : Colors.transparent,
+        child: Row(
+          children: [
+            Icon(
+              isSelected
+                  ? Icons.radio_button_checked
+                  : Icons.radio_button_off,
+              size: 16,
+              color: isSelected
+                  ? const Color(0xFF8D6E63)
+                  : const Color(0xFFB8A99A),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                name,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: const Color(0xFF6B5B4F),
+                  fontWeight:
+                  isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

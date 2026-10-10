@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../providers/auth_provider.dart';
-import '../../widgets/responsive_wrapper.dart';
 import 'generate_visitor_qr.dart';
 import 'gate_history.dart';
 import 'my_qr_codes.dart';
+import 'my_profile_screen.dart';
 
 class ResidentDashboard extends StatelessWidget {
   const ResidentDashboard({super.key});
@@ -14,33 +14,28 @@ class ResidentDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final screenWidth = MediaQuery.of(context).size.width;
-    final screenHeight = MediaQuery.of(context).size.height;
     final user = authProvider.currentUser;
     final hasRFID = user?.rfidTag != null && user!.rfidTag!.isNotEmpty;
 
-    int crossAxisCount = 2;
-    if (kIsWeb) {
-      if (screenWidth > 1000) {
-        crossAxisCount = 4;
-      } else if (screenWidth > 700) {
-        crossAxisCount = 3;
-      } else {
-        crossAxisCount = 2;
-      }
-    }
+    // ==================== LAYOUT CONSTANTS ====================
+    final double contentMaxWidth = kIsWeb ? 900 : double.infinity;
+    final double outerPadding = kIsWeb ? 24 : 16;
 
-    // For mobile, use 2 columns
-    if (screenWidth < 600) {
-      crossAxisCount = 2;
-    }
+    // Grid columns
+    int crossAxisCount = 3;
+    if (!kIsWeb && screenWidth < 600) crossAxisCount = 2;
+
+    // Grid sizing
+    final double gridAspect = kIsWeb ? 1.6 : 1.0;
+    final double gridSpacing = kIsWeb ? 16 : 12;
 
     return Scaffold(
       appBar: AppBar(
         title: Row(
-          children: [
-            const Icon(Icons.home_work, size: 22, color: Color(0xFFFFF8F0)),
-            const SizedBox(width: 8),
-            const Text(
+          children: const [
+            Icon(Icons.home_work, size: 22, color: Color(0xFFFFF8F0)),
+            SizedBox(width: 8),
+            Text(
               'Florence Homes',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
@@ -54,208 +49,136 @@ class ResidentDashboard extends StatelessWidget {
         elevation: 0,
         centerTitle: false,
         actions: [
+          // ==================== PROFILE BUTTON ====================
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+            child: Material(
+              color: Colors.white.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(10),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(10),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                        builder: (context) => const MyProfileScreen()),
+                  );
+                },
+                child: Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.3),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFFFF8F0),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.person,
+                          size: 14,
+                          color: Color(0xFF8D6E63),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Profile',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: Color(0xFFFFF8F0),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // ==================== LOGOUT ====================
           IconButton(
             icon: const Icon(Icons.logout, size: 20),
             onPressed: () => _showLogoutConfirmation(context, authProvider),
             color: const Color(0xFFFFF8F0),
+            tooltip: 'Logout',
           ),
+          const SizedBox(width: 4),
         ],
       ),
       body: Container(
-        decoration: BoxDecoration(
+        // ✅ Full-screen gradient even when content is short
+        constraints: const BoxConstraints.expand(),
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFFFFF8F0),
-              const Color(0xFFF5F0E8),
-              const Color(0xFFEDE5D8),
+              Color(0xFFFFF8F0),
+              Color(0xFFF5F0E8),
+              Color(0xFFEDE5D8),
             ],
           ),
         ),
         child: SafeArea(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Welcome Card
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFFD4C4A8).withOpacity(0.2),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: const Color(0xFFE0D5C1),
-                        width: 1.5,
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [Color(0xFFD4C4A8), Color(0xFFC4A882)],
-                              ),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: const Icon(
-                              Icons.home_work,
-                              size: 36,
-                              color: Color(0xFFFFF8F0),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Welcome, ${user?.fullName?.split(' ').first ?? 'Resident'}!',
-                                  style: TextStyle(
-                                    fontSize: kIsWeb ? 18 : 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: const Color(0xFF6B5B4F),
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                                if (user?.houseNumber != null)
-                                  Padding(
-                                    padding: const EdgeInsets.only(top: 4),
-                                    child: Row(
-                                      children: [
-                                        const Icon(Icons.home_outlined, size: 12, color: Color(0xFFB8A99A)),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          'House: ${user?.houseNumber}',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF8D6E63),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 8,
-                                  children: [
-                                    // Approval Status Badge
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: user?.isApproved == true
-                                            ? const Color(0xFF4CAF50).withOpacity(0.15)
-                                            : const Color(0xFFFF9800).withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color: user?.isApproved == true
-                                              ? const Color(0xFF4CAF50).withOpacity(0.3)
-                                              : const Color(0xFFFF9800).withOpacity(0.3),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        user?.isApproved == true
-                                            ? '✓ Account Approved'
-                                            : '⏳ Pending Approval',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w600,
-                                          color: user?.isApproved == true
-                                              ? const Color(0xFF4CAF50)
-                                              : const Color(0xFFFF9800),
-                                        ),
-                                      ),
-                                    ),
-                                    // RFID Status Badge
-                                    if (hasRFID)
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: const Color(0xFF8D6E63).withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(20),
-                                          border: Border.all(
-                                            color: const Color(0xFF8D6E63).withOpacity(0.3),
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          '✓ RFID Registered',
-                                          style: TextStyle(
-                                            fontSize: 10,
-                                            fontWeight: FontWeight.w600,
-                                            color: Color(0xFF8D6E63),
-                                          ),
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            ),
+            padding: EdgeInsets.all(outerPadding),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    // ==================== WELCOME CARD ====================
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFFD4C4A8).withOpacity(0.2),
+                            blurRadius: 10,
+                            offset: const Offset(0, 3),
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // RFID Info Card - Shows RFID details if registered
-                if (hasRFID) ...[
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFFD4C4A8).withOpacity(0.15),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: const Color(0xFFE0D5C1),
+                            width: 1.5,
+                          ),
                         ),
-                      ],
-                    ),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: const Color(0xFFE0D5C1),
-                          width: 1,
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(14),
+                        padding: EdgeInsets.all(kIsWeb ? 14 : 16),
                         child: Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(10),
+                              padding: EdgeInsets.all(kIsWeb ? 10 : 12),
                               decoration: BoxDecoration(
                                 gradient: const LinearGradient(
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
-                                  colors: [Color(0xFF8D6E63), Color(0xFFD4C4A8)],
+                                  colors: [
+                                    Color(0xFFD4C4A8),
+                                    Color(0xFFC4A882)
+                                  ],
                                 ),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(14),
                               ),
-                              child: const Icon(
-                                Icons.nfc,
-                                size: 28,
-                                color: Color(0xFFFFF8F0),
+                              child: Icon(
+                                Icons.home_work,
+                                size: kIsWeb ? 28 : 36,
+                                color: const Color(0xFFFFF8F0),
                               ),
                             ),
                             const SizedBox(width: 14),
@@ -263,50 +186,52 @@ class ResidentDashboard extends StatelessWidget {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text(
-                                    'RFID Tag Information',
-                                    style: TextStyle(
-                                      fontSize: 14,
+                                  Text(
+                                    'Welcome, ${user?.fullName?.split(' ').first ?? 'Resident'}!',
+                                    style: const TextStyle(
+                                      fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                       color: Color(0xFF6B5B4F),
+                                      letterSpacing: 0.5,
                                     ),
                                   ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.tag, size: 12, color: Color(0xFFB8A99A)),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          'Tag ID: ${user?.rfidTag?.substring(0, user!.rfidTag!.length > 20 ? 20 : user.rfidTag!.length)}...',
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            color: Color(0xFF8D6E63),
+                                  if (user?.houseNumber != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.home_outlined,
+                                              size: 12,
+                                              color: Color(0xFFB8A99A)),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'House: ${user?.houseNumber}',
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF8D6E63),
+                                            ),
                                           ),
-                                        ),
+                                        ],
                                       ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Row(
+                                    ),
+                                  const SizedBox(height: 8),
+                                  Wrap(
+                                    spacing: 8,
+                                    runSpacing: 6,
                                     children: [
-                                      const Icon(Icons.check_circle, size: 12, color: Color(0xFF4CAF50)),
-                                      const SizedBox(width: 4),
-                                      const Text(
-                                        'Status: ',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Color(0xFFB8A99A),
-                                        ),
+                                      _buildStatusBadge(
+                                        user?.isApproved == true
+                                            ? '✓ Account Approved'
+                                            : '⏳ Pending Approval',
+                                        user?.isApproved == true
+                                            ? const Color(0xFF4CAF50)
+                                            : const Color(0xFFFF9800),
                                       ),
-                                      const Text(
-                                        'Active',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: Color(0xFF4CAF50),
+                                      if (hasRFID)
+                                        _buildStatusBadge(
+                                          '✓ RFID Registered',
+                                          const Color(0xFF8D6E63),
                                         ),
-                                      ),
                                     ],
                                   ),
                                 ],
@@ -316,65 +241,175 @@ class ResidentDashboard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                ],
+                    const SizedBox(height: 16),
 
-                // Menu Grid
-                SizedBox(
-                  height: screenHeight * 0.45,
-                  child: GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: crossAxisCount,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: kIsWeb ? 1.1 : 1.0,
-                    children: [
-                      _buildMenuCard(
-                        context,
-                        title: '📱 Visitor QR',
-                        icon: Icons.qr_code,
-                        color: const Color(0xFFD4C4A8),
-                        description: 'Create visitor QR codes',
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const GenerateVisitorQR()),
-                          );
-                        },
+                    // ==================== RFID INFO CARD ====================
+                    if (hasRFID) ...[
+                      Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color:
+                              const Color(0xFFD4C4A8).withOpacity(0.15),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: const Color(0xFFE0D5C1),
+                              width: 1,
+                            ),
+                          ),
+                          padding: EdgeInsets.all(kIsWeb ? 12 : 14),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: EdgeInsets.all(kIsWeb ? 8 : 10),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFF8D6E63),
+                                      Color(0xFFD4C4A8)
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: Icon(
+                                  Icons.nfc,
+                                  size: kIsWeb ? 22 : 28,
+                                  color: const Color(0xFFFFF8F0),
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'RFID Tag Information',
+                                      style: TextStyle(
+                                        fontSize: kIsWeb ? 13 : 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF6B5B4F),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.tag,
+                                            size: 12,
+                                            color: Color(0xFFB8A99A)),
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            'Tag ID: ${user?.rfidTag?.substring(0, user!.rfidTag!.length > 20 ? 20 : user.rfidTag!.length)}...',
+                                            style: const TextStyle(
+                                              fontSize: 11,
+                                              color: Color(0xFF8D6E63),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Row(
+                                      children: const [
+                                        Icon(Icons.check_circle,
+                                            size: 12,
+                                            color: Color(0xFF4CAF50)),
+                                        SizedBox(width: 4),
+                                        Text(
+                                          'Status: ',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: Color(0xFFB8A99A),
+                                          ),
+                                        ),
+                                        Text(
+                                          'Active',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: Color(0xFF4CAF50),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
-                      _buildMenuCard(
-                        context,
-                        title: '📜 Gate History',
-                        icon: Icons.history,
-                        color: const Color(0xFFC4A882),
-                        description: 'View your gate entries',
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const GateHistory()),
-                          );
-                        },
-                      ),
-                      _buildMenuCard(
-                        context,
-                        title: '🔖 My QR Codes',
-                        icon: Icons.qr_code_scanner,
-                        color: const Color(0xFFB8A99A),
-                        description: 'View your QR codes',
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const MyQRCodes()),
-                          );
-                        },
-                      ),
+                      const SizedBox(height: 16),
                     ],
-                  ),
+
+                    // ==================== MENU GRID ====================
+                    GridView.count(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisCount: crossAxisCount,
+                      crossAxisSpacing: gridSpacing,
+                      mainAxisSpacing: gridSpacing,
+                      childAspectRatio: gridAspect,
+                      children: [
+                        _buildMenuCard(
+                          context,
+                          title: 'Visitor QR',
+                          icon: Icons.qr_code,
+                          color: const Color(0xFFD4C4A8),
+                          description: 'Create visitor QR codes',
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) =>
+                                  const GenerateVisitorQR()),
+                            );
+                          },
+                        ),
+                        _buildMenuCard(
+                          context,
+                          title: 'Gate History',
+                          icon: Icons.history,
+                          color: const Color(0xFFC4A882),
+                          description: 'View your gate entries',
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) => const GateHistory()),
+                            );
+                          },
+                        ),
+                        _buildMenuCard(
+                          context,
+                          title: 'My QR Codes',
+                          icon: Icons.qr_code_scanner,
+                          color: const Color(0xFFB8A99A),
+                          description: 'View your QR codes',
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (context) => const MyQRCodes()),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 12),
-              ],
+              ),
             ),
           ),
         ),
@@ -382,8 +417,29 @@ class ResidentDashboard extends StatelessWidget {
     );
   }
 
-  // Logout confirmation dialog
-  void _showLogoutConfirmation(BuildContext context, AuthProvider authProvider) {
+  // ==================== SMALL STATUS BADGE ====================
+  Widget _buildStatusBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+          color: color,
+        ),
+      ),
+    );
+  }
+
+  // ==================== LOGOUT CONFIRMATION ====================
+  void _showLogoutConfirmation(
+      BuildContext context, AuthProvider authProvider) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -404,10 +460,7 @@ class ResidentDashboard extends StatelessWidget {
           ),
           content: const Text(
             'Are you sure you want to logout?',
-            style: TextStyle(
-              fontSize: 14,
-              color: Color(0xFF8D6E63),
-            ),
+            style: TextStyle(fontSize: 14, color: Color(0xFF8D6E63)),
           ),
           backgroundColor: const Color(0xFFFFF8F0),
           shape: RoundedRectangleBorder(
@@ -419,7 +472,8 @@ class ResidentDashboard extends StatelessWidget {
               onPressed: () => Navigator.pop(context),
               style: TextButton.styleFrom(
                 foregroundColor: const Color(0xFFB8A99A),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               ),
               child: const Text('Cancel', style: TextStyle(fontSize: 14)),
             ),
@@ -434,12 +488,15 @@ class ResidentDashboard extends StatelessWidget {
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFD4C4A8),
                 foregroundColor: const Color(0xFF6B5B4F),
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Logout', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              child: const Text('Logout',
+                  style: TextStyle(
+                      fontSize: 14, fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -447,17 +504,25 @@ class ResidentDashboard extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuCard(BuildContext context, {
-    required String title,
-    required IconData icon,
-    required Color color,
-    required String description,
-    required VoidCallback onTap,
-  }) {
+  // ==================== MENU CARD ====================
+  Widget _buildMenuCard(
+      BuildContext context, {
+        required String title,
+        required IconData icon,
+        required Color color,
+        required String description,
+        required VoidCallback onTap,
+      }) {
+    final double cardPadding = kIsWeb ? 12 : 14;
+    final double iconBoxPadding = kIsWeb ? 10 : 12;
+    final double iconSize = kIsWeb ? 22 : 34;
+    final double titleSize = kIsWeb ? 13 : 14;
+    final double descSize = 10;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFFD4C4A8).withOpacity(0.15),
@@ -470,64 +535,65 @@ class ResidentDashboard extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(14),
           child: Container(
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(14),
               border: Border.all(
                 color: const Color(0xFFE0D5C1),
                 width: 1.5,
               ),
             ),
-            child: Padding(
-              padding: const EdgeInsets.all(14.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [
-                          color,
-                          color.withOpacity(0.7),
-                        ],
+            padding: EdgeInsets.all(cardPadding),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: EdgeInsets.all(iconBoxPadding),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [color, color.withOpacity(0.7)],
+                    ),
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withOpacity(0.2),
+                        blurRadius: 6,
                       ),
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: color.withOpacity(0.2),
-                          blurRadius: 6,
-                        ),
-                      ],
-                    ),
-                    child: Icon(icon, size: 34, color: const Color(0xFFFFF8F0)),
+                    ],
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    title,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF6B5B4F),
-                      letterSpacing: 0.5,
-                    ),
+                  child: Icon(icon,
+                      size: iconSize, color: const Color(0xFFFFF8F0)),
+                ),
+                SizedBox(height: kIsWeb ? 8 : 12),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: titleSize,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF6B5B4F),
+                    letterSpacing: 0.4,
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    description,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      color: Color(0xFFB8A99A),
-                      fontWeight: FontWeight.w500,
-                    ),
+                ),
+                SizedBox(height: kIsWeb ? 3 : 6),
+                Text(
+                  description,
+                  textAlign: TextAlign.center,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: descSize,
+                    color: const Color(0xFFB8A99A),
+                    fontWeight: FontWeight.w500,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),

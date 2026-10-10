@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:provider/provider.dart';
 import '../../services/auth_service.dart';
 import '../../services/email_service.dart';
 import '../../services/tcp_service.dart';
@@ -17,10 +17,17 @@ class _ManageResidentsState extends State<ManageResidents> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthService _authService = AuthService();
   final TCPService _tcpService = TCPService();
+
   List<UserModel> _residents = [];
+  List<UserModel> _filteredResidents = [];
   bool _isLoading = true;
   String? _errorMessage;
+
+  // ==================== SEARCH + PAGINATION ====================
+  final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  int _currentPage = 1;
+  int _pageSize = 10; // 0 = All
 
   @override
   void initState() {
@@ -33,6 +40,13 @@ class _ManageResidentsState extends State<ManageResidents> {
     await _tcpService.connect();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  // ==================== LOAD ====================
   Future<void> _loadResidents() async {
     setState(() {
       _isLoading = true;
@@ -40,24 +54,96 @@ class _ManageResidentsState extends State<ManageResidents> {
     });
 
     try {
-      QuerySnapshot snapshot = await _firestore
+      final snapshot = await _firestore
           .collection('users')
           .where('userType', isEqualTo: 'resident')
           .get();
 
-      setState(() {
-        _residents = snapshot.docs.map((doc) {
-          return UserModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
-        }).toList();
-        _isLoading = false;
-      });
+      final list = snapshot.docs.map((doc) {
+        return UserModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
+      }).toList();
+
+      list.sort((a, b) =>
+          a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
+
+      if (mounted) {
+        setState(() {
+          _residents = list;
+          _applyFiltersInternal();
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      print('ERROR loading residents: $e');
-      setState(() {
-        _errorMessage = 'Error: $e';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'Error: $e';
+          _isLoading = false;
+        });
+      }
     }
+  }
+
+  // ==================== SEARCH + PAGINATION HELPERS ====================
+  void _applyFiltersInternal() {
+    if (_searchQuery.isEmpty) {
+      _filteredResidents = List.from(_residents);
+    } else {
+      final q = _searchQuery.toLowerCase();
+      _filteredResidents = _residents.where((r) {
+        return r.fullName.toLowerCase().contains(q) ||
+            (r.houseNumber?.toLowerCase().contains(q) ?? false) ||
+            r.email.toLowerCase().contains(q) ||
+            (r.residentId?.toLowerCase().contains(q) ?? false) ||
+            (r.rfidTag?.toLowerCase().contains(q) ?? false);
+      }).toList();
+    }
+
+    if (_currentPage > _totalPages) {
+      _currentPage = _totalPages < 1 ? 1 : _totalPages;
+    }
+  }
+
+  void _onSearchChanged(String value) {
+    setState(() {
+      _searchQuery = value;
+      _currentPage = 1;
+      _applyFiltersInternal();
+    });
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() {
+      _searchQuery = '';
+      _currentPage = 1;
+      _applyFiltersInternal();
+    });
+  }
+
+  int get _totalPages {
+    if (_pageSize == 0) return 1;
+    if (_filteredResidents.isEmpty) return 1;
+    return ((_filteredResidents.length - 1) ~/ _pageSize) + 1;
+  }
+
+  List<UserModel> get _paginatedResidents {
+    if (_pageSize == 0) return _filteredResidents;
+    final start = (_currentPage - 1) * _pageSize;
+    if (start >= _filteredResidents.length) return [];
+    final end = (start + _pageSize).clamp(0, _filteredResidents.length);
+    return _filteredResidents.sublist(start, end);
+  }
+
+  void _goToPage(int page) {
+    if (page < 1 || page > _totalPages) return;
+    setState(() => _currentPage = page);
+  }
+
+  void _changePageSize(int newSize) {
+    setState(() {
+      _pageSize = newSize;
+      _currentPage = 1;
+    });
   }
 
   // ==================== RFID REGISTRATION ====================
@@ -622,6 +708,8 @@ class _ManageResidentsState extends State<ManageResidents> {
                   ? const Color(0xFFC4A882)
                   : const Color(0xFF5D4037),
             ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
           ),
         ),
       ],
@@ -630,7 +718,7 @@ class _ManageResidentsState extends State<ManageResidents> {
 
   // ==================== DELETE RESIDENT ====================
   Future<void> _deleteResident(UserModel resident) async {
-    bool? confirm = await showDialog(
+    final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Delete Resident',
@@ -682,7 +770,6 @@ class _ManageResidentsState extends State<ManageResidents> {
   }
 
   // ==================== APPROVE RESIDENT ====================
-  // Unified — same logic as pending_approvals.dart
   Future<void> _approveResident(UserModel resident) async {
     if (resident.isApproved) return;
 
@@ -746,28 +833,9 @@ class _ManageResidentsState extends State<ManageResidents> {
     }
   }
 
-  List<UserModel> _getFilteredResidents() {
-    if (_searchQuery.isEmpty) return _residents;
-
-    return _residents.where((resident) {
-      return resident.fullName
-          .toLowerCase()
-          .contains(_searchQuery.toLowerCase()) ||
-          (resident.houseNumber
-              ?.toLowerCase()
-              .contains(_searchQuery.toLowerCase()) ??
-              false) ||
-          resident.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          (resident.residentId
-              ?.toLowerCase()
-              .contains(_searchQuery.toLowerCase()) ??
-              false);
-    }).toList();
-  }
-
+  // ==================== BUILD ====================
   @override
   Widget build(BuildContext context) {
-    final filteredResidents = _getFilteredResidents();
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
@@ -793,15 +861,18 @@ class _ManageResidentsState extends State<ManageResidents> {
             icon: const Icon(Icons.add, size: 20),
             onPressed: () => _addEditResident(),
             color: const Color(0xFFFFF8F0),
+            tooltip: 'Add resident',
           ),
           IconButton(
             icon: const Icon(Icons.refresh, size: 20),
             onPressed: _loadResidents,
             color: const Color(0xFFFFF8F0),
+            tooltip: 'Refresh',
           ),
         ],
       ),
       body: Container(
+        constraints: const BoxConstraints.expand(),
         decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -814,15 +885,13 @@ class _ManageResidentsState extends State<ManageResidents> {
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildBody(filteredResidents, screenWidth),
-                const SizedBox(height: 20),
-              ],
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: kIsWeb ? 900 : double.infinity,
+              ),
+              child: _buildBody(screenWidth),
             ),
           ),
         ),
@@ -830,7 +899,9 @@ class _ManageResidentsState extends State<ManageResidents> {
     );
   }
 
-  Widget _buildBody(List<UserModel> filteredResidents, double screenWidth) {
+  Widget _buildBody(double screenWidth) {
+    final padding = kIsWeb ? 20.0 : 12.0;
+
     if (_isLoading) {
       return const Center(
         child: Column(
@@ -870,59 +941,116 @@ class _ManageResidentsState extends State<ManageResidents> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        TextField(
-          decoration: InputDecoration(
-            hintText: '🔍 Search by name, ID, or house...',
-            hintStyle:
-            const TextStyle(color: Color(0xFFB8A99A), fontSize: 12),
-            prefixIcon: const Icon(Icons.search,
-                color: Color(0xFFD4C4A8), size: 18),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(14),
-              borderSide:
-              const BorderSide(color: Color(0xFFD4C4A8), width: 2),
-            ),
-            filled: true,
-            fillColor: Colors.white,
-            contentPadding:
-            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          ),
-          onChanged: (value) {
-            setState(() => _searchQuery = value);
-          },
-        ),
-        const SizedBox(height: 12),
+    final paginated = _paginatedResidents;
+    final total = _totalPages;
 
-        Center(
-          child: Wrap(
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: EdgeInsets.fromLTRB(
+          padding, kIsWeb ? 12 : 8, padding, padding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ==================== SEARCH + COUNT + PAGE SIZE ====================
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
+                  decoration: InputDecoration(
+                    hintText:
+                    'Search by name, ID, house, email, or RFID tag...',
+                    hintStyle: const TextStyle(
+                        color: Color(0xFFB8A99A), fontSize: 12),
+                    prefixIcon: const Icon(Icons.search,
+                        color: Color(0xFFD4C4A8), size: 20),
+                    suffixIcon: _searchQuery.isNotEmpty
+                        ? IconButton(
+                      icon: const Icon(Icons.clear,
+                          size: 18, color: Color(0xFFB8A99A)),
+                      onPressed: _clearSearch,
+                      tooltip: 'Clear',
+                    )
+                        : null,
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 4, vertical: 12),
+                  ),
+                ),
+                const Divider(color: Color(0xFFF5F0E8), height: 1),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Icon(Icons.people_outline,
+                        size: 14, color: Color(0xFFB8A99A)),
+                    const SizedBox(width: 6),
+                    // ✅ Flexible to prevent overflow with long text
+                    Flexible(
+                      child: Text(
+                        '${_filteredResidents.length} residents',
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFFB8A99A),
+                            fontWeight: FontWeight.w500),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
+                    ),
+                    const Spacer(),
+                    const Text('Per page:',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFFB8A99A),
+                            fontWeight: FontWeight.w500)),
+                    const SizedBox(width: 6),
+                    ..._pageSizeOptions(),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 12),
+
+          // ==================== STAT CARDS ====================
+          Wrap(
             spacing: 8,
             runSpacing: 8,
             alignment: WrapAlignment.center,
             children: [
-              _buildStatCard('Total', filteredResidents.length.toString(),
-                  Icons.people, const Color(0xFFD4C4A8), screenWidth),
-              const SizedBox(width: 8),
+              _buildStatCard(
+                  'Total',
+                  _filteredResidents.length.toString(),
+                  Icons.people,
+                  const Color(0xFFD4C4A8),
+                  screenWidth),
               _buildStatCard(
                   'Approved',
-                  filteredResidents.where((r) => r.isApproved).length.toString(),
+                  _filteredResidents
+                      .where((r) => r.isApproved)
+                      .length
+                      .toString(),
                   Icons.check_circle,
                   const Color(0xFF8D6E63),
                   screenWidth),
-              const SizedBox(width: 8),
               _buildStatCard(
                   'RFID',
-                  filteredResidents
+                  _filteredResidents
                       .where((r) => r.rfidTag != null)
                       .length
                       .toString(),
@@ -931,259 +1059,530 @@ class _ManageResidentsState extends State<ManageResidents> {
                   screenWidth),
             ],
           ),
-        ),
-        const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
-        filteredResidents.isEmpty
-            ? SizedBox(
-          height: 300,
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.people,
-                    size: 60, color: Color(0xFFE0D5C1)),
-                const SizedBox(height: 12),
-                const Text('No residents found',
-                    style: TextStyle(
-                        fontSize: 14, color: Color(0xFFB8A99A))),
-              ],
-            ),
-          ),
-        )
-            : ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: filteredResidents.length,
-          itemBuilder: (context, index) {
-            final resident = filteredResidents[index];
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
+          // ==================== LIST ====================
+          if (paginated.isEmpty)
+            Container(
+              padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(14),
+                border:
+                Border.all(color: const Color(0xFFE0D5C1), width: 1),
+              ),
+              child: const Column(
+                children: [
+                  Icon(Icons.people, size: 48, color: Color(0xFFE0D5C1)),
+                  SizedBox(height: 12),
+                  Text(
+                    'No residents found',
+                    style: TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF6B5B4F),
+                        fontWeight: FontWeight.w500),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Try a different search term or add a new resident',
+                    style:
+                    TextStyle(fontSize: 12, color: Color(0xFFB8A99A)),
+                  ),
+                ],
+              ),
+            )
+          else
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: paginated.length,
+              itemBuilder: (context, index) {
+                final globalIndex = _pageSize == 0
+                    ? index + 1
+                    : ((_currentPage - 1) * _pageSize) + index + 1;
+                return _buildResidentCard(paginated[index], globalIndex);
+              },
+            ),
+
+          const SizedBox(height: 12),
+
+          // ==================== PAGINATION ====================
+          if (_pageSize != 0 && total > 1)
+            Container(
+              padding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border:
+                Border.all(color: const Color(0xFFE0D5C1), width: 1),
                 boxShadow: [
                   BoxShadow(
                     color: const Color(0xFFD4C4A8).withOpacity(0.15),
-                    blurRadius: 4,
+                    blurRadius: 6,
                     offset: const Offset(0, 2),
                   ),
                 ],
               ),
-              child: Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                      color: const Color(0xFFE0D5C1), width: 1),
-                ),
-                child: ExpansionTile(
-                  tilePadding: const EdgeInsets.symmetric(
-                      horizontal: 12, vertical: 0),
-                  childrenPadding: const EdgeInsets.all(10),
-                  leading: CircleAvatar(
-                    radius: 18,
-                    backgroundColor: resident.isApproved
-                        ? const Color(0xFF8D6E63).withOpacity(0.15)
-                        : const Color(0xFFD4C4A8).withOpacity(0.3),
-                    child: Icon(
-                      Icons.person,
-                      size: 18,
-                      color: resident.isApproved
-                          ? const Color(0xFF8D6E63)
-                          : const Color(0xFFB8A99A),
-                    ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.first_page, size: 20),
+                    onPressed:
+                    _currentPage > 1 ? () => _goToPage(1) : null,
+                    color: const Color(0xFF8D6E63),
+                    disabledColor: const Color(0xFFE0D5C1),
+                    tooltip: 'First page',
                   ),
-                  title: Text(
-                    resident.fullName,
-                    style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF6B5B4F),
-                        fontSize: 13),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                  IconButton(
+                    icon: const Icon(Icons.chevron_left, size: 20),
+                    onPressed: _currentPage > 1
+                        ? () => _goToPage(_currentPage - 1)
+                        : null,
+                    color: const Color(0xFF8D6E63),
+                    disabledColor: const Color(0xFFE0D5C1),
+                    tooltip: 'Previous page',
                   ),
-                  subtitle: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (resident.residentId != null)
-                        Text(
-                          resident.residentId!,
+                  Expanded(
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color:
+                          const Color(0xFFD4C4A8).withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          'Page $_currentPage of $total',
                           style: const TextStyle(
-                            color: Color(0xFF8D6E63),
                             fontSize: 11,
-                            fontWeight: FontWeight.bold,
-                            fontFamily: 'monospace',
+                            color: Color(0xFF6B5B4F),
+                            fontWeight: FontWeight.w600,
                           ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
-                      Text(
-                        resident.houseNumber ?? 'No house',
-                        style: const TextStyle(
-                            color: Color(0xFFB8A99A), fontSize: 11),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                       ),
-                      if (resident.rfidTag != null)
-                        Container(
-                          margin: const EdgeInsets.only(top: 2),
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFC4A882)
-                                .withOpacity(0.2),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Text('📡 RFID',
-                              style: TextStyle(
-                                  fontSize: 8,
-                                  color: Color(0xFF8D6E63))),
-                        ),
-                    ],
-                  ),
-                  trailing: PopupMenuButton(
-                    color: const Color(0xFFFFF8F0),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
-                      side: const BorderSide(color: Color(0xFFE0D5C1)),
                     ),
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                          value: 'edit',
-                          child: Row(children: [
-                            Icon(Icons.edit,
-                                size: 16, color: Color(0xFFD4C4A8)),
-                            SizedBox(width: 8),
-                            Text('Edit', style: TextStyle(fontSize: 12))
-                          ])),
-                      if (!resident.isApproved)
-                        const PopupMenuItem(
-                            value: 'approve',
-                            child: Row(children: [
-                              Icon(Icons.check,
-                                  size: 16, color: Color(0xFF8D6E63)),
-                              SizedBox(width: 8),
-                              Text('Approve',
-                                  style: TextStyle(fontSize: 12))
-                            ])),
-                      if (resident.rfidTag == null)
-                        const PopupMenuItem(
-                            value: 'register_rfid',
-                            child: Row(children: [
-                              Icon(Icons.nfc,
-                                  size: 16, color: Color(0xFFD4C4A8)),
-                              SizedBox(width: 8),
-                              Text('Register RFID',
-                                  style: TextStyle(fontSize: 12))
-                            ])),
-                      if (resident.rfidTag != null)
-                        const PopupMenuItem(
-                            value: 'remove_rfid',
-                            child: Row(children: [
-                              Icon(Icons.nfc,
-                                  size: 16, color: Color(0xFFD32F2F)),
-                              SizedBox(width: 8),
-                              Text('Remove RFID',
-                                  style: TextStyle(fontSize: 12))
-                            ])),
-                      const PopupMenuItem(
-                          value: 'delete',
-                          child: Row(children: [
-                            Icon(Icons.delete,
-                                size: 16, color: Color(0xFFD32F2F)),
-                            SizedBox(width: 8),
-                            Text('Delete',
-                                style: TextStyle(fontSize: 12))
-                          ])),
-                    ],
-                    onSelected: (value) async {
-                      if (value == 'edit') {
-                        await _addEditResident(resident: resident);
-                      } else if (value == 'approve') {
-                        await _approveResident(resident);
-                      } else if (value == 'register_rfid') {
-                        await _registerRFID(resident);
-                      } else if (value == 'remove_rfid') {
-                        await _removeRFID(resident);
-                      } else if (value == 'delete') {
-                        await _deleteResident(resident);
-                      }
-                    },
                   ),
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (resident.residentId != null) ...[
-                          _buildInfoRow(Icons.badge, 'Resident ID',
-                              resident.residentId!),
-                          const SizedBox(height: 4),
-                        ],
-                        _buildInfoRow(
-                            Icons.email,
-                            'Email',
-                            resident.email.isEmpty
-                                ? 'Not provided'
-                                : resident.email),
-                        const SizedBox(height: 4),
-                        _buildInfoRow(Icons.phone, 'Phone',
-                            resident.phoneNumber ?? 'Not provided'),
-                        const SizedBox(height: 4),
-                        _buildInfoRow(Icons.home, 'House',
-                            resident.houseNumber ?? 'Not assigned'),
-                        const SizedBox(height: 4),
-                        _buildInfoRow(Icons.nfc, 'RFID',
-                            resident.rfidTag ?? 'Not registered'),
-                        const SizedBox(height: 4),
-                        _buildInfoRow(Icons.calendar_today,
-                            'Registered', _formatDate(resident.createdAt)),
-                        const SizedBox(height: 4),
-                        _buildInfoRow(Icons.verified, 'Status',
-                            resident.isApproved
-                                ? '✅ Approved'
-                                : '⏳ Pending'),
-                      ],
-                    ),
-                  ],
+                  IconButton(
+                    icon: const Icon(Icons.chevron_right, size: 20),
+                    onPressed: _currentPage < total
+                        ? () => _goToPage(_currentPage + 1)
+                        : null,
+                    color: const Color(0xFF8D6E63),
+                    disabledColor: const Color(0xFFE0D5C1),
+                    tooltip: 'Next page',
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.last_page, size: 20),
+                    onPressed: _currentPage < total
+                        ? () => _goToPage(total)
+                        : null,
+                    color: const Color(0xFF8D6E63),
+                    disabledColor: const Color(0xFFE0D5C1),
+                    tooltip: 'Last page',
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== RESIDENT CARD ====================
+  Widget _buildResidentCard(UserModel resident, int index) {
+    final hasRFID = resident.rfidTag != null &&
+        resident.rfidTag!.isNotEmpty;
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFD4C4A8).withOpacity(0.15),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+        ),
+        child: ExpansionTile(
+          tilePadding:
+          const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          childrenPadding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+          shape: const Border(),
+          collapsedShape: const Border(),
+          leading: CircleAvatar(
+            radius: 18,
+            backgroundColor: resident.isApproved
+                ? const Color(0xFF8D6E63).withOpacity(0.15)
+                : const Color(0xFFD4C4A8).withOpacity(0.3),
+            child: Icon(
+              Icons.person,
+              size: 18,
+              color: resident.isApproved
+                  ? const Color(0xFF8D6E63)
+                  : const Color(0xFFB8A99A),
+            ),
+          ),
+          title: Row(
+            children: [
+              // ✅ Fixed-width index so #1 and #169 line up
+              SizedBox(
+                width: 28,
+                child: Text(
+                  '#$index',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xFFB8A99A),
+                    fontWeight: FontWeight.w600,
+                    fontFamily: 'monospace',
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
                 ),
               ),
-            );
-          },
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  resident.fullName,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF6B5B4F),
+                      fontSize: 13),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (resident.isApproved)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF4CAF50).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Text(
+                    '✓',
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Color(0xFF4CAF50),
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (resident.residentId != null)
+                Text(
+                  resident.residentId!,
+                  style: const TextStyle(
+                    color: Color(0xFF8D6E63),
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    fontFamily: 'monospace',
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              const SizedBox(height: 2),
+              // ============ TAG CHIPS ============
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: [
+                  if (resident.houseNumber != null &&
+                      resident.houseNumber!.isNotEmpty)
+                    _miniChip(
+                      Icons.home,
+                      resident.houseNumber!,
+                      const Color(0xFFB8A99A),
+                    ),
+                  if (hasRFID)
+                    _miniChip(
+                      Icons.nfc,
+                      'Tag: ${_shortTag(resident.rfidTag!)}',
+                      const Color(0xFF8D6E63),
+                    )
+                  else
+                    _miniChip(
+                      Icons.nfc,
+                      'No tag',
+                      const Color(0xFFD4C4A8),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          trailing: PopupMenuButton<String>(
+            color: const Color(0xFFFFF8F0),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: const BorderSide(color: Color(0xFFE0D5C1)),
+            ),
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                  value: 'edit',
+                  child: Row(children: [
+                    Icon(Icons.edit, size: 16, color: Color(0xFFD4C4A8)),
+                    SizedBox(width: 8),
+                    Text('Edit Info', style: TextStyle(fontSize: 12))
+                  ])),
+              if (!resident.isApproved)
+                const PopupMenuItem(
+                    value: 'approve',
+                    child: Row(children: [
+                      Icon(Icons.check,
+                          size: 16, color: Color(0xFF8D6E63)),
+                      SizedBox(width: 8),
+                      Text('Approve', style: TextStyle(fontSize: 12))
+                    ])),
+              if (!hasRFID)
+                const PopupMenuItem(
+                    value: 'register_rfid',
+                    child: Row(children: [
+                      Icon(Icons.add_circle_outline,
+                          size: 16, color: Color(0xFF4CAF50)),
+                      SizedBox(width: 8),
+                      Text('Add RFID Tag',
+                          style: TextStyle(fontSize: 12))
+                    ])),
+              if (hasRFID) ...[
+                const PopupMenuItem(
+                    value: 'add_tag',
+                    child: Row(children: [
+                      Icon(Icons.add_circle_outline,
+                          size: 16, color: Color(0xFF4CAF50)),
+                      SizedBox(width: 8),
+                      Text('Add New Tag',
+                          style: TextStyle(fontSize: 12))
+                    ])),
+                const PopupMenuItem(
+                    value: 'remove_rfid',
+                    child: Row(children: [
+                      Icon(Icons.remove_circle_outline,
+                          size: 16, color: Color(0xFFD32F2F)),
+                      SizedBox(width: 8),
+                      Text('Remove Tag',
+                          style: TextStyle(fontSize: 12))
+                    ])),
+              ],
+              const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(children: [
+                    Icon(Icons.delete,
+                        size: 16, color: Color(0xFFD32F2F)),
+                    SizedBox(width: 8),
+                    Text('Delete', style: TextStyle(fontSize: 12))
+                  ])),
+            ],
+            onSelected: (value) async {
+              if (value == 'edit') {
+                await _addEditResident(resident: resident);
+              } else if (value == 'approve') {
+                await _approveResident(resident);
+              } else if (value == 'register_rfid' ||
+                  value == 'add_tag') {
+                await _registerRFID(resident);
+              } else if (value == 'remove_rfid') {
+                await _removeRFID(resident);
+              } else if (value == 'delete') {
+                await _deleteResident(resident);
+              }
+            },
+          ),
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF8F0),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                    color: const Color(0xFFE0D5C1), width: 1),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (resident.residentId != null) ...[
+                    _buildInfoRow(Icons.badge, 'Resident ID',
+                        resident.residentId!),
+                    const SizedBox(height: 6),
+                  ],
+                  _buildInfoRow(
+                      Icons.email,
+                      'Email',
+                      resident.email.isEmpty
+                          ? 'Not provided'
+                          : resident.email),
+                  const SizedBox(height: 6),
+                  _buildInfoRow(Icons.phone, 'Phone',
+                      resident.phoneNumber ?? 'Not provided'),
+                  const SizedBox(height: 6),
+                  _buildInfoRow(Icons.home, 'House',
+                      resident.houseNumber ?? 'Not assigned'),
+                  const SizedBox(height: 6),
+                  _buildInfoRow(
+                    Icons.nfc,
+                    'RFID Tag',
+                    hasRFID ? resident.rfidTag! : 'Not registered',
+                  ),
+                  const SizedBox(height: 6),
+                  _buildInfoRow(Icons.calendar_today, 'Registered',
+                      _formatDate(resident.createdAt)),
+                  const SizedBox(height: 6),
+                  _buildInfoRow(Icons.verified, 'Status',
+                      resident.isApproved
+                          ? 'Approved'
+                          : 'Pending Approval'),
+                ],
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
+  }
+
+  // Shorten long RFID tag for chip display
+  String _shortTag(String tag) {
+    if (tag.length <= 10) return tag;
+    return '${tag.substring(0, 6)}…${tag.substring(tag.length - 3)}';
+  }
+
+  // Mini chip for compact tag display — ✅ FIXED OVERFLOW
+  Widget _miniChip(IconData icon, String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: color),
+          const SizedBox(width: 3),
+          // ✅ Flexible + ellipsis stops the "overflowed by X pixels" error
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 9,
+                color: color,
+                fontWeight: FontWeight.w600,
+              ),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== PAGE SIZE CHIPS ====================
+  List<Widget> _pageSizeOptions() {
+    const options = <Map<String, dynamic>>[
+      {'label': '10', 'value': 10},
+      {'label': '20', 'value': 20},
+      {'label': '50', 'value': 50},
+      {'label': '100', 'value': 100},
+      {'label': 'All', 'value': 0},
+    ];
+
+    return options.map((opt) {
+      final value = opt['value'] as int;
+      final isSelected = _pageSize == value;
+      return Padding(
+        padding: const EdgeInsets.only(left: 4),
+        child: GestureDetector(
+          onTap: () => _changePageSize(value),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? const Color(0xFFD4C4A8)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isSelected
+                    ? const Color(0xFFD4C4A8)
+                    : const Color(0xFFE0D5C1),
+                width: 1,
+              ),
+            ),
+            child: Text(
+              opt['label'] as String,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight:
+                isSelected ? FontWeight.bold : FontWeight.w500,
+                color: isSelected
+                    ? const Color(0xFFFFF8F0)
+                    : const Color(0xFF8D6E63),
+              ),
+            ),
+          ),
+        ),
+      );
+    }).toList();
   }
 
   Widget _buildStatCard(String title, String value, IconData icon,
       Color color, double screenWidth) {
-    double cardWidth = screenWidth < 600 ? (screenWidth / 3) - 12 : 85;
+    double cardWidth = screenWidth < 600 ? (screenWidth / 3) - 16 : 100;
     double iconSize = screenWidth < 600 ? 14 : 16;
     double fontSize = screenWidth < 600 ? 11 : 13;
     double labelSize = screenWidth < 600 ? 8 : 9;
 
-    return SizedBox(
-      width: cardWidth.clamp(70, 95),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.3), width: 1),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: iconSize),
-            const SizedBox(height: 2),
-            Text(value,
-                style: TextStyle(
-                    fontSize: fontSize,
-                    fontWeight: FontWeight.bold,
-                    color: color)),
-            Text(title,
-                style: TextStyle(
-                    fontSize: labelSize,
-                    color: color,
-                    fontWeight: FontWeight.w500)),
-          ],
-        ),
+    return Container(
+      width: cardWidth.clamp(80, 120),
+      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withOpacity(0.3), width: 1),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFD4C4A8).withOpacity(0.12),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: iconSize),
+          const SizedBox(height: 2),
+          Text(value,
+              style: TextStyle(
+                  fontSize: fontSize,
+                  fontWeight: FontWeight.bold,
+                  color: color),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1),
+          Text(title,
+              style: TextStyle(
+                  fontSize: labelSize,
+                  color: color,
+                  fontWeight: FontWeight.w500),
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              textAlign: TextAlign.center),
+        ],
       ),
     );
   }
@@ -1194,16 +1593,18 @@ class _ManageResidentsState extends State<ManageResidents> {
         Icon(icon, size: 12, color: const Color(0xFFD4C4A8)),
         const SizedBox(width: 6),
         SizedBox(
-            width: 70,
+            width: 80,
             child: Text(label,
                 style: const TextStyle(
                     fontSize: 10,
                     color: Color(0xFFB8A99A),
-                    fontWeight: FontWeight.w500))),
+                    fontWeight: FontWeight.w500),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1)),
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(fontSize: 10, color: Color(0xFF6B5B4F)),
+            style: const TextStyle(fontSize: 11, color: Color(0xFF6B5B4F)),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),

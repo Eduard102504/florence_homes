@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import '../../services/qr_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../providers/auth_provider.dart';
 import 'qr_display_screen.dart';
 
@@ -20,6 +20,9 @@ class _MyQRCodesState extends State<MyQRCodes> {
   String? _errorMessage;
   String _filter = 'all';
 
+  final double contentMaxWidth = kIsWeb ? 900 : double.infinity;
+  final double outerPadding = kIsWeb ? 24 : 12;
+
   @override
   void initState() {
     super.initState();
@@ -33,10 +36,9 @@ class _MyQRCodesState extends State<MyQRCodes> {
     });
 
     try {
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final authProvider =
+      Provider.of<AuthProvider>(context, listen: false);
       final residentId = authProvider.currentUser?.id;
-
-      print('Loading QR codes for resident: $residentId');
 
       if (residentId == null) {
         setState(() {
@@ -52,8 +54,6 @@ class _MyQRCodesState extends State<MyQRCodes> {
           .orderBy('generatedAt', descending: true)
           .get();
 
-      print('Found ${snapshot.docs.length} QR codes');
-
       setState(() {
         _qrCodes = snapshot.docs.map((doc) {
           Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
@@ -62,7 +62,6 @@ class _MyQRCodesState extends State<MyQRCodes> {
         }).toList();
         _isLoading = false;
       });
-
     } catch (e) {
       print('Error loading QR codes: $e');
       setState(() {
@@ -93,10 +92,8 @@ class _MyQRCodesState extends State<MyQRCodes> {
 
   String _getStatus(Map<String, dynamic> qr) {
     DateTime expiresAt = DateTime.parse(qr['expiresAt']);
-
     if (qr['isUsed']) return 'Used';
     if (expiresAt.isBefore(DateTime.now())) return 'Expired';
-
     Duration remaining = expiresAt.difference(DateTime.now());
     if (remaining.inHours < 1) return 'Expiring soon';
     return 'Active';
@@ -120,15 +117,14 @@ class _MyQRCodesState extends State<MyQRCodes> {
   @override
   Widget build(BuildContext context) {
     final filteredQRCodes = _getFilteredQRCodes();
-    final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
       appBar: AppBar(
         title: Row(
-          children: [
-            const Icon(Icons.qr_code, size: 22, color: Color(0xFFFFF8F0)),
-            const SizedBox(width: 8),
-            const Text(
+          children: const [
+            Icon(Icons.qr_code, size: 22, color: Color(0xFFFFF8F0)),
+            SizedBox(width: 8),
+            Text(
               'My QR Codes',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
@@ -149,25 +145,31 @@ class _MyQRCodesState extends State<MyQRCodes> {
         ],
       ),
       body: Container(
-        decoration: BoxDecoration(
+        constraints: const BoxConstraints.expand(),
+        decoration: const BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFFFFF8F0),
-              const Color(0xFFF5F0E8),
-              const Color(0xFFEDE5D8),
+              Color(0xFFFFF8F0),
+              Color(0xFFF5F0E8),
+              Color(0xFFEDE5D8),
             ],
           ),
         ),
         child: SafeArea(
-          child: _buildBody(filteredQRCodes, screenWidth),
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: contentMaxWidth),
+              child: _buildBody(filteredQRCodes),
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildBody(List<Map<String, dynamic>> filteredQRCodes, double screenWidth) {
+  Widget _buildBody(List<Map<String, dynamic>> filteredQRCodes) {
     if (_isLoading) {
       return const Center(
         child: Column(
@@ -177,10 +179,8 @@ class _MyQRCodesState extends State<MyQRCodes> {
               valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8)),
             ),
             SizedBox(height: 16),
-            Text(
-              'Loading your QR codes...',
-              style: TextStyle(color: Color(0xFFB8A99A)),
-            ),
+            Text('Loading your QR codes...',
+                style: TextStyle(color: Color(0xFFB8A99A))),
           ],
         ),
       );
@@ -193,7 +193,8 @@ class _MyQRCodesState extends State<MyQRCodes> {
           children: [
             const Icon(Icons.error, size: 48, color: Color(0xFFD32F2F)),
             const SizedBox(height: 16),
-            Text(_errorMessage!, style: const TextStyle(color: Color(0xFF8D6E63))),
+            Text(_errorMessage!,
+                style: const TextStyle(color: Color(0xFF8D6E63))),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: _loadQRCodes,
@@ -219,11 +220,8 @@ class _MyQRCodesState extends State<MyQRCodes> {
                 color: const Color(0xFFD4C4A8).withOpacity(0.15),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.qr_code,
-                size: 70,
-                color: Color(0xFFD4C4A8),
-              ),
+              child: const Icon(Icons.qr_code,
+                  size: 70, color: Color(0xFFD4C4A8)),
             ),
             const SizedBox(height: 16),
             const Text(
@@ -242,9 +240,7 @@ class _MyQRCodesState extends State<MyQRCodes> {
             ),
             const SizedBox(height: 24),
             ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
+              onPressed: () => Navigator.pop(context),
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFFD4C4A8),
                 foregroundColor: const Color(0xFF6B5B4F),
@@ -263,8 +259,8 @@ class _MyQRCodesState extends State<MyQRCodes> {
       children: [
         // Stats Card
         Container(
-          margin: const EdgeInsets.all(12),
-          padding: const EdgeInsets.all(12),
+          margin: EdgeInsets.all(outerPadding),
+          padding: EdgeInsets.all(kIsWeb ? 12 : 12),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
@@ -280,7 +276,7 @@ class _MyQRCodesState extends State<MyQRCodes> {
           child: Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(10),
+                padding: EdgeInsets.all(kIsWeb ? 8 : 10),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
                     begin: Alignment.topLeft,
@@ -289,35 +285,38 @@ class _MyQRCodesState extends State<MyQRCodes> {
                   ),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.qr_code_scanner, color: Color(0xFFFFF8F0), size: 28),
+                child: Icon(Icons.qr_code_scanner,
+                    color: const Color(0xFFFFF8F0),
+                    size: kIsWeb ? 22 : 28),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Total QR Codes',
                       style: TextStyle(
-                        fontSize: 12,
-                        color: Color(0xFFB8A99A),
+                        fontSize: kIsWeb ? 11 : 12,
+                        color: const Color(0xFFB8A99A),
                         fontWeight: FontWeight.w500,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       '${_qrCodes.length}',
-                      style: const TextStyle(
-                        fontSize: 28,
+                      style: TextStyle(
+                        fontSize: kIsWeb ? 22 : 28,
                         fontWeight: FontWeight.bold,
-                        color: Color(0xFF5D4037),
+                        color: const Color(0xFF5D4037),
                       ),
                     ),
                   ],
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0xFFD4C4A8).withOpacity(0.15),
                   borderRadius: BorderRadius.circular(20),
@@ -335,9 +334,9 @@ class _MyQRCodesState extends State<MyQRCodes> {
           ),
         ),
 
-        // Filter Chips
+        // Filter chips
         Container(
-          margin: const EdgeInsets.symmetric(horizontal: 12),
+          margin: EdgeInsets.symmetric(horizontal: outerPadding),
           child: SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             physics: const BouncingScrollPhysics(),
@@ -356,31 +355,26 @@ class _MyQRCodesState extends State<MyQRCodes> {
         ),
         const SizedBox(height: 12),
 
-        // QR Codes List
+        // List
         Expanded(
           child: filteredQRCodes.isEmpty
               ? Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(
-                  Icons.qr_code,
-                  size: 60,
-                  color: const Color(0xFFE0D5C1),
-                ),
+                const Icon(Icons.qr_code,
+                    size: 60, color: Color(0xFFE0D5C1)),
                 const SizedBox(height: 12),
                 Text(
                   'No ${_filter == 'all' ? '' : _filter} QR codes',
                   style: const TextStyle(
-                    color: Color(0xFFB8A99A),
-                    fontSize: 14,
-                  ),
+                      color: Color(0xFFB8A99A), fontSize: 14),
                 ),
               ],
             ),
           )
               : ListView.builder(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(outerPadding),
             itemCount: filteredQRCodes.length,
             itemBuilder: (context, index) {
               final qr = filteredQRCodes[index];
@@ -395,7 +389,8 @@ class _MyQRCodesState extends State<MyQRCodes> {
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                      color: const Color(0xFFD4C4A8)
+                          .withOpacity(0.15),
                       blurRadius: 4,
                       offset: const Offset(0, 2),
                     ),
@@ -404,7 +399,8 @@ class _MyQRCodesState extends State<MyQRCodes> {
                 child: Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+                    border: Border.all(
+                        color: const Color(0xFFE0D5C1), width: 1),
                   ),
                   child: InkWell(
                     onTap: () {
@@ -430,15 +426,16 @@ class _MyQRCodesState extends State<MyQRCodes> {
                               Container(
                                 padding: const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  gradient: LinearGradient(
+                                  gradient: const LinearGradient(
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                     colors: [
-                                      const Color(0xFFD4C4A8),
-                                      const Color(0xFFC4A882),
+                                      Color(0xFFD4C4A8),
+                                      Color(0xFFC4A882),
                                     ],
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
+                                  borderRadius:
+                                  BorderRadius.circular(12),
                                 ),
                                 child: const Icon(
                                   Icons.qr_code,
@@ -449,7 +446,8 @@ class _MyQRCodesState extends State<MyQRCodes> {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  crossAxisAlignment:
+                                  CrossAxisAlignment.start,
                                   children: [
                                     Text(
                                       qr['visitorName'],
@@ -462,9 +460,9 @@ class _MyQRCodesState extends State<MyQRCodes> {
                                     const SizedBox(height: 2),
                                     Text(
                                       'For: ${qr['residentName']}',
-                                      style: TextStyle(
+                                      style: const TextStyle(
                                         fontSize: 11,
-                                        color: const Color(0xFFB8A99A),
+                                        color: Color(0xFFB8A99A),
                                       ),
                                     ),
                                   ],
@@ -472,19 +470,19 @@ class _MyQRCodesState extends State<MyQRCodes> {
                               ),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
+                                    horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: statusColor.withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
+                                  color:
+                                  statusColor.withOpacity(0.1),
+                                  borderRadius:
+                                  BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: statusColor,
-                                    width: 1,
-                                  ),
+                                      color: statusColor, width: 1),
                                 ),
                                 child: Text(
-                                  status == 'Expiring soon' ? '⚠️ $status' : status,
+                                  status == 'Expiring soon'
+                                      ? '⚠️ $status'
+                                      : status,
                                   style: TextStyle(
                                     fontSize: 10,
                                     color: statusColor,
@@ -497,36 +495,28 @@ class _MyQRCodesState extends State<MyQRCodes> {
                           const SizedBox(height: 12),
                           Row(
                             children: [
-                              const Icon(
-                                Icons.access_time,
-                                size: 14,
-                                color: Color(0xFFB8A99A),
-                              ),
+                              const Icon(Icons.access_time,
+                                  size: 14, color: Color(0xFFB8A99A)),
                               const SizedBox(width: 4),
                               Text(
                                 'Expires: ${DateFormat('MMM dd, hh:mm a').format(expiresAt)}',
                                 style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Color(0xFFB8A99A),
-                                ),
+                                    fontSize: 11,
+                                    color: Color(0xFFB8A99A)),
                               ),
                             ],
                           ),
                           const SizedBox(height: 6),
                           Row(
                             children: [
-                              const Icon(
-                                Icons.calendar_today,
-                                size: 14,
-                                color: Color(0xFFB8A99A),
-                              ),
+                              const Icon(Icons.calendar_today,
+                                  size: 14, color: Color(0xFFB8A99A)),
                               const SizedBox(width: 4),
                               Text(
                                 'Generated: ${DateFormat('MMM dd, yyyy').format(DateTime.parse(qr['generatedAt']))}',
                                 style: const TextStyle(
-                                  fontSize: 11,
-                                  color: Color(0xFFB8A99A),
-                                ),
+                                    fontSize: 11,
+                                    color: Color(0xFFB8A99A)),
                               ),
                             ],
                           ),
@@ -548,25 +538,25 @@ class _MyQRCodesState extends State<MyQRCodes> {
       label: Text(
         label,
         style: TextStyle(
-          color: _filter == value ? const Color(0xFFFFF8F0) : const Color(0xFF6B5B4F),
+          color: _filter == value
+              ? const Color(0xFFFFF8F0)
+              : const Color(0xFF6B5B4F),
           fontSize: 13,
           fontWeight: FontWeight.w500,
         ),
       ),
       selected: _filter == value,
-      onSelected: (selected) {
-        setState(() => _filter = value);
-      },
+      onSelected: (selected) => setState(() => _filter = value),
       backgroundColor: Colors.white,
       selectedColor: const Color(0xFFD4C4A8),
       checkmarkColor: const Color(0xFFFFF8F0),
       side: BorderSide(
-        color: _filter == value ? const Color(0xFFD4C4A8) : const Color(0xFFE0D5C1),
+        color: _filter == value
+            ? const Color(0xFFD4C4A8)
+            : const Color(0xFFE0D5C1),
         width: 1.5,
       ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(20),
-      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
     );
   }
 }

@@ -1,5 +1,6 @@
 // lib/screens/admin/add_edit_resident_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/user_model.dart';
 import '../../services/auth_service.dart';
@@ -26,6 +27,9 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
 
   bool _isLoading = false;
   bool _isEditing = false;
+
+  final double contentMaxWidth = kIsWeb ? 900 : double.infinity;
+  final double outerPadding = kIsWeb ? 20 : 16;
 
   @override
   void initState() {
@@ -62,6 +66,7 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
             const SnackBar(
               content: Text('Resident updated successfully'),
               backgroundColor: Color(0xFF4CAF50),
+              behavior: SnackBarBehavior.floating,
             ),
           );
           Navigator.pop(context, true);
@@ -98,6 +103,7 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
           SnackBar(
             content: Text('Error: $e'),
             backgroundColor: const Color(0xFFD32F2F),
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -106,9 +112,6 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
     if (mounted) setState(() => _isLoading = false);
   }
 
-  // ============================================================
-  // SHOW GENERATED CREDENTIALS AFTER ADD
-  // ============================================================
   Future<void> _showCredentialsDialog({
     required String residentId,
     required String password,
@@ -118,10 +121,14 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: const Color(0xFFFFF8F0),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: const BorderSide(color: Color(0xFFE0D5C1), width: 1.5),
+        ),
         title: Row(
           children: const [
-            Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 28),
+            Icon(Icons.check_circle, color: Color(0xFF4CAF50), size: 26),
             SizedBox(width: 10),
             Expanded(
               child: Text(
@@ -129,6 +136,7 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
                 style: TextStyle(
                   color: Color(0xFF5D4037),
                   fontWeight: FontWeight.bold,
+                  fontSize: 18,
                 ),
               ),
             ),
@@ -148,7 +156,7 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFF8F0),
+                  color: Colors.white,
                   borderRadius: BorderRadius.circular(12),
                   border:
                   Border.all(color: const Color(0xFFD4C4A8), width: 1.5),
@@ -238,427 +246,298 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
           style: const TextStyle(
             fontWeight: FontWeight.bold,
             letterSpacing: 1,
+            fontSize: 16,
           ),
         ),
-        backgroundColor: const Color(0xFF5D4037),
-        elevation: 4,
+        backgroundColor: const Color(0xFFD4C4A8),
+        elevation: 0,
       ),
       body: Container(
+        constraints: const BoxConstraints.expand(),
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
             colors: [
               Color(0xFFFFF8F0),
-              Color(0xFFEFEBE9),
+              Color(0xFFF5F0E8),
+              Color(0xFFEDE5D8),
             ],
           ),
         ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Info Banner
-                if (!_isEditing)
-                  Container(
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF8D6E63).withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: const Color(0xFF8D6E63).withOpacity(0.3),
-                      ),
-                    ),
-                    child: Row(
-                      children: const [
-                        Icon(Icons.info_outline,
-                            color: Color(0xFF8D6E63), size: 22),
-                        SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'A Resident ID (FHM-###) will be auto-generated and shown after saving. '
-                                'Email is optional.',
-                            style: TextStyle(
-                              color: Color(0xFF5D4037),
-                              fontSize: 12,
-                              height: 1.4,
+        child: SafeArea(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(outerPadding),
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      // ============ INFO BANNER ============
+                      if (!_isEditing)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFD4C4A8)
+                                .withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: const Color(0xFFD4C4A8)
+                                  .withOpacity(0.3),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (!_isEditing) const SizedBox(height: 16),
-
-                // Personal Information
-                Card(
-                  elevation: 6,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  color: const Color(0xFFFFF8F0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: const Color(0xFFD7CCC8),
-                        width: 1,
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      Color(0xFF8D6E63),
-                                      Color(0xFF5D4037),
-                                    ],
+                          child: Row(
+                            children: const [
+                              Icon(Icons.info_outline,
+                                  color: Color(0xFF8D6E63), size: 20),
+                              SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  'A Resident ID (FHM-###) will be auto-generated after saving.',
+                                  style: TextStyle(
+                                    color: Color(0xFF5D4037),
+                                    fontSize: 12,
+                                    height: 1.3,
                                   ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Icon(
-                                  Icons.person,
-                                  color: Color(0xFFFFF3E0),
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              const Text(
-                                'Personal Information',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF5D4037),
-                                  letterSpacing: 0.5,
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 20),
+                        ),
+                      if (!_isEditing) const SizedBox(height: 14),
 
-                          // Full Name (required)
-                          TextFormField(
+                      // ============ PERSONAL INFO ============
+                      _buildCard(
+                        title: 'Personal Information',
+                        icon: Icons.person,
+                        children: [
+                          _buildField(
                             controller: _nameController,
-                            decoration: InputDecoration(
-                              labelText: 'Full Name *',
-                              labelStyle:
-                              const TextStyle(color: Color(0xFF8D6E63)),
-                              prefixIcon: const Icon(Icons.person,
-                                  color: Color(0xFF8D6E63)),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFFD7CCC8)),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFFD7CCC8)),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFF5D4037), width: 2),
-                              ),
-                              filled: true,
-                              fillColor: Colors.white,
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter full name';
-                              }
-                              return null;
-                            },
+                            label: 'Full Name *',
+                            icon: Icons.person_outline,
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'Required'
+                                : null,
                           ),
-                          const SizedBox(height: 16),
-
-                          // Email (OPTIONAL)
-                          TextFormField(
+                          const SizedBox(height: 12),
+                          _buildField(
                             controller: _emailController,
-                            decoration: InputDecoration(
-                              labelText: 'Email Address (Optional)',
-                              labelStyle:
-                              const TextStyle(color: Color(0xFF8D6E63)),
-                              prefixIcon: const Icon(Icons.email_outlined,
-                                  color: Color(0xFF8D6E63)),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFFD7CCC8)),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFFD7CCC8)),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFF5D4037), width: 2),
-                              ),
-                              filled: true,
-                              fillColor: Colors.white,
-                              helperText: 'Leave blank if resident has no email',
-                              helperStyle: const TextStyle(
-                                  color: Color(0xFF8D6E63), fontSize: 11),
-                            ),
+                            label: 'Email Address (Optional)',
+                            icon: Icons.email_outlined,
+                            hint: 'Leave blank if resident has no email',
                             enabled: !_isEditing,
                             keyboardType: TextInputType.emailAddress,
-                            // Optional — only validates format if entered
-                            validator: (value) {
-                              if (value != null &&
-                                  value.trim().isNotEmpty &&
-                                  !value.contains('@')) {
+                            validator: (v) {
+                              if (v != null &&
+                                  v.trim().isNotEmpty &&
+                                  !v.contains('@')) {
                                 return 'Enter a valid email or leave blank';
                               }
                               return null;
                             },
                           ),
-
-                          // Password (only when adding)
                           if (!_isEditing) ...[
-                            const SizedBox(height: 16),
-                            TextFormField(
+                            const SizedBox(height: 12),
+                            _buildField(
                               controller: _passwordController,
-                              decoration: InputDecoration(
-                                labelText: 'Password *',
-                                labelStyle: const TextStyle(
-                                    color: Color(0xFF8D6E63)),
-                                prefixIcon: const Icon(Icons.lock,
-                                    color: Color(0xFF8D6E63)),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFFD7CCC8)),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFFD7CCC8)),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFF5D4037), width: 2),
-                                ),
-                                filled: true,
-                                fillColor: Colors.white,
-                                helperText:
-                                'Will be shown after saving and emailed upon approval',
-                                helperStyle: const TextStyle(
-                                    color: Color(0xFF8D6E63), fontSize: 11),
-                              ),
-                              obscureText: true,
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter password';
-                                }
-                                if (value.length < 6) {
-                                  return 'Password must be at least 6 characters';
-                                }
+                              label: 'Password *',
+                              icon: Icons.lock_outline,
+                              hint:
+                              'Will be emailed upon approval',
+                              obscure: true,
+                              validator: (v) {
+                                if (v == null || v.isEmpty) return 'Required';
+                                if (v.length < 6) return 'Min 6 characters';
                                 return null;
                               },
                             ),
                           ],
-
-                          const SizedBox(height: 16),
-
-                          // Phone (optional)
-                          TextFormField(
+                          const SizedBox(height: 12),
+                          _buildField(
                             controller: _phoneController,
-                            decoration: InputDecoration(
-                              labelText: 'Phone Number (Optional)',
-                              labelStyle:
-                              const TextStyle(color: Color(0xFF8D6E63)),
-                              prefixIcon: const Icon(Icons.phone,
-                                  color: Color(0xFF8D6E63)),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFFD7CCC8)),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFFD7CCC8)),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFF5D4037), width: 2),
-                              ),
-                              filled: true,
-                              fillColor: Colors.white,
-                            ),
+                            label: 'Phone Number (Optional)',
+                            icon: Icons.phone_outlined,
                             keyboardType: TextInputType.phone,
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                ),
 
-                const SizedBox(height: 20),
+                      const SizedBox(height: 14),
 
-                // Residence Information
-                Card(
-                  elevation: 6,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  color: const Color(0xFFFFF8F0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: const Color(0xFFD7CCC8),
-                        width: 1,
-                      ),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(20.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      // ============ RESIDENCE INFO ============
+                      _buildCard(
+                        title: 'Residence Information',
+                        icon: Icons.home,
                         children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      Color(0xFF8D6E63),
-                                      Color(0xFF5D4037),
-                                    ],
-                                  ),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Icon(
-                                  Icons.home,
-                                  color: Color(0xFFFFF3E0),
-                                  size: 24,
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              const Text(
-                                'Residence Information',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF5D4037),
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 20),
-                          TextFormField(
+                          _buildField(
                             controller: _houseNumberController,
-                            decoration: InputDecoration(
-                              labelText: 'House Number / Unit *',
-                              labelStyle:
-                              const TextStyle(color: Color(0xFF8D6E63)),
-                              prefixIcon: const Icon(Icons.home,
-                                  color: Color(0xFF8D6E63)),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFFD7CCC8)),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFFD7CCC8)),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFF5D4037), width: 2),
-                              ),
-                              filled: true,
-                              fillColor: Colors.white,
-                              hintText: 'e.g., Block A, Lot 12',
-                              hintStyle:
-                              const TextStyle(color: Color(0xFFBCAAA4)),
-                            ),
-                            validator: (value) {
-                              if (value == null || value.isEmpty) {
-                                return 'Please enter house number';
-                              }
-                              return null;
-                            },
+                            label: 'House Number / Unit *',
+                            icon: Icons.home_outlined,
+                            hint: 'e.g., Block A, Lot 12',
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'Required'
+                                : null,
                           ),
                         ],
                       ),
-                    ),
-                  ),
-                ),
 
-                const SizedBox(height: 28),
+                      const SizedBox(height: 20),
 
-                // Action Button
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _saveResident,
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(double.infinity, 55),
-                    backgroundColor: const Color(0xFF5D4037),
-                    foregroundColor: const Color(0xFFFFF3E0),
-                    elevation: 5,
-                    shadowColor: const Color(0xFF3E2723),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    textStyle: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1,
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                          Color(0xFFFFF3E0)),
-                    ),
-                  )
-                      : Text(_isEditing ? 'Update Resident' : 'Add Resident'),
-                ),
-
-                if (_isEditing) ...[
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: () => Navigator.pop(context),
-                    style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF8D6E63),
-                      textStyle: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
+                      // ============ ACTION ============
+                      ElevatedButton(
+                        onPressed: _isLoading ? null : _saveResident,
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size(double.infinity, 52),
+                          backgroundColor: const Color(0xFFD4C4A8),
+                          foregroundColor: const Color(0xFF6B5B4F),
+                          elevation: 3,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          textStyle: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                        child: _isLoading
+                            ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor:
+                            AlwaysStoppedAnimation<Color>(
+                                Color(0xFF6B5B4F)),
+                          ),
+                        )
+                            : Text(_isEditing
+                            ? 'Update Resident'
+                            : 'Add Resident'),
                       ),
-                    ),
-                    child: const Text('Cancel'),
+
+                      if (_isEditing) ...[
+                        const SizedBox(height: 10),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          style: TextButton.styleFrom(
+                            foregroundColor: const Color(0xFF8D6E63),
+                          ),
+                          child: const Text('Cancel'),
+                        ),
+                      ],
+                      const SizedBox(height: 20),
+                    ],
                   ),
-                ],
-              ],
+                ),
+              ),
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  // ============ CARD WRAPPER ============
+  Widget _buildCard({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFD4C4A8).withOpacity(0.15),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5),
+        ),
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFD4C4A8).withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child:
+                  Icon(icon, color: const Color(0xFF8D6E63), size: 18),
+                ),
+                const SizedBox(width: 10),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF6B5B4F),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            ...children,
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============ INPUT FIELD ============
+  Widget _buildField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    String? hint,
+    bool enabled = true,
+    bool obscure = false,
+    TextInputType? keyboardType,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      enabled: enabled,
+      obscureText: obscure,
+      keyboardType: keyboardType,
+      validator: validator,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        labelStyle:
+        const TextStyle(color: Color(0xFFB8A99A), fontSize: 12),
+        hintStyle:
+        const TextStyle(color: Color(0xFFD4C4A8), fontSize: 11),
+        prefixIcon: Icon(icon, color: const Color(0xFFD4C4A8), size: 20),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFFE0D5C1)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide:
+          const BorderSide(color: Color(0xFFD4C4A8), width: 2),
+        ),
+        filled: true,
+        fillColor: const Color(0xFFFFF8F0),
       ),
     );
   }

@@ -1,7 +1,7 @@
 name: florence_homes
 description: Florence Homes Village Gate System
 publish_to: 'none'
-version: 4.0.1+4
+version: 5.0.1+5
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -20,6 +20,7 @@ dependencies:
   # QR Code
   qr_flutter: ^4.1.0
   mobile_scanner: ^3.5.0
+  web: ^1.1.0
 
   # UI & State Management
   provider: ^6.1.1
@@ -29,6 +30,7 @@ dependencies:
   # File & Share
   path_provider: ^2.1.1
   share_plus: ^7.2.1
+
   permission_handler: ^11.0.1
 
   # CSV & Network

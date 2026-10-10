@@ -56,6 +56,20 @@ class AuthProvider extends ChangeNotifier {
     return result;
   }
 
+  // ==================== RELOAD CURRENT USER ====================
+  // Re-fetches the current user's document from Firestore
+  // (used after adding an email, RFID registration, etc.)
+  Future<void> reloadCurrentUser() async {
+    final uid = _authService.getCurrentUserId();
+    if (uid == null) return;
+
+    final user = await _authService.getUser(uid);
+    if (user != null) {
+      _currentUser = user;
+      notifyListeners();
+    }
+  }
+
   Future<void> logout() async {
     await _authService.logout();
     _currentUser = null;

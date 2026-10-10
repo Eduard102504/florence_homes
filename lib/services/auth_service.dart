@@ -258,7 +258,6 @@ class AuthService {
   }
 
   // ==================== SELF-REGISTRATION (EMAIL VERIFIED) ====================
-  // 🆕 Also generates FHM ID and stores password for the approval email
   Future<Map<String, dynamic>> registerUser(
       String email,
       String password,
@@ -286,7 +285,6 @@ class AuthService {
         };
       }
 
-      // 🆕 Generate Resident ID for self-registered users too
       final residentId = await _generateResidentId();
       print('🆔 Generated Resident ID (self-reg): $residentId');
 
@@ -317,7 +315,7 @@ class AuthService {
         'authEmail': normalizedEmail,
         'hasRealEmail': true,
         'isManualRegistration': false,
-        'plaintextPassword': password, // so we can email it on approval
+        'plaintextPassword': password,
       });
       print('✅ Firestore user created for: $normalizedEmail');
 
@@ -338,7 +336,7 @@ class AuthService {
     }
   }
 
-  // ==================== PASSWORD RESET ====================
+  // ==================== PASSWORD RESET (FORGOT PASSWORD) ====================
   Future<Map<String, dynamic>> sendPasswordResetCode(String email) async {
     try {
       String normalizedEmail = email.trim().toLowerCase();
@@ -376,6 +374,7 @@ class AuthService {
           .set({
         'code': code,
         'email': normalizedEmail,
+        'purpose': 'forgot_password',
         'createdAt': DateTime.now(),
         'expiresAt': DateTime.now().add(const Duration(minutes: 10)),
         'isUsed': false,
@@ -441,6 +440,203 @@ class AuthService {
         'message':
         'Code verified! Password reset email sent to your inbox.',
       };
+    } catch (e) {
+      return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+
+  // ==================== ADD EMAIL TO EXISTING ACCOUNT ====================
+  Future<Map<String, dynamic>> addEmailToAccount({
+    required String userId,
+    required String currentPassword,
+    required String newEmail,
+  }) async {
+    try {
+      String normalizedEmail = newEmail.trim().toLowerCase();
+
+      if (normalizedEmail.isEmpty || !normalizedEmail.contains('@')) {
+        return {'success': false, 'message': 'Please enter a valid email'};
+      }
+
+      if (normalizedEmail == adminEmail.toLowerCase()) {
+        return {
+          'success': false,
+          'message': 'This email is reserved for system administrator.',
+        };
+      }
+
+      // Check if email already in use by another account
+      List<String> signInMethods =
+      await _auth.fetchSignInMethodsForEmail(normalizedEmail);
+      if (signInMethods.isNotEmpty) {
+        return {
+          'success': false,
+          'message': 'An account with this email already exists.',
+        };
+      }
+
+      final user = _auth.currentUser;
+      if (user == null) {
+        return {'success': false, 'message': 'Not logged in'};
+      }
+
+      // Verify current password by re-authenticating
+      final credential = EmailAuthProvider.credential(
+        email: user.email ?? '',
+        password: currentPassword,
+      );
+
+      try {
+        await user.reauthenticateWithCredential(credential);
+      } catch (e) {
+        return {
+          'success': false,
+          'message': 'Current password is incorrect',
+        };
+      }
+
+      // Update Firebase Auth email
+      await user.updateEmail(normalizedEmail);
+
+      // Update Firestore
+      await _firestore.collection('users').doc(userId).update({
+        'email': normalizedEmail,
+        'authEmail': normalizedEmail,
+        'hasRealEmail': true,
+      });
+
+      return {
+        'success': true,
+        'message': 'Email added successfully',
+      };
+    } catch (e) {
+      print('❌ Add email error: $e');
+      return {
+        'success': false,
+        'message': e.toString(),
+      };
+    }
+  }
+
+  // ==================== CHANGE PASSWORD VIA OTP ====================
+  // Step 1: Send OTP to the resident's email
+  Future<Map<String, dynamic>> sendPasswordChangeCode(String userId) async {
+    try {
+      DocumentSnapshot userDoc =
+      await _firestore.collection('users').doc(userId).get();
+
+      if (!userDoc.exists) {
+        return {'success': false, 'message': 'User not found'};
+      }
+
+      final data = userDoc.data() as Map<String, dynamic>;
+      final email = (data['email'] as String?) ?? '';
+      final hasRealEmail = data['hasRealEmail'] == true;
+
+      if (!hasRealEmail || email.isEmpty) {
+        return {
+          'success': false,
+          'message': 'No email on file. Please add an email first.',
+        };
+      }
+
+      String code = (100000 + Random().nextInt(900000)).toString();
+
+      await _firestore
+          .collection('password_resets')
+          .doc(email.toLowerCase())
+          .set({
+        'code': code,
+        'email': email.toLowerCase(),
+        'userId': userId,
+        'purpose': 'password_change',
+        'createdAt': DateTime.now(),
+        'expiresAt': DateTime.now().add(const Duration(minutes: 10)),
+        'isUsed': false,
+      });
+
+      bool sent = await EmailService.sendVerificationCode(email, code);
+
+      if (sent) {
+        return {
+          'success': true,
+          'message': 'Verification code sent to $email',
+          'email': email,
+        };
+      } else {
+        return {
+          'success': false,
+          'message': 'Failed to send email. Please try again.',
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Error: $e'};
+    }
+  }
+
+  // Step 2: Verify code & change password
+  Future<Map<String, dynamic>> changePasswordWithCode({
+    required String userId,
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    try {
+      if (newPassword.length < 6) {
+        return {
+          'success': false,
+          'message': 'Password must be at least 6 characters',
+        };
+      }
+
+      String normalizedEmail = email.trim().toLowerCase();
+      DocumentSnapshot doc = await _firestore
+          .collection('password_resets')
+          .doc(normalizedEmail)
+          .get();
+
+      if (!doc.exists) {
+        return {'success': false, 'message': 'No code request found'};
+      }
+
+      Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+
+      if (data['code'] != code) {
+        return {'success': false, 'message': 'Invalid code'};
+      }
+      if (data['isUsed'] == true) {
+        return {'success': false, 'message': 'Code has already been used'};
+      }
+
+      DateTime expiresAt = (data['expiresAt'] as Timestamp).toDate();
+      if (DateTime.now().isAfter(expiresAt)) {
+        return {'success': false, 'message': 'Code has expired'};
+      }
+
+      final user = _auth.currentUser;
+      if (user == null) {
+        return {'success': false, 'message': 'Not logged in'};
+      }
+
+      await user.updatePassword(newPassword);
+
+      await _firestore
+          .collection('password_resets')
+          .doc(normalizedEmail)
+          .update({'isUsed': true});
+
+      return {
+        'success': true,
+        'message': 'Password changed successfully',
+      };
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'requires-recent-login') {
+        return {
+          'success': false,
+          'message': 'Please log out and log back in, then try again.',
+        };
+      }
+      return {'success': false, 'message': e.message ?? 'Error'};
     } catch (e) {
       return {'success': false, 'message': 'Error: $e'};
     }
