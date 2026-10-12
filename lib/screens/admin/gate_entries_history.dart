@@ -810,76 +810,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: const [
-            Icon(Icons.history, size: 17, color: Color(0xFFFFF8F0)),
-            SizedBox(width: 8),
-            Text(
-              'Gate History',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFFD4C4A8),
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.filter_list, size: 20),
-            onPressed: _showFilterDialog,
-            color: const Color(0xFFFFF8F0),
-            tooltip: 'Filter',
-          ),
-          IconButton(
-            icon: _isExporting
-                ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                    Color(0xFFFFF8F0)),
-              ),
-            )
-                : const Icon(Icons.picture_as_pdf,
-                color: Color(0xFFFFF8F0)),
-            onPressed: _isExporting ? null : _exportToPDF,
-            tooltip: 'Save as PDF',
-          ),
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 14),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFF8D6E63).withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF4CAF50),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                const Text('LIVE',
-                    style: TextStyle(
-                        fontSize: 10,
-                        color: Color(0xFFFFF8F0),
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5)),
-              ],
-            ),
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFFD4C4A8),
       body: Container(
         constraints: const BoxConstraints.expand(),
         decoration: const BoxDecoration(
@@ -894,14 +825,164 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
           ),
         ),
         child: SafeArea(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: kIsWeb ? 900 : double.infinity,
+          child: Column(
+            children: [
+              // ==================== CUSTOM TWO-ROW HEADER ====================
+              _buildHeader(),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: kIsWeb ? 900 : double.infinity,
+                    ),
+                    child: _buildBody(screenWidth),
+                  ),
+                ),
               ),
-              child: _buildBody(screenWidth),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // CUSTOM TWO-ROW HEADER
+  // Top: back (left) + LIVE badge + filter + PDF + CSV (right)
+  // Bottom: large title
+  // ============================================================
+  Widget _buildHeader() {
+    return Container(
+      color: const Color(0xFFD4C4A8),
+      padding: EdgeInsets.fromLTRB(
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _headerIconButton(
+                icon: Icons.arrow_back,
+                tooltip: 'Back',
+                onTap: () => Navigator.pop(context),
+              ),
+              const Spacer(),
+              // LIVE badge
+              Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF8F0).withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: const Color(0xFFFFF8F0).withOpacity(0.25),
+                    width: 1,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF4CAF50),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Text(
+                      'LIVE',
+                      style: TextStyle(
+                        fontSize: 10,
+                        color: Color(0xFFFFF8F0),
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              _headerIconButton(
+                icon: Icons.filter_list,
+                tooltip: 'Filter',
+                onTap: _showFilterDialog,
+              ),
+              const SizedBox(width: 8),
+              _headerIconButton(
+                icon: Icons.picture_as_pdf,
+                tooltip: 'Save as PDF',
+                onTap: _isExporting ? () {} : _exportToPDF,
+                showSpinner: _isExporting,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: const [
+              Icon(Icons.history, size: 26, color: Color(0xFFFFF8F0)),
+              SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  'Gate History',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                    fontSize: 22,
+                    color: Color(0xFFFFF8F0),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _headerIconButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+    bool showSpinner = false,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8F0).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFFFFF8F0).withOpacity(0.25),
+              width: 1,
             ),
+          ),
+          child: Tooltip(
+            message: tooltip,
+            child: showSpinner
+                ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                    Color(0xFFFFF8F0)),
+              ),
+            )
+                : Icon(icon, color: const Color(0xFFFFF8F0), size: 20),
           ),
         ),
       ),
@@ -1197,7 +1278,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                         size: 20,
                       ),
                     ),
-                    // ✅ Fixed-width index + Expanded name + ellipsis
                     title: Row(
                       children: [
                         SizedBox(

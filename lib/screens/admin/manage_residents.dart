@@ -4,7 +4,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../services/auth_service.dart';
 import '../../services/email_service.dart';
 import '../../services/tcp_service.dart';
+import '../../services/archive_service.dart';
 import '../../models/user_model.dart';
+import 'archived_residents_screen.dart';
+import 'resident_records_screen.dart';
 
 class ManageResidents extends StatefulWidget {
   const ManageResidents({super.key});
@@ -17,17 +20,17 @@ class _ManageResidentsState extends State<ManageResidents> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final AuthService _authService = AuthService();
   final TCPService _tcpService = TCPService();
+  final ArchiveService _archiveService = ArchiveService();
 
   List<UserModel> _residents = [];
   List<UserModel> _filteredResidents = [];
   bool _isLoading = true;
   String? _errorMessage;
 
-  // ==================== SEARCH + PAGINATION ====================
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   int _currentPage = 1;
-  int _pageSize = 10; // 0 = All
+  int _pageSize = 10;
 
   @override
   void initState() {
@@ -716,19 +719,74 @@ class _ManageResidentsState extends State<ManageResidents> {
     );
   }
 
-  // ==================== DELETE RESIDENT ====================
+  // ==================== DELETE / ARCHIVE RESIDENT ====================
   Future<void> _deleteResident(UserModel resident) async {
+    final reasonController = TextEditingController();
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Resident',
-            style: TextStyle(color: Color(0xFF6B5B4F))),
-        content: Text('Are you sure you want to delete ${resident.fullName}?',
-            style: const TextStyle(color: Color(0xFF8D6E63))),
         backgroundColor: const Color(0xFFFFF8F0),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(24),
           side: const BorderSide(color: Color(0xFFE0D5C1), width: 1.5),
+        ),
+        title: Row(
+          children: const [
+            Icon(Icons.archive_outlined,
+                color: Color(0xFF8D6E63), size: 24),
+            SizedBox(width: 8),
+            Text('Archive Resident',
+                style: TextStyle(
+                    color: Color(0xFF6B5B4F),
+                    fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Are you sure you want to archive ${resident.fullName}?',
+              style: const TextStyle(
+                  color: Color(0xFF8D6E63), fontSize: 13),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'The resident will be moved to the archive and can be restored later.',
+              style: TextStyle(
+                  color: Color(0xFFB8A99A),
+                  fontSize: 11,
+                  height: 1.4),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: reasonController,
+              maxLines: 2,
+              decoration: InputDecoration(
+                labelText: 'Reason (optional)',
+                labelStyle: const TextStyle(
+                    color: Color(0xFFB8A99A), fontSize: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                  const BorderSide(color: Color(0xFFE0D5C1)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide:
+                  const BorderSide(color: Color(0xFFE0D5C1)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
+                      color: Color(0xFFD4C4A8), width: 2),
+                ),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+            ),
+          ],
         ),
         actions: [
           TextButton(
@@ -737,35 +795,70 @@ class _ManageResidentsState extends State<ManageResidents> {
                 foregroundColor: const Color(0xFFB8A99A)),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          ElevatedButton.icon(
             onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(
-                foregroundColor: const Color(0xFFD32F2F)),
-            child: const Text('Delete'),
+            icon: const Icon(Icons.archive, size: 16),
+            label: const Text('Archive'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8D6E63),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
           ),
         ],
       ),
     );
 
-    if (confirm == true) {
-      setState(() => _isLoading = true);
+    if (confirm != true) return;
 
-      try {
-        if (resident.rfidTag != null) {
-          await _firestore
-              .collection('rfid_tags')
-              .doc(resident.rfidTag)
-              .delete();
-        }
+    setState(() => _isLoading = true);
 
-        await _firestore.collection('users').doc(resident.id).delete();
+    try {
+      final userDoc =
+      await _firestore.collection('users').doc(resident.id).get();
+      final userData = userDoc.data() ?? <String, dynamic>{};
 
-        _showMessage('Resident deleted successfully', isSuccess: true);
-        _loadResidents();
-      } catch (e) {
-        _showMessage('Error deleting resident: $e', isError: true);
-        setState(() => _isLoading = false);
+      final adminAuth = _authService.getCurrentUserId();
+      String adminName = 'Administrator';
+      if (adminAuth != null) {
+        final adminDoc =
+        await _firestore.collection('users').doc(adminAuth).get();
+        adminName =
+            (adminDoc.get('fullName') as String?) ?? 'Administrator';
       }
+
+      final archived = await _archiveService.archiveResident(
+        userData: userData,
+        originalId: resident.id!,
+        adminUid: adminAuth,
+        adminName: adminName,
+        reason: reasonController.text.trim().isEmpty
+            ? null
+            : reasonController.text.trim(),
+      );
+
+      if (!archived) {
+        _showMessage('Failed to archive resident', isError: true);
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      if (resident.rfidTag != null) {
+        await _firestore
+            .collection('rfid_tags')
+            .doc(resident.rfidTag)
+            .delete();
+      }
+
+      await _firestore.collection('users').doc(resident.id).delete();
+
+      _showMessage('${resident.fullName} archived successfully',
+          isSuccess: true);
+      _loadResidents();
+    } catch (e) {
+      _showMessage('Error archiving resident: $e', isError: true);
+      setState(() => _isLoading = false);
     }
   }
 
@@ -839,38 +932,7 @@ class _ManageResidentsState extends State<ManageResidents> {
     final screenWidth = MediaQuery.of(context).size.width;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: const [
-            Icon(Icons.people, size: 20, color: Color(0xFFFFF8F0)),
-            SizedBox(width: 8),
-            Text(
-              'Manage Residents',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-                fontSize: 15,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFFD4C4A8),
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add, size: 20),
-            onPressed: () => _addEditResident(),
-            color: const Color(0xFFFFF8F0),
-            tooltip: 'Add resident',
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 20),
-            onPressed: _loadResidents,
-            color: const Color(0xFFFFF8F0),
-            tooltip: 'Refresh',
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFFD4C4A8),
       body: Container(
         constraints: const BoxConstraints.expand(),
         decoration: const BoxDecoration(
@@ -885,14 +947,139 @@ class _ManageResidentsState extends State<ManageResidents> {
           ),
         ),
         child: SafeArea(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: kIsWeb ? 900 : double.infinity,
+          child: Column(
+            children: [
+              // ==================== CUSTOM TWO-ROW HEADER ====================
+              _buildHeader(),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: kIsWeb ? 900 : double.infinity,
+                    ),
+                    child: _buildBody(screenWidth),
+                  ),
+                ),
               ),
-              child: _buildBody(screenWidth),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // CUSTOM TWO-ROW HEADER
+  // Top row: back (left) + archive / records / add / refresh (right)
+  // Bottom row: large title
+  // ============================================================
+  Widget _buildHeader() {
+    return Container(
+      color: const Color(0xFFD4C4A8),
+      padding: EdgeInsets.fromLTRB(
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ---------- TOP ROW ----------
+          Row(
+            children: [
+              _headerIconButton(
+                icon: Icons.arrow_back,
+                tooltip: 'Back',
+                onTap: () => Navigator.pop(context),
+              ),
+              const Spacer(),
+              _headerIconButton(
+                icon: Icons.archive_outlined,
+                tooltip: 'View Archive',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const ArchivedResidentsScreen()),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _headerIconButton(
+                icon: Icons.library_books_outlined,
+                tooltip: 'View Records',
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (_) => const ResidentRecordsScreen()),
+                ),
+              ),
+              const SizedBox(width: 8),
+              _headerIconButton(
+                icon: Icons.add,
+                tooltip: 'Add resident',
+                onTap: () => _addEditResident(),
+              ),
+              const SizedBox(width: 8),
+              _headerIconButton(
+                icon: Icons.refresh,
+                tooltip: 'Refresh',
+                onTap: _loadResidents,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // ---------- BOTTOM ROW: TITLE ----------
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: const [
+              Icon(Icons.people,
+                  size: 26, color: Color(0xFFFFF8F0)),
+              SizedBox(width: 10),
+              Flexible(
+                child: Text(
+                  'Manage Residents',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                    fontSize: 22,
+                    color: Color(0xFFFFF8F0),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _headerIconButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8F0).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFFFFF8F0).withOpacity(0.25),
+              width: 1,
             ),
+          ),
+          child: Tooltip(
+            message: tooltip,
+            child: Icon(icon, color: const Color(0xFFFFF8F0), size: 20),
           ),
         ),
       ),
@@ -999,7 +1186,6 @@ class _ManageResidentsState extends State<ManageResidents> {
                     const Icon(Icons.people_outline,
                         size: 14, color: Color(0xFFB8A99A)),
                     const SizedBox(width: 6),
-                    // ✅ Flexible to prevent overflow with long text
                     Flexible(
                       child: Text(
                         '${_filteredResidents.length} residents',
@@ -1236,7 +1422,6 @@ class _ManageResidentsState extends State<ManageResidents> {
           ),
           title: Row(
             children: [
-              // ✅ Fixed-width index so #1 and #169 line up
               SizedBox(
                 width: 28,
                 child: Text(
@@ -1265,6 +1450,7 @@ class _ManageResidentsState extends State<ManageResidents> {
               ),
               if (resident.isApproved)
                 Container(
+                  margin: const EdgeInsets.only(left: 4),
                   padding: const EdgeInsets.symmetric(
                       horizontal: 6, vertical: 2),
                   decoration: BoxDecoration(
@@ -1298,7 +1484,6 @@ class _ManageResidentsState extends State<ManageResidents> {
                   maxLines: 1,
                 ),
               const SizedBox(height: 2),
-              // ============ TAG CHIPS ============
               Wrap(
                 spacing: 4,
                 runSpacing: 4,
@@ -1382,10 +1567,10 @@ class _ManageResidentsState extends State<ManageResidents> {
               const PopupMenuItem(
                   value: 'delete',
                   child: Row(children: [
-                    Icon(Icons.delete,
+                    Icon(Icons.archive_outlined,
                         size: 16, color: Color(0xFFD32F2F)),
                     SizedBox(width: 8),
-                    Text('Delete', style: TextStyle(fontSize: 12))
+                    Text('Archive', style: TextStyle(fontSize: 12))
                   ])),
             ],
             onSelected: (value) async {
@@ -1455,13 +1640,11 @@ class _ManageResidentsState extends State<ManageResidents> {
     );
   }
 
-  // Shorten long RFID tag for chip display
   String _shortTag(String tag) {
     if (tag.length <= 10) return tag;
     return '${tag.substring(0, 6)}…${tag.substring(tag.length - 3)}';
   }
 
-  // Mini chip for compact tag display — ✅ FIXED OVERFLOW
   Widget _miniChip(IconData icon, String text, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -1475,7 +1658,6 @@ class _ManageResidentsState extends State<ManageResidents> {
         children: [
           Icon(icon, size: 10, color: color),
           const SizedBox(width: 3),
-          // ✅ Flexible + ellipsis stops the "overflowed by X pixels" error
           Flexible(
             child: Text(
               text,
@@ -1493,7 +1675,6 @@ class _ManageResidentsState extends State<ManageResidents> {
     );
   }
 
-  // ==================== PAGE SIZE CHIPS ====================
   List<Widget> _pageSizeOptions() {
     const options = <Map<String, dynamic>>[
       {'label': '10', 'value': 10},

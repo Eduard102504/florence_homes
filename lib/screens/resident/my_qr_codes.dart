@@ -56,7 +56,8 @@ class _MyQRCodesState extends State<MyQRCodes> {
 
       setState(() {
         _qrCodes = snapshot.docs.map((doc) {
-          Map<String, dynamic> data = doc.data() as Map<String, dynamic>;
+          Map<String, dynamic> data =
+          doc.data() as Map<String, dynamic>;
           data['id'] = doc.id;
           return data;
         }).toList();
@@ -114,36 +115,102 @@ class _MyQRCodesState extends State<MyQRCodes> {
     }
   }
 
+  // ============================================================
+  // INLINE HEADER
+  // ============================================================
+  Widget _buildHeader() {
+    return Container(
+      color: const Color(0xFFD4C4A8),
+      padding: EdgeInsets.fromLTRB(
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 40,
+            child: Row(
+              children: [
+                _iconPill(
+                  icon: Icons.arrow_back,
+                  tooltip: 'Back',
+                  onTap: () => Navigator.pop(context),
+                ),
+                const Spacer(),
+                _iconPill(
+                  icon: Icons.refresh,
+                  tooltip: 'Refresh',
+                  onTap: _loadQRCodes,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: const [
+              Icon(Icons.qr_code, size: 26, color: Color(0xFFFFF8F0)),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'My QR Codes',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                    fontSize: 22,
+                    color: Color(0xFFFFF8F0),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _iconPill({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8F0).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFFFFF8F0).withOpacity(0.25),
+              width: 1,
+            ),
+          ),
+          child: Tooltip(
+            message: tooltip,
+            child: Icon(icon, color: const Color(0xFFFFF8F0), size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final filteredQRCodes = _getFilteredQRCodes();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: const [
-            Icon(Icons.qr_code, size: 22, color: Color(0xFFFFF8F0)),
-            SizedBox(width: 8),
-            Text(
-              'My QR Codes',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-                fontSize: 18,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFFD4C4A8),
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 20),
-            onPressed: _loadQRCodes,
-            color: const Color(0xFFFFF8F0),
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFFD4C4A8),
       body: Container(
         constraints: const BoxConstraints.expand(),
         decoration: const BoxDecoration(
@@ -158,11 +225,19 @@ class _MyQRCodesState extends State<MyQRCodes> {
           ),
         ),
         child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: contentMaxWidth),
-              child: _buildBody(filteredQRCodes),
-            ),
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: Center(
+                  child: ConstrainedBox(
+                    constraints:
+                    BoxConstraints(maxWidth: contentMaxWidth),
+                    child: _buildBody(filteredQRCodes),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -176,7 +251,8 @@ class _MyQRCodesState extends State<MyQRCodes> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8)),
+              valueColor:
+              AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8)),
             ),
             SizedBox(height: 16),
             Text('Loading your QR codes...',
@@ -315,8 +391,8 @@ class _MyQRCodesState extends State<MyQRCodes> {
                 ),
               ),
               Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 6),
                 decoration: BoxDecoration(
                   color: const Color(0xFFD4C4A8).withOpacity(0.15),
                   borderRadius: BorderRadius.circular(20),
@@ -419,14 +495,17 @@ class _MyQRCodesState extends State<MyQRCodes> {
                     child: Padding(
                       padding: const EdgeInsets.all(14),
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment:
+                        CrossAxisAlignment.start,
                         children: [
                           Row(
                             children: [
                               Container(
-                                padding: const EdgeInsets.all(10),
+                                padding:
+                                const EdgeInsets.all(10),
                                 decoration: BoxDecoration(
-                                  gradient: const LinearGradient(
+                                  gradient:
+                                  const LinearGradient(
                                     begin: Alignment.topLeft,
                                     end: Alignment.bottomRight,
                                     colors: [
@@ -456,6 +535,9 @@ class _MyQRCodesState extends State<MyQRCodes> {
                                         fontWeight: FontWeight.bold,
                                         color: Color(0xFF6B5B4F),
                                       ),
+                                      overflow:
+                                      TextOverflow.ellipsis,
+                                      maxLines: 1,
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
@@ -464,6 +546,9 @@ class _MyQRCodesState extends State<MyQRCodes> {
                                         fontSize: 11,
                                         color: Color(0xFFB8A99A),
                                       ),
+                                      overflow:
+                                      TextOverflow.ellipsis,
+                                      maxLines: 1,
                                     ),
                                   ],
                                 ),
@@ -496,13 +581,18 @@ class _MyQRCodesState extends State<MyQRCodes> {
                           Row(
                             children: [
                               const Icon(Icons.access_time,
-                                  size: 14, color: Color(0xFFB8A99A)),
+                                  size: 14,
+                                  color: Color(0xFFB8A99A)),
                               const SizedBox(width: 4),
-                              Text(
-                                'Expires: ${DateFormat('MMM dd, hh:mm a').format(expiresAt)}',
-                                style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Color(0xFFB8A99A)),
+                              Expanded(
+                                child: Text(
+                                  'Expires: ${DateFormat('MMM dd, hh:mm a').format(expiresAt)}',
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Color(0xFFB8A99A)),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
                               ),
                             ],
                           ),
@@ -510,13 +600,18 @@ class _MyQRCodesState extends State<MyQRCodes> {
                           Row(
                             children: [
                               const Icon(Icons.calendar_today,
-                                  size: 14, color: Color(0xFFB8A99A)),
+                                  size: 14,
+                                  color: Color(0xFFB8A99A)),
                               const SizedBox(width: 4),
-                              Text(
-                                'Generated: ${DateFormat('MMM dd, yyyy').format(DateTime.parse(qr['generatedAt']))}',
-                                style: const TextStyle(
-                                    fontSize: 11,
-                                    color: Color(0xFFB8A99A)),
+                              Expanded(
+                                child: Text(
+                                  'Generated: ${DateFormat('MMM dd, yyyy').format(DateTime.parse(qr['generatedAt']))}',
+                                  style: const TextStyle(
+                                      fontSize: 11,
+                                      color: Color(0xFFB8A99A)),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
                               ),
                             ],
                           ),

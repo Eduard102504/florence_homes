@@ -1,4 +1,3 @@
-// lib/screens/admin/pending_approvals.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -15,18 +14,19 @@ class PendingApprovals extends StatefulWidget {
 
 class _PendingApprovalsState extends State<PendingApprovals> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
   List<UserModel> _pendingUsers = [];
   List<UserModel> _filteredUsers = [];
+
   bool _isLoading = true;
   String? _errorMessage;
   String? _rejectionReason;
   bool _isProcessing = false;
 
-  // ==================== SEARCH + PAGINATION ====================
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   int _currentPage = 1;
-  int _pageSize = 10; // 0 = All
+  int _pageSize = 10;
 
   @override
   void initState() {
@@ -40,7 +40,6 @@ class _PendingApprovalsState extends State<PendingApprovals> {
     super.dispose();
   }
 
-  // ==================== LOAD ====================
   Future<void> _loadPendingUsers() async {
     setState(() {
       _isLoading = true;
@@ -54,14 +53,15 @@ class _PendingApprovalsState extends State<PendingApprovals> {
           .where('isApproved', isEqualTo: false)
           .get();
 
-      final users = snapshot.docs.map((doc) {
+      final list = snapshot.docs.map((doc) {
         return UserModel.fromMap(doc.id, doc.data() as Map<String, dynamic>);
       }).toList();
 
-      users.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      list.sort((a, b) =>
+          a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
 
       setState(() {
-        _pendingUsers = users;
+        _pendingUsers = list;
         _applyFiltersInternal();
         _isLoading = false;
       });
@@ -73,7 +73,6 @@ class _PendingApprovalsState extends State<PendingApprovals> {
     }
   }
 
-  // ==================== SEARCH + PAGINATION HELPERS ====================
   void _applyFiltersInternal() {
     if (_searchQuery.isEmpty) {
       _filteredUsers = List.from(_pendingUsers);
@@ -83,7 +82,8 @@ class _PendingApprovalsState extends State<PendingApprovals> {
         return u.fullName.toLowerCase().contains(q) ||
             u.email.toLowerCase().contains(q) ||
             (u.residentId?.toLowerCase().contains(q) ?? false) ||
-            (u.houseNumber?.toLowerCase().contains(q) ?? false);
+            (u.houseNumber?.toLowerCase().contains(q) ?? false) ||
+            (u.phoneNumber?.toLowerCase().contains(q) ?? false);
       }).toList();
     }
 
@@ -124,8 +124,7 @@ class _PendingApprovalsState extends State<PendingApprovals> {
   }
 
   void _goToPage(int page) {
-    final total = _totalPages;
-    if (page < 1 || page > total) return;
+    if (page < 1 || page > _totalPages) return;
     setState(() => _currentPage = page);
   }
 
@@ -136,7 +135,6 @@ class _PendingApprovalsState extends State<PendingApprovals> {
     });
   }
 
-  // ==================== APPROVE ====================
   Future<void> _approveUser(UserModel user) async {
     setState(() => _isProcessing = true);
 
@@ -174,7 +172,7 @@ class _PendingApprovalsState extends State<PendingApprovals> {
         }
 
         message = emailSent
-            ? '✅ ${user.fullName} approved. Credentials emailed to $storedEmail.'
+            ? '✅ ${user.fullName} approved. Credentials emailed.'
             : '✅ Approved but email failed. Credentials: $residentId / $plaintextPassword';
       } else if (!hasRealEmail || storedEmail.isEmpty) {
         message =
@@ -223,11 +221,8 @@ class _PendingApprovalsState extends State<PendingApprovals> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFFFFF8F0),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-            side: const BorderSide(color: Color(0xFFE0D5C1), width: 1.5),
-          ),
+          shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Text(
             'Reject Registration',
             style: TextStyle(
@@ -350,36 +345,101 @@ class _PendingApprovalsState extends State<PendingApprovals> {
     }
   }
 
-  // ==================== BUILD ====================
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: const [
-            Icon(Icons.pending_actions, size: 22, color: Color(0xFFFFF8F0)),
-            SizedBox(width: 8),
-            Text(
-              'Pending Approvals',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-                fontSize: 16,
-              ),
+  // ============================================================
+  // REUSABLE HEADER (inline)
+  // ============================================================
+  Widget _buildHeader() {
+    return Container(
+      color: const Color(0xFFD4C4A8),
+      padding: EdgeInsets.fromLTRB(
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 40,
+            child: Row(
+              children: [
+                _iconPill(
+                  icon: Icons.arrow_back,
+                  tooltip: 'Back',
+                  onTap: () => Navigator.pop(context),
+                ),
+                const Spacer(),
+                _iconPill(
+                  icon: Icons.refresh,
+                  tooltip: 'Refresh',
+                  onTap: _isProcessing ? () {} : _loadPendingUsers,
+                ),
+              ],
             ),
-          ],
-        ),
-        backgroundColor: const Color(0xFFD4C4A8),
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 20),
-            onPressed: _isProcessing ? null : _loadPendingUsers,
-            color: const Color(0xFFFFF8F0),
-            tooltip: 'Refresh',
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: const [
+              Icon(Icons.pending_actions,
+                  size: 26, color: Color(0xFFFFF8F0)),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Pending Approvals',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                    fontSize: 22,
+                    color: Color(0xFFFFF8F0),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _iconPill({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8F0).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFFFFF8F0).withOpacity(0.25),
+              width: 1,
+            ),
+          ),
+          child: Tooltip(
+            message: tooltip,
+            child: Icon(icon, color: const Color(0xFFFFF8F0), size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFD4C4A8),
       body: Container(
         constraints: const BoxConstraints.expand(),
         decoration: const BoxDecoration(
@@ -394,29 +454,37 @@ class _PendingApprovalsState extends State<PendingApprovals> {
           ),
         ),
         child: SafeArea(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: kIsWeb ? 900 : double.infinity,
-              ),
-              child: _isProcessing
-                  ? const Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(
-                          Color(0xFFC4A882)),
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: _isProcessing
+                    ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFFC4A882)),
+                      ),
+                      SizedBox(height: 16),
+                      Text('Processing...',
+                          style:
+                          TextStyle(color: Color(0xFF8D6E63))),
+                    ],
+                  ),
+                )
+                    : Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: kIsWeb ? 900 : double.infinity,
                     ),
-                    SizedBox(height: 16),
-                    Text('Processing...',
-                        style: TextStyle(color: Color(0xFF8D6E63))),
-                  ],
+                    child: _buildBody(),
+                  ),
                 ),
-              )
-                  : _buildBody(),
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -424,7 +492,7 @@ class _PendingApprovalsState extends State<PendingApprovals> {
   }
 
   Widget _buildBody() {
-    final padding = kIsWeb ? 20.0 : 16.0;
+    final padding = kIsWeb ? 20.0 : 12.0;
 
     if (_isLoading) {
       return const Center(
@@ -499,7 +567,6 @@ class _PendingApprovalsState extends State<PendingApprovals> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ==================== SEARCH + COUNT + PAGE SIZE ====================
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
@@ -520,7 +587,8 @@ class _PendingApprovalsState extends State<PendingApprovals> {
                   controller: _searchController,
                   onChanged: _onSearchChanged,
                   decoration: InputDecoration(
-                    hintText: 'Search by name, email, ID, or house...',
+                    hintText:
+                    'Search by name, ID, house, email, or phone...',
                     hintStyle: const TextStyle(
                         color: Color(0xFFB8A99A), fontSize: 12),
                     prefixIcon: const Icon(Icons.search,
@@ -543,15 +611,19 @@ class _PendingApprovalsState extends State<PendingApprovals> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(Icons.people_outline,
+                    const Icon(Icons.pending_actions,
                         size: 14, color: Color(0xFFB8A99A)),
                     const SizedBox(width: 6),
-                    Text(
-                      '${_filteredUsers.length} pending',
-                      style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFFB8A99A),
-                          fontWeight: FontWeight.w500),
+                    Flexible(
+                      child: Text(
+                        '${_filteredUsers.length} pending',
+                        style: const TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFFB8A99A),
+                            fontWeight: FontWeight.w500),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                      ),
                     ),
                     const Spacer(),
                     const Text('Per page:',
@@ -580,10 +652,11 @@ class _PendingApprovalsState extends State<PendingApprovals> {
               ),
               child: const Column(
                 children: [
-                  Icon(Icons.search_off, size: 48, color: Color(0xFFE0D5C1)),
+                  Icon(Icons.search_off,
+                      size: 48, color: Color(0xFFE0D5C1)),
                   SizedBox(height: 12),
                   Text(
-                    'No matches found',
+                    'No matching pending users',
                     style: TextStyle(
                         fontSize: 14,
                         color: Color(0xFF6B5B4F),
@@ -592,8 +665,8 @@ class _PendingApprovalsState extends State<PendingApprovals> {
                   SizedBox(height: 4),
                   Text(
                     'Try a different search term',
-                    style: TextStyle(
-                        fontSize: 12, color: Color(0xFFB8A99A)),
+                    style:
+                    TextStyle(fontSize: 12, color: Color(0xFFB8A99A)),
                   ),
                 ],
               ),
@@ -604,11 +677,7 @@ class _PendingApprovalsState extends State<PendingApprovals> {
               physics: const NeverScrollableScrollPhysics(),
               itemCount: paginated.length,
               itemBuilder: (context, index) {
-                final user = paginated[index];
-                final globalIndex = _pageSize == 0
-                    ? index + 1
-                    : ((_currentPage - 1) * _pageSize) + index + 1;
-                return _buildUserCard(user, globalIndex);
+                return _buildPendingCard(paginated[index]);
               },
             ),
 
@@ -635,8 +704,7 @@ class _PendingApprovalsState extends State<PendingApprovals> {
                 children: [
                   IconButton(
                     icon: const Icon(Icons.first_page, size: 20),
-                    onPressed:
-                    _currentPage > 1 ? () => _goToPage(1) : null,
+                    onPressed: _currentPage > 1 ? () => _goToPage(1) : null,
                     color: const Color(0xFF8D6E63),
                     disabledColor: const Color(0xFFE0D5C1),
                     tooltip: 'First page',
@@ -656,8 +724,7 @@ class _PendingApprovalsState extends State<PendingApprovals> {
                         padding: const EdgeInsets.symmetric(
                             horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(
-                          color:
-                          const Color(0xFFD4C4A8).withOpacity(0.15),
+                          color: const Color(0xFFD4C4A8).withOpacity(0.15),
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
@@ -667,6 +734,8 @@ class _PendingApprovalsState extends State<PendingApprovals> {
                             color: Color(0xFF6B5B4F),
                             fontWeight: FontWeight.w600,
                           ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       ),
                     ),
@@ -697,15 +766,14 @@ class _PendingApprovalsState extends State<PendingApprovals> {
     );
   }
 
-  // ==================== USER CARD ====================
-  Widget _buildUserCard(UserModel user, int globalIndex) {
+  Widget _buildPendingCard(UserModel user) {
     final hasEmail = user.email.isNotEmpty;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
+      margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
             color: const Color(0xFFD4C4A8).withOpacity(0.15),
@@ -716,180 +784,197 @@ class _PendingApprovalsState extends State<PendingApprovals> {
       ),
       child: Container(
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(color: const Color(0xFFE0D5C1), width: 1.5),
         ),
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        const Color(0xFFFF9800).withOpacity(0.2),
-                        const Color(0xFFFF9800).withOpacity(0.1),
-                      ],
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [
+                          const Color(0xFFFF9800).withOpacity(0.2),
+                          const Color(0xFFFF9800).withOpacity(0.1),
+                        ],
+                      ),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    borderRadius: BorderRadius.circular(14),
+                    child: const Icon(Icons.person,
+                        size: 32, color: Color(0xFFFF9800)),
                   ),
-                  child: const Icon(Icons.person,
-                      size: 26, color: Color(0xFFFF9800)),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Text(
-                            '#$globalIndex',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Color(0xFFB8A99A),
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'monospace',
-                            ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user.fullName,
+                          style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF6B5B4F)),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          hasEmail ? user.email : '📭 No email on file',
+                          style: TextStyle(
+                            color: hasEmail
+                                ? const Color(0xFFB8A99A)
+                                : const Color(0xFFFF9800),
+                            fontSize: 11,
+                            fontStyle: hasEmail
+                                ? FontStyle.normal
+                                : FontStyle.italic,
                           ),
-                          const SizedBox(width: 6),
-                          Expanded(
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                        if (user.residentId != null) ...[
+                          const SizedBox(height: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color:
+                              const Color(0xFFC4A882).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
                             child: Text(
-                              user.fullName,
+                              'ID: ${user.residentId}',
                               style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF6B5B4F)),
-                              overflow: TextOverflow.ellipsis,
+                                color: Color(0xFF8D6E63),
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                fontFamily: 'monospace',
+                              ),
                             ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        hasEmail ? user.email : '📭 No email on file',
-                        style: TextStyle(
-                          color: hasEmail
-                              ? const Color(0xFFB8A99A)
-                              : const Color(0xFFFF9800),
-                          fontSize: 11,
-                          fontStyle: hasEmail
-                              ? FontStyle.normal
-                              : FontStyle.italic,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      if (user.residentId != null) ...[
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFC4A882).withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            'ID: ${user.residentId}',
-                            style: const TextStyle(
-                              color: Color(0xFF8D6E63),
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              fontFamily: 'monospace',
-                            ),
-                          ),
-                        ),
                       ],
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFF9800).withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                        color: const Color(0xFFFF9800).withOpacity(0.3)),
-                  ),
-                  child: const Text(
-                    '⏳ PENDING',
-                    style: TextStyle(
-                        color: Color(0xFFFF9800),
-                        fontWeight: FontWeight.bold,
-                        fontSize: 10),
-                  ),
-                ),
-              ],
-            ),
-            const Divider(color: Color(0xFFE0D5C1), height: 20),
-            _buildInfoRow(Icons.home, '🏠 House',
-                user.houseNumber ?? 'Not provided'),
-            const SizedBox(height: 6),
-            _buildInfoRow(Icons.phone, '📱 Phone',
-                user.phoneNumber ?? 'Not provided'),
-            const SizedBox(height: 6),
-            _buildInfoRow(
-              Icons.calendar_today,
-              '📅 Registered',
-              DateFormat('MMM dd, yyyy').format(user.createdAt),
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed:
-                    _isProcessing ? null : () => _approveUser(user),
-                    icon: const Icon(Icons.check, size: 16),
-                    label: const Text('Approve',
-                        style: TextStyle(fontSize: 13)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF8D6E63),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
                     ),
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _isProcessing
-                        ? null
-                        : () => _showRejectionDialog(user),
-                    icon: const Icon(Icons.close, size: 16),
-                    label: const Text('Reject',
-                        style: TextStyle(fontSize: 13)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFD32F2F),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12)),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFF9800).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                          color: const Color(0xFFFF9800).withOpacity(0.3)),
+                    ),
+                    child: const Text(
+                      '⏳ PENDING',
+                      style: TextStyle(
+                          color: Color(0xFFFF9800),
+                          fontWeight: FontWeight.bold,
+                          fontSize: 10),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                ],
+              ),
+              const Divider(color: Color(0xFFE0D5C1), height: 20),
+              _buildInfoRow(Icons.home, '🏠 House',
+                  user.houseNumber ?? 'Not provided'),
+              const SizedBox(height: 6),
+              _buildInfoRow(Icons.phone, '📱 Phone',
+                  user.phoneNumber ?? 'Not provided'),
+              const SizedBox(height: 6),
+              _buildInfoRow(
+                Icons.calendar_today,
+                '📅 Registered',
+                DateFormat('MMM dd, yyyy').format(user.createdAt),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed:
+                      _isProcessing ? null : () => _approveUser(user),
+                      icon: const Icon(Icons.check, size: 16),
+                      label: const Text('Approve',
+                          style: TextStyle(fontSize: 13)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF8D6E63),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _isProcessing
+                          ? null
+                          : () => _showRejectionDialog(user),
+                      icon: const Icon(Icons.close, size: 16),
+                      label: const Text('Reject',
+                          style: TextStyle(fontSize: 13)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFD32F2F),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  // ==================== PAGE SIZE CHIPS ====================
+  Widget _buildInfoRow(IconData icon, String label, String value) {
+    return Row(
+      children: [
+        Icon(icon, size: 14, color: const Color(0xFFD4C4A8)),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 80,
+          child: Text(
+            label,
+            style: const TextStyle(
+                fontSize: 11,
+                color: Color(0xFFB8A99A),
+                fontWeight: FontWeight.w500),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: const TextStyle(fontSize: 11, color: Color(0xFF6B5B4F)),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ],
+    );
+  }
+
   List<Widget> _pageSizeOptions() {
     const options = <Map<String, dynamic>>[
-      {'label': '5', 'value': 5},
       {'label': '10', 'value': 10},
       {'label': '20', 'value': 20},
       {'label': '50', 'value': 50},
+      {'label': '100', 'value': 100},
       {'label': 'All', 'value': 0},
     ];
 
@@ -918,8 +1003,7 @@ class _PendingApprovalsState extends State<PendingApprovals> {
               opt['label'] as String,
               style: TextStyle(
                 fontSize: 10,
-                fontWeight:
-                isSelected ? FontWeight.bold : FontWeight.w500,
+                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
                 color: isSelected
                     ? const Color(0xFFFFF8F0)
                     : const Color(0xFF8D6E63),
@@ -929,32 +1013,5 @@ class _PendingApprovalsState extends State<PendingApprovals> {
         ),
       );
     }).toList();
-  }
-
-  // ==================== INFO ROW ====================
-  Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, size: 14, color: const Color(0xFFD4C4A8)),
-        const SizedBox(width: 8),
-        SizedBox(
-          width: 70,
-          child: Text(
-            label,
-            style: const TextStyle(
-                fontSize: 11,
-                color: Color(0xFFB8A99A),
-                fontWeight: FontWeight.w500),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 11, color: Color(0xFF6B5B4F)),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
   }
 }

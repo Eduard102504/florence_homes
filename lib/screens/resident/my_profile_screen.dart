@@ -16,22 +16,112 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
   final AuthService _authService = AuthService();
   bool _isLoading = false;
 
+  final double contentMaxWidth = kIsWeb ? 900 : double.infinity;
+  final double outerPadding = kIsWeb ? 24 : 16;
+
+  // ============================================================
+  // INLINE HEADER
+  // ============================================================
+  Widget _buildHeader() {
+    return Container(
+      color: const Color(0xFFD4C4A8),
+      padding: EdgeInsets.fromLTRB(
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 40,
+            child: Row(
+              children: [
+                _iconPill(
+                  icon: Icons.arrow_back,
+                  tooltip: 'Back',
+                  onTap: () => Navigator.pop(context),
+                ),
+                const Spacer(),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: const [
+              Icon(Icons.person, size: 26, color: Color(0xFFFFF8F0)),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'My Profile',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                    fontSize: 22,
+                    color: Color(0xFFFFF8F0),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _iconPill({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8F0).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFFFFF8F0).withOpacity(0.25),
+              width: 1,
+            ),
+          ),
+          child: Tooltip(
+            message: tooltip,
+            child: Icon(icon, color: const Color(0xFFFFF8F0), size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final user = authProvider.currentUser;
 
-    // ==================== LAYOUT CONSTANTS ====================
-    final double contentMaxWidth = kIsWeb ? 900 : double.infinity;
-    final double outerPadding = kIsWeb ? 24 : 16;
-
     if (user == null) {
       return Scaffold(
-        appBar: AppBar(
-          title: const Text('My Profile'),
-          backgroundColor: const Color(0xFFD4C4A8),
+        backgroundColor: const Color(0xFFD4C4A8),
+        body: SafeArea(
+          child: Column(
+            children: [
+              _buildHeader(),
+              const Expanded(
+                child: Center(child: Text('Not logged in')),
+              ),
+            ],
+          ),
         ),
-        body: const Center(child: Text('Not logged in')),
       );
     }
 
@@ -39,26 +129,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
     final hasRFID = user.rfidTag != null && user.rfidTag!.isNotEmpty;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: const [
-            Icon(Icons.person, size: 22, color: Color(0xFFFFF8F0)),
-            SizedBox(width: 8),
-            Text(
-              'My Profile',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-                fontSize: 18,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFFD4C4A8),
-        elevation: 0,
-      ),
+      backgroundColor: const Color(0xFFD4C4A8),
       body: Container(
-        // ✅ Full-screen gradient even when content is short
         constraints: const BoxConstraints.expand(),
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -72,167 +144,206 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
           ),
         ),
         child: SafeArea(
-          child: _isLoading
-              ? const Center(
-            child: CircularProgressIndicator(
-              valueColor:
-              AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8)),
-            ),
-          )
-              : SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.all(outerPadding),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: contentMaxWidth),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // ==================== AVATAR + NAME ====================
-                    Center(
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: _isLoading
+                    ? const Center(
+                  child: CircularProgressIndicator(
+                    valueColor: AlwaysStoppedAnimation<Color>(
+                        Color(0xFFD4C4A8)),
+                  ),
+                )
+                    : SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.all(outerPadding),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                          maxWidth: contentMaxWidth),
                       child: Column(
+                        crossAxisAlignment:
+                        CrossAxisAlignment.stretch,
                         children: [
-                          Container(
-                            padding: EdgeInsets.all(kIsWeb ? 16 : 20),
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  Color(0xFFD4C4A8),
-                                  Color(0xFFC4A882),
-                                ],
-                              ),
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(0xFFD4C4A8)
-                                      .withOpacity(0.3),
-                                  blurRadius: 15,
-                                  offset: const Offset(0, 5),
+                          // ==================== AVATAR + NAME ====================
+                          Center(
+                            child: Column(
+                              children: [
+                                Container(
+                                  padding: EdgeInsets.all(
+                                      kIsWeb ? 16 : 20),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                      colors: [
+                                        Color(0xFFD4C4A8),
+                                        Color(0xFFC4A882),
+                                      ],
+                                    ),
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: const Color(
+                                            0xFFD4C4A8)
+                                            .withOpacity(0.3),
+                                        blurRadius: 15,
+                                        offset:
+                                        const Offset(0, 5),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Text(
+                                    user.fullName.isNotEmpty
+                                        ? user.fullName[0]
+                                        .toUpperCase()
+                                        : '?',
+                                    style: TextStyle(
+                                      fontSize: kIsWeb ? 34 : 42,
+                                      fontWeight: FontWeight.bold,
+                                      color:
+                                      const Color(0xFFFFF8F0),
+                                    ),
+                                  ),
                                 ),
+                                SizedBox(
+                                    height: kIsWeb ? 10 : 12),
+                                Text(
+                                  user.fullName,
+                                  style: TextStyle(
+                                    fontSize: kIsWeb ? 18 : 20,
+                                    fontWeight: FontWeight.bold,
+                                    color:
+                                    const Color(0xFF5D4037),
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                                if (user.residentId != null) ...[
+                                  const SizedBox(height: 4),
+                                  Container(
+                                    padding:
+                                    const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFC4A882)
+                                          .withOpacity(0.15),
+                                      borderRadius:
+                                      BorderRadius.circular(
+                                          20),
+                                      border: Border.all(
+                                        color: const Color(
+                                            0xFFC4A882)
+                                            .withOpacity(0.3),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      user.residentId!,
+                                      style: const TextStyle(
+                                        fontFamily: 'monospace',
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                        color: Color(0xFF8D6E63),
+                                        letterSpacing: 1,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
-                            child: Text(
-                              user.fullName.isNotEmpty
-                                  ? user.fullName[0].toUpperCase()
-                                  : '?',
-                              style: TextStyle(
-                                fontSize: kIsWeb ? 34 : 42,
-                                fontWeight: FontWeight.bold,
-                                color: const Color(0xFFFFF8F0),
-                              ),
-                            ),
                           ),
-                          SizedBox(height: kIsWeb ? 10 : 12),
-                          Text(
-                            user.fullName,
-                            style: TextStyle(
-                              fontSize: kIsWeb ? 18 : 20,
-                              fontWeight: FontWeight.bold,
-                              color: const Color(0xFF5D4037),
-                            ),
+                          SizedBox(height: kIsWeb ? 18 : 24),
+
+                          // ==================== INFO CARD ====================
+                          _buildInfoCard(
+                            title: 'Account Information',
+                            children: [
+                              _buildInfoRow(
+                                  Icons.badge,
+                                  'Resident ID',
+                                  user.residentId ??
+                                      'Not assigned'),
+                              _buildInfoRow(Icons.person, 'Full Name',
+                                  user.fullName),
+                              _buildInfoRow(
+                                Icons.email,
+                                'Email',
+                                hasEmail
+                                    ? user.email
+                                    : 'No email on file',
+                                highlight: !hasEmail,
+                              ),
+                              _buildInfoRow(
+                                  Icons.phone,
+                                  'Phone',
+                                  user.phoneNumber ??
+                                      'Not provided'),
+                              _buildInfoRow(
+                                  Icons.home,
+                                  'House',
+                                  user.houseNumber ??
+                                      'Not assigned'),
+                              _buildInfoRow(
+                                  Icons.nfc,
+                                  'RFID',
+                                  hasRFID
+                                      ? 'Registered'
+                                      : 'Not registered'),
+                              _buildInfoRow(
+                                Icons.verified,
+                                'Status',
+                                user.isApproved
+                                    ? 'Approved'
+                                    : 'Pending Approval',
+                              ),
+                            ],
                           ),
-                          if (user.residentId != null) ...[
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFC4A882)
-                                    .withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: const Color(0xFFC4A882)
-                                      .withOpacity(0.3),
-                                ),
-                              ),
-                              child: Text(
-                                user.residentId!,
-                                style: const TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 13,
-                                  color: Color(0xFF8D6E63),
-                                  letterSpacing: 1,
-                                ),
-                              ),
+                          SizedBox(height: kIsWeb ? 14 : 16),
+
+                          // ==================== ADD EMAIL ====================
+                          if (!hasEmail) ...[
+                            _buildActionCard(
+                              icon: Icons.email_outlined,
+                              title: 'Add Email Address',
+                              subtitle:
+                              'Add an email to enable password changes and recovery',
+                              buttonLabel: 'Add Email',
+                              buttonColor:
+                              const Color(0xFFD4C4A8),
+                              onPressed: () => _showAddEmailDialog(
+                                  context, authProvider),
                             ),
+                            SizedBox(height: kIsWeb ? 10 : 12),
                           ],
+
+                          // ==================== CHANGE PASSWORD ====================
+                          _buildActionCard(
+                            icon: Icons.lock_outline,
+                            title: 'Change Password',
+                            subtitle: hasEmail
+                                ? 'We\'ll send a verification code to ${user.email}'
+                                : 'Add an email first to enable password changes',
+                            buttonLabel: 'Change Password',
+                            buttonColor: hasEmail
+                                ? const Color(0xFF8D6E63)
+                                : const Color(0xFFB8A99A),
+                            enabled: hasEmail,
+                            onPressed: hasEmail
+                                ? () => _showChangePasswordDialog(
+                                context, authProvider)
+                                : null,
+                          ),
+
+                          SizedBox(height: kIsWeb ? 20 : 24),
                         ],
                       ),
                     ),
-                    SizedBox(height: kIsWeb ? 18 : 24),
-
-                    // ==================== INFO CARD ====================
-                    _buildInfoCard(
-                      title: 'Account Information',
-                      children: [
-                        _buildInfoRow(Icons.badge, 'Resident ID',
-                            user.residentId ?? 'Not assigned'),
-                        _buildInfoRow(
-                            Icons.person, 'Full Name', user.fullName),
-                        _buildInfoRow(
-                          Icons.email,
-                          'Email',
-                          hasEmail ? user.email : 'No email on file',
-                          highlight: !hasEmail,
-                        ),
-                        _buildInfoRow(Icons.phone, 'Phone',
-                            user.phoneNumber ?? 'Not provided'),
-                        _buildInfoRow(Icons.home, 'House',
-                            user.houseNumber ?? 'Not assigned'),
-                        _buildInfoRow(Icons.nfc, 'RFID',
-                            hasRFID ? 'Registered' : 'Not registered'),
-                        _buildInfoRow(
-                          Icons.verified,
-                          'Status',
-                          user.isApproved
-                              ? 'Approved'
-                              : 'Pending Approval',
-                        ),
-                      ],
-                    ),
-                    SizedBox(height: kIsWeb ? 14 : 16),
-
-                    // ==================== ADD EMAIL ====================
-                    if (!hasEmail) ...[
-                      _buildActionCard(
-                        icon: Icons.email_outlined,
-                        title: 'Add Email Address',
-                        subtitle:
-                        'Add an email to enable password changes and recovery',
-                        buttonLabel: 'Add Email',
-                        buttonColor: const Color(0xFFD4C4A8),
-                        onPressed: () =>
-                            _showAddEmailDialog(context, authProvider),
-                      ),
-                      SizedBox(height: kIsWeb ? 10 : 12),
-                    ],
-
-                    // ==================== CHANGE PASSWORD ====================
-                    _buildActionCard(
-                      icon: Icons.lock_outline,
-                      title: 'Change Password',
-                      subtitle: hasEmail
-                          ? 'We\'ll send a verification code to ${user.email}'
-                          : 'Add an email first to enable password changes',
-                      buttonLabel: 'Change Password',
-                      buttonColor: hasEmail
-                          ? const Color(0xFF8D6E63)
-                          : const Color(0xFFB8A99A),
-                      enabled: hasEmail,
-                      onPressed: hasEmail
-                          ? () => _showChangePasswordDialog(
-                          context, authProvider)
-                          : null,
-                    ),
-
-                    SizedBox(height: kIsWeb ? 20 : 24),
-                  ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -258,7 +369,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
           ),
           title: Row(
             children: const [
-              Icon(Icons.email_outlined, color: Color(0xFF8D6E63), size: 24),
+              Icon(Icons.email_outlined,
+                  color: Color(0xFF8D6E63), size: 24),
               SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -329,7 +441,9 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                           color: Color(0xFF8D6E63)),
                       suffixIcon: IconButton(
                         icon: Icon(
-                          obscure ? Icons.visibility : Icons.visibility_off,
+                          obscure
+                              ? Icons.visibility
+                              : Icons.visibility_off,
                           color: const Color(0xFF8D6E63),
                         ),
                         onPressed: () =>
@@ -436,7 +550,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
           ),
           title: Row(
             children: const [
-              Icon(Icons.lock_outline, color: Color(0xFF8D6E63), size: 24),
+              Icon(Icons.lock_outline,
+                  color: Color(0xFF8D6E63), size: 24),
               SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -466,7 +581,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFC4A882).withOpacity(0.15),
+                        color:
+                        const Color(0xFFC4A882).withOpacity(0.15),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
                             color: const Color(0xFFC4A882)
@@ -484,6 +600,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                                   fontSize: 12,
                                   color: Color(0xFF6B5B4F),
                                   fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
                             ),
                           ),
                         ],
@@ -544,8 +662,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                                   ? Icons.visibility
                                   : Icons.visibility_off,
                               color: const Color(0xFF8D6E63)),
-                          onPressed: () =>
-                              setDialogState(() => obscure1 = !obscure1),
+                          onPressed: () => setDialogState(
+                                  () => obscure1 = !obscure1),
                         ),
                         labelStyle:
                         const TextStyle(color: Color(0xFF8D6E63)),
@@ -588,8 +706,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                                   ? Icons.visibility
                                   : Icons.visibility_off,
                               color: const Color(0xFF8D6E63)),
-                          onPressed: () =>
-                              setDialogState(() => obscure2 = !obscure2),
+                          onPressed: () => setDialogState(
+                                  () => obscure2 = !obscure2),
                         ),
                         labelStyle:
                         const TextStyle(color: Color(0xFF8D6E63)),
@@ -785,6 +903,8 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                     fontStyle:
                     highlight ? FontStyle.italic : FontStyle.normal,
                   ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 2,
                 ),
               ],
             ),

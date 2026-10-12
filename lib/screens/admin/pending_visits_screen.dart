@@ -1,4 +1,3 @@
-// lib/screens/admin/pending_visits_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -19,11 +18,10 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
   String? _errorMessage;
   bool _isProcessing = false;
 
-  // ==================== SEARCH + PAGINATION ====================
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
   int _currentPage = 1;
-  int _pageSize = 10; // 0 = All
+  int _pageSize = 10;
 
   @override
   void initState() {
@@ -37,7 +35,6 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     super.dispose();
   }
 
-  // ==================== LOAD ====================
   Future<void> _loadPendingVisits() async {
     setState(() {
       _isLoading = true;
@@ -80,7 +77,6 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     }
   }
 
-  // ==================== SEARCH + PAGINATION HELPERS ====================
   void _applyFiltersInternal() {
     if (_searchQuery.isEmpty) {
       _filteredVisits = List.from(_visits);
@@ -151,7 +147,6 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     });
   }
 
-  // ==================== MARK EXIT ====================
   Future<void> _markExit(Map<String, dynamic> visit) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -289,36 +284,101 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     }
   }
 
-  // ==================== BUILD ====================
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: const [
-            Icon(Icons.exit_to_app, size: 20, color: Color(0xFFFFF8F0)),
-            SizedBox(width: 8),
-            Text(
-              'Pending Visits',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-                fontSize: 15,
-              ),
+  // ============================================================
+  // REUSABLE HEADER (inline)
+  // ============================================================
+  Widget _buildHeader() {
+    return Container(
+      color: const Color(0xFFD4C4A8),
+      padding: EdgeInsets.fromLTRB(
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 40,
+            child: Row(
+              children: [
+                _iconPill(
+                  icon: Icons.arrow_back,
+                  tooltip: 'Back',
+                  onTap: () => Navigator.pop(context),
+                ),
+                const Spacer(),
+                _iconPill(
+                  icon: Icons.refresh,
+                  tooltip: 'Refresh',
+                  onTap: _isProcessing ? () {} : _loadPendingVisits,
+                ),
+              ],
             ),
-          ],
-        ),
-        backgroundColor: const Color(0xFFD4C4A8),
-        elevation: 0,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh, size: 20),
-            onPressed: _isProcessing ? null : _loadPendingVisits,
-            color: const Color(0xFFFFF8F0),
-            tooltip: 'Refresh',
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: const [
+              Icon(Icons.exit_to_app,
+                  size: 26, color: Color(0xFFFFF8F0)),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Pending Visits',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                    fontSize: 22,
+                    color: Color(0xFFFFF8F0),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ],
           ),
         ],
       ),
+    );
+  }
+
+  Widget _iconPill({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8F0).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFFFFF8F0).withOpacity(0.25),
+              width: 1,
+            ),
+          ),
+          child: Tooltip(
+            message: tooltip,
+            child: Icon(icon, color: const Color(0xFFFFF8F0), size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFD4C4A8),
       body: Container(
         constraints: const BoxConstraints.expand(),
         decoration: const BoxDecoration(
@@ -333,14 +393,21 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
           ),
         ),
         child: SafeArea(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: kIsWeb ? 900 : double.infinity,
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: kIsWeb ? 900 : double.infinity,
+                    ),
+                    child: _buildBody(),
+                  ),
+                ),
               ),
-              child: _buildBody(),
-            ),
+            ],
           ),
         ),
       ),
@@ -399,7 +466,6 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // ==================== SEARCH + COUNT + PAGE SIZE ====================
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
@@ -469,7 +535,6 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
 
           const SizedBox(height: 12),
 
-          // ==================== SUMMARY CARD ====================
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
@@ -530,7 +595,6 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
 
           const SizedBox(height: 12),
 
-          // ==================== RESULTS ====================
           if (paginated.isEmpty)
             Container(
               padding: const EdgeInsets.all(32),
@@ -584,7 +648,6 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
 
           const SizedBox(height: 12),
 
-          // ==================== PAGINATION CONTROLS ====================
           if (_pageSize != 0 && total > 1)
             Container(
               padding:
@@ -667,7 +730,6 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     );
   }
 
-  // ==================== VISIT CARD ====================
   Widget _buildVisitCard(Map<String, dynamic> visit, int index) {
     final checkIn =
     DateTime.tryParse((visit['checkInTime'] ?? '').toString());
@@ -819,7 +881,6 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     );
   }
 
-  // ==================== PAGE SIZE CHIPS ====================
   List<Widget> _pageSizeOptions() {
     const options = <Map<String, dynamic>>[
       {'label': '5', 'value': 5},
@@ -867,7 +928,6 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     }).toList();
   }
 
-  // ==================== INFO ROW ====================
   Widget _infoRow(IconData icon, String label, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,

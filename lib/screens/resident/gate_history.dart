@@ -20,7 +20,6 @@ class _GateHistoryState extends State<GateHistory> {
   String? _errorMessage;
   StreamSubscription<QuerySnapshot>? _sub;
 
-  // ==================== LAYOUT CONSTANTS ====================
   final double contentMaxWidth = kIsWeb ? 900 : double.infinity;
   final double outerPadding = kIsWeb ? 24 : 12;
 
@@ -50,9 +49,9 @@ class _GateHistoryState extends State<GateHistory> {
     super.dispose();
   }
 
-  // ==================== LIVE STREAM ====================
   void _startStream() {
-    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+    final authProvider =
+    Provider.of<AuthProvider>(context, listen: false);
     final residentId = authProvider.currentUser?.id;
 
     if (residentId == null) {
@@ -103,58 +102,132 @@ class _GateHistoryState extends State<GateHistory> {
     );
   }
 
+  // ============================================================
+  // INLINE HEADER
+  // ============================================================
+  Widget _buildHeader() {
+    return Container(
+      color: const Color(0xFFD4C4A8),
+      padding: EdgeInsets.fromLTRB(
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 40,
+            child: Row(
+              children: [
+                _iconPill(
+                  icon: Icons.arrow_back,
+                  tooltip: 'Back',
+                  onTap: () => Navigator.pop(context),
+                ),
+                const Spacer(),
+                // LIVE badge
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF8F0).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: const Color(0xFFFFF8F0).withOpacity(0.25),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF4CAF50),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'LIVE',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Color(0xFFFFF8F0),
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: const [
+              Icon(Icons.history, size: 26, color: Color(0xFFFFF8F0)),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Gate History',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                    fontSize: 22,
+                    color: Color(0xFFFFF8F0),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _iconPill({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8F0).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFFFFF8F0).withOpacity(0.25),
+              width: 1,
+            ),
+          ),
+          child: Tooltip(
+            message: tooltip,
+            child: Icon(icon, color: const Color(0xFFFFF8F0), size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
   // ==================== BUILD ====================
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: const [
-            Icon(Icons.history, size: 22, color: Color(0xFFFFF8F0)),
-            SizedBox(width: 8),
-            Text(
-              'Gate History',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-                fontSize: 18,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFFD4C4A8),
-        elevation: 0,
-        actions: [
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: const Color(0xFF8D6E63).withOpacity(0.2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF4CAF50),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                const Text('LIVE',
-                    style: TextStyle(
-                        fontSize: 10,
-                        color: Color(0xFFFFF8F0),
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5)),
-              ],
-            ),
-          ),
-        ],
-      ),
+      backgroundColor: const Color(0xFFD4C4A8),
       body: Container(
         constraints: const BoxConstraints.expand(),
         decoration: const BoxDecoration(
@@ -169,332 +242,428 @@ class _GateHistoryState extends State<GateHistory> {
           ),
         ),
         child: SafeArea(
-          child: !_hasLoadedOnce
-              ? const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                      Color(0xFFD4C4A8)),
-                ),
-                SizedBox(height: 16),
-                Text('Loading history...',
-                    style: TextStyle(color: Color(0xFFB8A99A))),
-              ],
-            ),
-          )
-              : _errorMessage != null && _entries.isEmpty
-              ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error,
-                    size: 48, color: Color(0xFFD32F2F)),
-                const SizedBox(height: 16),
-                Text(
-                  _errorMessage!,
-                  style: const TextStyle(color: Color(0xFF6B5B4F)),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: _startStream,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFD4C4A8),
-                    foregroundColor: const Color(0xFF6B5B4F),
-                  ),
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          )
-              : _entries.isEmpty
-              ? const Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.history,
-                    size: 70, color: Color(0xFFE0D5C1)),
-                SizedBox(height: 16),
-                Text(
-                  'No gate entries found',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Color(0xFF6B5B4F),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                SizedBox(height: 8),
-                Text(
-                  'Your gate access history will appear here',
-                  style: TextStyle(
-                      color: Color(0xFFB8A99A), fontSize: 12),
-                ),
-              ],
-            ),
-          )
-              : SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.all(outerPadding),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                    maxWidth: contentMaxWidth),
-                child: Column(
-                  children: [
-                    // ==================== STATS CARD ====================
-                    Container(
-                      width: double.infinity,
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding:
-                      EdgeInsets.all(kIsWeb ? 14 : 16),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius:
-                        BorderRadius.circular(16),
-                        border: Border.all(
-                            color: const Color(0xFFE0D5C1),
-                            width: 1),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFD4C4A8)
-                                .withOpacity(0.15),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2),
-                          ),
-                        ],
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: !_hasLoadedOnce
+                    ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                            Color(0xFFD4C4A8)),
                       ),
-                      child: Row(
+                      SizedBox(height: 16),
+                      Text('Loading history...',
+                          style:
+                          TextStyle(color: Color(0xFFB8A99A))),
+                    ],
+                  ),
+                )
+                    : _errorMessage != null && _entries.isEmpty
+                    ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.error,
+                          size: 48, color: Color(0xFFD32F2F)),
+                      const SizedBox(height: 16),
+                      Text(
+                        _errorMessage!,
+                        style: const TextStyle(
+                            color: Color(0xFF6B5B4F)),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                        onPressed: _startStream,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor:
+                          const Color(0xFFD4C4A8),
+                          foregroundColor:
+                          const Color(0xFF6B5B4F),
+                        ),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
+                    : _entries.isEmpty
+                    ? const Center(
+                  child: Column(
+                    mainAxisAlignment:
+                    MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.history,
+                          size: 70,
+                          color: Color(0xFFE0D5C1)),
+                      SizedBox(height: 16),
+                      Text(
+                        'No gate entries found',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Color(0xFF6B5B4F),
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      SizedBox(height: 8),
+                      Text(
+                        'Your gate access history will appear here',
+                        style: TextStyle(
+                            color: Color(0xFFB8A99A),
+                            fontSize: 12),
+                      ),
+                    ],
+                  ),
+                )
+                    : SingleChildScrollView(
+                  physics:
+                  const BouncingScrollPhysics(),
+                  padding:
+                  EdgeInsets.all(outerPadding),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(
+                          maxWidth: contentMaxWidth),
+                      child: Column(
                         children: [
+                          // ==================== STATS CARD ====================
                           Container(
+                            width: double.infinity,
+                            margin: const EdgeInsets.only(
+                                bottom: 16),
                             padding: EdgeInsets.all(
-                                kIsWeb ? 8 : 10),
+                                kIsWeb ? 14 : 16),
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
-                                colors: [
-                                  Color(0xFFD4C4A8),
-                                  Color(0xFFC4A882)
-                                ],
-                              ),
+                              color: Colors.white,
                               borderRadius:
-                              BorderRadius.circular(12),
-                            ),
-                            child: Icon(Icons.history,
-                                color: const Color(0xFFFFF8F0),
-                                size: kIsWeb ? 22 : 28),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment:
-                              CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Total Gate Entries',
-                                  style: TextStyle(
-                                    fontSize: kIsWeb ? 11 : 12,
-                                    color: const Color(
-                                        0xFFB8A99A),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '${_entries.length}',
-                                  style: TextStyle(
-                                    fontSize:
-                                    kIsWeb ? 22 : 28,
-                                    fontWeight: FontWeight.bold,
-                                    color: const Color(
-                                        0xFF5D4037),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFD4C4A8)
-                                  .withOpacity(0.15),
-                              borderRadius:
-                              BorderRadius.circular(20),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: const [
-                                Icon(Icons.check_circle,
-                                    size: 14,
-                                    color:
-                                    Color(0xFF8D6E63)),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Last 50',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color:
-                                    Color(0xFF8D6E63),
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // ==================== ENTRIES LIST ====================
-                    ListView.builder(
-                      shrinkWrap: true,
-                      physics:
-                      const NeverScrollableScrollPhysics(),
-                      itemCount: _entries.length,
-                      itemBuilder: (context, index) {
-                        final entry = _entries[index];
-                        final timestamp = _parseTimestamp(
-                            entry['timestamp']);
-                        final entryType =
-                            entry['entryType'] ?? 'unknown';
-                        final status =
-                            entry['status'] ?? 'entry';
-                        final visitorName =
-                        entry['visitorName'];
-
-                        return Container(
-                          margin:
-                          const EdgeInsets.only(bottom: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius:
-                            BorderRadius.circular(14),
-                            boxShadow: [
-                              BoxShadow(
-                                color: const Color(0xFFD4C4A8)
-                                    .withOpacity(0.15),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              borderRadius:
-                              BorderRadius.circular(14),
+                              BorderRadius.circular(
+                                  16),
                               border: Border.all(
                                   color: const Color(
                                       0xFFE0D5C1),
                                   width: 1),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(
+                                      0xFFD4C4A8)
+                                      .withOpacity(0.15),
+                                  blurRadius: 6,
+                                  offset:
+                                  const Offset(0, 2),
+                                ),
+                              ],
                             ),
-                            child: ListTile(
-                              contentPadding:
-                              const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 8),
-                              leading: Container(
-                                padding:
-                                const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end:
-                                    Alignment.bottomRight,
-                                    colors: [
-                                      _getTypeColor(entryType),
-                                      _getTypeColor(entryType)
-                                          .withOpacity(0.7),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: EdgeInsets.all(
+                                      kIsWeb ? 8 : 10),
+                                  decoration: BoxDecoration(
+                                    gradient:
+                                    const LinearGradient(
+                                      begin: Alignment
+                                          .topLeft,
+                                      end: Alignment
+                                          .bottomRight,
+                                      colors: [
+                                        Color(0xFFD4C4A8),
+                                        Color(0xFFC4A882)
+                                      ],
+                                    ),
+                                    borderRadius:
+                                    BorderRadius
+                                        .circular(12),
+                                  ),
+                                  child: Icon(
+                                      Icons.history,
+                                      color: const Color(
+                                          0xFFFFF8F0),
+                                      size: kIsWeb
+                                          ? 22
+                                          : 28),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                    CrossAxisAlignment
+                                        .start,
+                                    children: [
+                                      Text(
+                                        'Total Gate Entries',
+                                        style: TextStyle(
+                                          fontSize:
+                                          kIsWeb
+                                              ? 11
+                                              : 12,
+                                          color: const Color(
+                                              0xFFB8A99A),
+                                          fontWeight:
+                                          FontWeight
+                                              .w500,
+                                        ),
+                                      ),
+                                      const SizedBox(
+                                          height: 4),
+                                      Text(
+                                        '${_entries.length}',
+                                        style: TextStyle(
+                                          fontSize: kIsWeb
+                                              ? 22
+                                              : 28,
+                                          fontWeight:
+                                          FontWeight
+                                              .bold,
+                                          color: const Color(
+                                              0xFF5D4037),
+                                        ),
+                                      ),
                                     ],
                                   ),
-                                  borderRadius:
-                                  BorderRadius.circular(10),
                                 ),
-                                child: Icon(
-                                  _getTypeIcon(entryType),
-                                  color: const Color(
-                                      0xFFFFF8F0),
-                                  size: 20,
-                                ),
-                              ),
-                              title: Text(
-                                _getEntryTypeLabel(entryType),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF6B5B4F),
-                                  fontSize: 13,
-                                ),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                                children: [
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    DateFormat(
-                                        'MMM dd, yyyy • hh:mm a')
-                                        .format(timestamp),
-                                    style: const TextStyle(
-                                      fontSize: 10,
-                                      color: Color(0xFFB8A99A),
-                                    ),
+                                Container(
+                                  padding: const EdgeInsets
+                                      .symmetric(
+                                      horizontal: 10,
+                                      vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(
+                                        0xFFD4C4A8)
+                                        .withOpacity(0.15),
+                                    borderRadius:
+                                    BorderRadius
+                                        .circular(20),
                                   ),
-                                  if (visitorName != null)
-                                    Padding(
-                                      padding:
-                                      const EdgeInsets.only(
-                                          top: 2),
-                                      child: Text(
-                                        '👤 $visitorName',
-                                        style: const TextStyle(
-                                            fontSize: 10,
-                                            color: Color(
-                                                0xFFD4C4A8)),
+                                  child: Row(
+                                    mainAxisSize:
+                                    MainAxisSize.min,
+                                    children: const [
+                                      Icon(
+                                          Icons
+                                              .check_circle,
+                                          size: 14,
+                                          color: Color(
+                                              0xFF8D6E63)),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Last 50',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Color(
+                                              0xFF8D6E63),
+                                          fontWeight:
+                                          FontWeight
+                                              .w500,
+                                        ),
                                       ),
-                                    ),
-                                ],
-                              ),
-                              trailing: Container(
-                                padding:
-                                const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: status == 'entry'
-                                      ? const Color(0xFF8D6E63)
-                                      .withOpacity(0.15)
-                                      : const Color(0xFFD32F2F)
-                                      .withOpacity(0.15),
-                                  borderRadius:
-                                  BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: status == 'entry'
-                                        ? const Color(
-                                        0xFF8D6E63)
-                                        .withOpacity(0.3)
-                                        : const Color(
-                                        0xFFD32F2F)
-                                        .withOpacity(0.3),
+                                    ],
                                   ),
                                 ),
-                                child: Text(
-                                  status == 'entry' ? '✅' : '❌',
-                                  style: const TextStyle(
-                                      fontSize: 12),
-                                ),
-                              ),
+                              ],
                             ),
                           ),
-                        );
-                      },
+
+                          // ==================== ENTRIES LIST ====================
+                          ListView.builder(
+                            shrinkWrap: true,
+                            physics:
+                            const NeverScrollableScrollPhysics(),
+                            itemCount: _entries.length,
+                            itemBuilder: (context, index) {
+                              final entry =
+                              _entries[index];
+                              final timestamp =
+                              _parseTimestamp(
+                                  entry['timestamp']);
+                              final entryType =
+                                  entry['entryType'] ??
+                                      'unknown';
+                              final status =
+                                  entry['status'] ?? 'entry';
+                              final visitorName =
+                              entry['visitorName'];
+
+                              return Container(
+                                margin:
+                                const EdgeInsets.only(
+                                    bottom: 10),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius:
+                                  BorderRadius.circular(
+                                      14),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: const Color(
+                                          0xFFD4C4A8)
+                                          .withOpacity(
+                                          0.15),
+                                      blurRadius: 4,
+                                      offset: const Offset(
+                                          0, 2),
+                                    ),
+                                  ],
+                                ),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius:
+                                    BorderRadius
+                                        .circular(14),
+                                    border: Border.all(
+                                        color: const Color(
+                                            0xFFE0D5C1),
+                                        width: 1),
+                                  ),
+                                  child: ListTile(
+                                    contentPadding:
+                                    const EdgeInsets
+                                        .symmetric(
+                                        horizontal: 12,
+                                        vertical: 8),
+                                    leading: Container(
+                                      padding:
+                                      const EdgeInsets
+                                          .all(8),
+                                      decoration:
+                                      BoxDecoration(
+                                        gradient:
+                                        LinearGradient(
+                                          begin: Alignment
+                                              .topLeft,
+                                          end: Alignment
+                                              .bottomRight,
+                                          colors: [
+                                            _getTypeColor(
+                                                entryType),
+                                            _getTypeColor(
+                                                entryType)
+                                                .withOpacity(
+                                                0.7),
+                                          ],
+                                        ),
+                                        borderRadius:
+                                        BorderRadius
+                                            .circular(
+                                            10),
+                                      ),
+                                      child: Icon(
+                                        _getTypeIcon(
+                                            entryType),
+                                        color: const Color(
+                                            0xFFFFF8F0),
+                                        size: 20,
+                                      ),
+                                    ),
+                                    title: Text(
+                                      _getEntryTypeLabel(
+                                          entryType),
+                                      style:
+                                      const TextStyle(
+                                        fontWeight:
+                                        FontWeight.bold,
+                                        color: Color(
+                                            0xFF6B5B4F),
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    subtitle: Column(
+                                      crossAxisAlignment:
+                                      CrossAxisAlignment
+                                          .start,
+                                      children: [
+                                        const SizedBox(
+                                            height: 2),
+                                        Text(
+                                          DateFormat(
+                                              'MMM dd, yyyy • hh:mm a')
+                                              .format(
+                                              timestamp),
+                                          style:
+                                          const TextStyle(
+                                            fontSize: 10,
+                                            color: Color(
+                                                0xFFB8A99A),
+                                          ),
+                                        ),
+                                        if (visitorName !=
+                                            null)
+                                          Padding(
+                                            padding:
+                                            const EdgeInsets
+                                                .only(
+                                                top: 2),
+                                            child: Text(
+                                              '👤 $visitorName',
+                                              style: const TextStyle(
+                                                  fontSize:
+                                                  10,
+                                                  color: Color(
+                                                      0xFFD4C4A8)),
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    trailing: Container(
+                                      padding:
+                                      const EdgeInsets
+                                          .symmetric(
+                                          horizontal: 8,
+                                          vertical: 4),
+                                      decoration:
+                                      BoxDecoration(
+                                        color: status ==
+                                            'entry'
+                                            ? const Color(
+                                            0xFF8D6E63)
+                                            .withOpacity(
+                                            0.15)
+                                            : const Color(
+                                            0xFFD32F2F)
+                                            .withOpacity(
+                                            0.15),
+                                        borderRadius:
+                                        BorderRadius
+                                            .circular(
+                                            16),
+                                        border: Border.all(
+                                          color: status ==
+                                              'entry'
+                                              ? const Color(
+                                              0xFF8D6E63)
+                                              .withOpacity(
+                                              0.3)
+                                              : const Color(
+                                              0xFFD32F2F)
+                                              .withOpacity(
+                                              0.3),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        status == 'entry'
+                                            ? '✅'
+                                            : '❌',
+                                        style:
+                                        const TextStyle(
+                                            fontSize:
+                                            12),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 12),
-                  ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),

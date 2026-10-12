@@ -25,7 +25,6 @@ class _GenerateVisitorQRState extends State<GenerateVisitorQR> {
 
   final QRService _qrService = QRService();
 
-  // ==================== LAYOUT CONSTANTS ====================
   final double contentMaxWidth = kIsWeb ? 900 : double.infinity;
   final double outerPadding = kIsWeb ? 24 : 16;
 
@@ -43,10 +42,12 @@ class _GenerateVisitorQRState extends State<GenerateVisitorQR> {
 
   bool _isTimeValid() {
     DateTime now = DateTime.now();
-    if (_selectedDate.isAfter(DateTime(now.year, now.month, now.day))) {
+    if (_selectedDate
+        .isAfter(DateTime(now.year, now.month, now.day))) {
       return true;
     }
-    if (_selectedDate.isAtSameMomentAs(DateTime(now.year, now.month, now.day))) {
+    if (_selectedDate
+        .isAtSameMomentAs(DateTime(now.year, now.month, now.day))) {
       final nowTime = TimeOfDay.fromDateTime(now);
       if (_selectedTime.hour < nowTime.hour) return false;
       if (_selectedTime.hour == nowTime.hour &&
@@ -127,27 +128,95 @@ class _GenerateVisitorQRState extends State<GenerateVisitorQR> {
     }
   }
 
+  // ============================================================
+  // INLINE HEADER
+  // ============================================================
+  Widget _buildHeader() {
+    return Container(
+      color: const Color(0xFFD4C4A8),
+      padding: EdgeInsets.fromLTRB(
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 40,
+            child: Row(
+              children: [
+                _iconPill(
+                  icon: Icons.arrow_back,
+                  tooltip: 'Back',
+                  onTap: () => Navigator.pop(context),
+                ),
+                const Spacer(),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: const [
+              Icon(Icons.qr_code, size: 26, color: Color(0xFFFFF8F0)),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Generate Visitor QR',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                    fontSize: 22,
+                    color: Color(0xFFFFF8F0),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _iconPill({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8F0).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFFFFF8F0).withOpacity(0.25),
+              width: 1,
+            ),
+          ),
+          child: Tooltip(
+            message: tooltip,
+            child: Icon(icon, color: const Color(0xFFFFF8F0), size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: const [
-            Icon(Icons.qr_code, size: 22, color: Color(0xFFFFF8F0)),
-            SizedBox(width: 8),
-            Text(
-              'Generate Visitor QR',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-                fontSize: 18,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFFD4C4A8),
-        elevation: 0,
-      ),
+      backgroundColor: const Color(0xFFD4C4A8),
       body: Container(
         constraints: const BoxConstraints.expand(),
         decoration: const BoxDecoration(
@@ -162,482 +231,547 @@ class _GenerateVisitorQRState extends State<GenerateVisitorQR> {
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.all(outerPadding),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: contentMaxWidth),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // Header Card
-                      Container(
-                        padding: EdgeInsets.all(kIsWeb ? 14 : 16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: const Color(0xFFE0D5C1), width: 1.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFD4C4A8)
-                                  .withOpacity(0.15),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Row(
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.all(outerPadding),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints:
+                      BoxConstraints(maxWidth: contentMaxWidth),
+                      child: Form(
+                        key: _formKey,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
+                            // Header Card
                             Container(
-                              padding: EdgeInsets.all(kIsWeb ? 10 : 12),
+                              padding: EdgeInsets.all(kIsWeb ? 14 : 16),
                               decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    Color(0xFFD4C4A8),
-                                    Color(0xFFC4A882)
-                                  ],
-                                ),
-                                borderRadius: BorderRadius.circular(16),
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                    color: const Color(0xFFE0D5C1),
+                                    width: 1.5),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFFD4C4A8)
+                                        .withOpacity(0.15),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
                               ),
-                              child: Icon(Icons.qr_code_scanner,
-                                  color: const Color(0xFFFFF8F0),
-                                  size: kIsWeb ? 26 : 32),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding:
+                                    EdgeInsets.all(kIsWeb ? 10 : 12),
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Color(0xFFD4C4A8),
+                                          Color(0xFFC4A882)
+                                        ],
+                                      ),
+                                      borderRadius:
+                                      BorderRadius.circular(16),
+                                    ),
+                                    child: Icon(Icons.qr_code_scanner,
+                                        color: const Color(0xFFFFF8F0),
+                                        size: kIsWeb ? 26 : 32),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Visitor QR Code',
+                                          style: TextStyle(
+                                            fontSize: kIsWeb ? 14 : 16,
+                                            fontWeight: FontWeight.bold,
+                                            color: const Color(0xFF6B5B4F),
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Generate a temporary QR code for your visitors',
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Color(0xFFB8A99A),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            const SizedBox(width: 16),
-                            Expanded(
+                            const SizedBox(height: 20),
+
+                            // Visitor Information
+                            Container(
+                              padding: EdgeInsets.all(kIsWeb ? 14 : 16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                    color: const Color(0xFFE0D5C1),
+                                    width: 1.5),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFFD4C4A8)
+                                        .withOpacity(0.15),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
+                              ),
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                                crossAxisAlignment:
+                                CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    'Visitor QR Code',
-                                    style: TextStyle(
-                                      fontSize: kIsWeb ? 14 : 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: const Color(0xFF6B5B4F),
-                                    ),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding:
+                                        const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFD4C4A8)
+                                              .withOpacity(0.15),
+                                          borderRadius:
+                                          BorderRadius.circular(12),
+                                        ),
+                                        child: const Icon(
+                                            Icons.person_outline,
+                                            color: Color(0xFF8D6E63),
+                                            size: 20),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      const Text(
+                                        'Visitor Information',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF6B5B4F),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Generate a temporary QR code for your visitors',
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Color(0xFFB8A99A),
+                                  const SizedBox(height: 16),
+                                  TextFormField(
+                                    controller: _visitorNameController,
+                                    decoration: InputDecoration(
+                                      labelText: 'Visitor Name',
+                                      labelStyle: const TextStyle(
+                                          color: Color(0xFFB8A99A),
+                                          fontSize: 13),
+                                      border: OutlineInputBorder(
+                                        borderRadius:
+                                        BorderRadius.circular(14),
+                                        borderSide: const BorderSide(
+                                            color: Color(0xFFE0D5C1)),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius:
+                                        BorderRadius.circular(14),
+                                        borderSide: const BorderSide(
+                                            color: Color(0xFFE0D5C1)),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius:
+                                        BorderRadius.circular(14),
+                                        borderSide: const BorderSide(
+                                            color: Color(0xFFD4C4A8),
+                                            width: 2),
+                                      ),
+                                      filled: true,
+                                      fillColor: const Color(0xFFFFF8F0),
+                                      prefixIcon: const Icon(
+                                          Icons.person_outline,
+                                          color: Color(0xFFD4C4A8)),
                                     ),
+                                    validator: (value) {
+                                      if (value == null ||
+                                          value.isEmpty) {
+                                        return 'Please enter visitor name';
+                                      }
+                                      return null;
+                                    },
                                   ),
                                 ],
                               ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Visitor Information
-                      Container(
-                        padding: EdgeInsets.all(kIsWeb ? 14 : 16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: const Color(0xFFE0D5C1), width: 1.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFD4C4A8)
-                                  .withOpacity(0.15),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFD4C4A8)
-                                        .withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(Icons.person_outline,
-                                      color: Color(0xFF8D6E63), size: 20),
-                                ),
-                                const SizedBox(width: 12),
-                                const Text(
-                                  'Visitor Information',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF6B5B4F),
-                                  ),
-                                ),
-                              ],
                             ),
                             const SizedBox(height: 16),
-                            TextFormField(
-                              controller: _visitorNameController,
-                              decoration: InputDecoration(
-                                labelText: 'Visitor Name',
-                                labelStyle: const TextStyle(
-                                    color: Color(0xFFB8A99A), fontSize: 13),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFFE0D5C1)),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFFE0D5C1)),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFFD4C4A8), width: 2),
-                                ),
-                                filled: true,
-                                fillColor: const Color(0xFFFFF8F0),
-                                prefixIcon: const Icon(Icons.person_outline,
-                                    color: Color(0xFFD4C4A8)),
-                              ),
-                              validator: (value) {
-                                if (value == null || value.isEmpty) {
-                                  return 'Please enter visitor name';
-                                }
-                                return null;
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
 
-                      // Visit Details
-                      Container(
-                        padding: EdgeInsets.all(kIsWeb ? 14 : 16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: const Color(0xFFE0D5C1), width: 1.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFD4C4A8)
-                                  .withOpacity(0.15),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
+                            // Visit Details
+                            Container(
+                              padding: EdgeInsets.all(kIsWeb ? 14 : 16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                    color: const Color(0xFFE0D5C1),
+                                    width: 1.5),
+                                boxShadow: [
+                                  BoxShadow(
                                     color: const Color(0xFFD4C4A8)
                                         .withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(12),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
                                   ),
-                                  child: const Icon(Icons.calendar_today,
-                                      color: Color(0xFF8D6E63), size: 20),
-                                ),
-                                const SizedBox(width: 12),
-                                const Text(
-                                  'Visit Details',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF6B5B4F),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 8),
-                            ListTile(
-                              leading: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFD4C4A8)
-                                      .withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Icon(Icons.calendar_today,
-                                    color: Color(0xFF8D6E63), size: 18),
-                              ),
-                              title: const Text(
-                                'Visit Date',
-                                style: TextStyle(
-                                    fontSize: 13, color: Color(0xFF6B5B4F)),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    DateFormat('MMMM dd, yyyy')
-                                        .format(_selectedDate),
-                                    style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: Color(0xFF5D4037)),
-                                  ),
-                                  if (_dateError != null)
-                                    Text(
-                                      _dateError!,
-                                      style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Color(0xFFD32F2F)),
-                                    ),
                                 ],
                               ),
-                              trailing: const Icon(Icons.chevron_right,
-                                  color: Color(0xFFD4C4A8)),
-                              onTap: _selectDate,
-                            ),
-                            ListTile(
-                              leading: Container(
-                                padding: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFD4C4A8)
-                                      .withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: const Icon(Icons.access_time,
-                                    color: Color(0xFF8D6E63), size: 18),
-                              ),
-                              title: const Text(
-                                'Visit Time',
-                                style: TextStyle(
-                                    fontSize: 13, color: Color(0xFF6B5B4F)),
-                              ),
-                              subtitle: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              child: Column(
+                                crossAxisAlignment:
+                                CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    _selectedTime.format(context),
-                                    style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w500,
-                                        color: Color(0xFF5D4037)),
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding:
+                                        const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFD4C4A8)
+                                              .withOpacity(0.15),
+                                          borderRadius:
+                                          BorderRadius.circular(12),
+                                        ),
+                                        child: const Icon(
+                                            Icons.calendar_today,
+                                            color: Color(0xFF8D6E63),
+                                            size: 20),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      const Text(
+                                        'Visit Details',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF6B5B4F),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  if (_timeError != null)
-                                    Text(
-                                      _timeError!,
-                                      style: const TextStyle(
-                                          fontSize: 11,
-                                          color: Color(0xFFD32F2F)),
+                                  const SizedBox(height: 8),
+                                  ListTile(
+                                    leading: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFD4C4A8)
+                                            .withOpacity(0.1),
+                                        borderRadius:
+                                        BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(
+                                          Icons.calendar_today,
+                                          color: Color(0xFF8D6E63),
+                                          size: 18),
                                     ),
+                                    title: const Text(
+                                      'Visit Date',
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: Color(0xFF6B5B4F)),
+                                    ),
+                                    subtitle: Column(
+                                      crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          DateFormat('MMMM dd, yyyy')
+                                              .format(_selectedDate),
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w500,
+                                              color: Color(0xFF5D4037)),
+                                        ),
+                                        if (_dateError != null)
+                                          Text(
+                                            _dateError!,
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                color: Color(0xFFD32F2F)),
+                                          ),
+                                      ],
+                                    ),
+                                    trailing: const Icon(
+                                        Icons.chevron_right,
+                                        color: Color(0xFFD4C4A8)),
+                                    onTap: _selectDate,
+                                  ),
+                                  ListTile(
+                                    leading: Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFD4C4A8)
+                                            .withOpacity(0.1),
+                                        borderRadius:
+                                        BorderRadius.circular(10),
+                                      ),
+                                      child: const Icon(
+                                          Icons.access_time,
+                                          color: Color(0xFF8D6E63),
+                                          size: 18),
+                                    ),
+                                    title: const Text(
+                                      'Visit Time',
+                                      style: TextStyle(
+                                          fontSize: 13,
+                                          color: Color(0xFF6B5B4F)),
+                                    ),
+                                    subtitle: Column(
+                                      crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          _selectedTime.format(context),
+                                          style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w500,
+                                              color: Color(0xFF5D4037)),
+                                        ),
+                                        if (_timeError != null)
+                                          Text(
+                                            _timeError!,
+                                            style: const TextStyle(
+                                                fontSize: 11,
+                                                color: Color(0xFFD32F2F)),
+                                          ),
+                                      ],
+                                    ),
+                                    trailing: const Icon(
+                                        Icons.chevron_right,
+                                        color: Color(0xFFD4C4A8)),
+                                    onTap: _selectTime,
+                                  ),
                                 ],
                               ),
-                              trailing: const Icon(Icons.chevron_right,
-                                  color: Color(0xFFD4C4A8)),
-                              onTap: _selectTime,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-
-                      // Validity
-                      Container(
-                        padding: EdgeInsets.all(kIsWeb ? 14 : 16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                              color: const Color(0xFFE0D5C1), width: 1.5),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFFD4C4A8)
-                                  .withOpacity(0.15),
-                              blurRadius: 8,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFD4C4A8)
-                                        .withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: const Icon(Icons.timer_outlined,
-                                      color: Color(0xFF8D6E63), size: 20),
-                                ),
-                                const SizedBox(width: 12),
-                                const Text(
-                                  'QR Code Validity',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF6B5B4F),
-                                  ),
-                                ),
-                              ],
                             ),
                             const SizedBox(height: 16),
-                            DropdownButtonFormField<int>(
-                              value: _validityHours,
-                              decoration: InputDecoration(
-                                labelText: 'Validity Period',
-                                labelStyle: const TextStyle(
-                                    color: Color(0xFFB8A99A), fontSize: 13),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFFE0D5C1)),
-                                ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFFE0D5C1)),
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(14),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFFD4C4A8), width: 2),
-                                ),
-                                filled: true,
-                                fillColor: const Color(0xFFFFF8F0),
-                                prefixIcon: const Icon(
-                                    Icons.hourglass_empty,
-                                    color: Color(0xFFD4C4A8)),
+
+                            // Validity
+                            Container(
+                              padding: EdgeInsets.all(kIsWeb ? 14 : 16),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                    color: const Color(0xFFE0D5C1),
+                                    width: 1.5),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0xFFD4C4A8)
+                                        .withOpacity(0.15),
+                                    blurRadius: 8,
+                                    offset: const Offset(0, 3),
+                                  ),
+                                ],
                               ),
-                              items: const [
-                                DropdownMenuItem(
-                                    value: 1,
-                                    child: Text('1 hour',
-                                        style: TextStyle(fontSize: 14))),
-                                DropdownMenuItem(
-                                    value: 2,
-                                    child: Text('2 hours',
-                                        style: TextStyle(fontSize: 14))),
-                                DropdownMenuItem(
-                                    value: 4,
-                                    child: Text('4 hours',
-                                        style: TextStyle(fontSize: 14))),
-                                DropdownMenuItem(
-                                    value: 8,
-                                    child: Text('8 hours',
-                                        style: TextStyle(fontSize: 14))),
-                                DropdownMenuItem(
-                                    value: 12,
-                                    child: Text('12 hours',
-                                        style: TextStyle(fontSize: 14))),
-                                DropdownMenuItem(
-                                    value: 24,
-                                    child: Text('24 hours',
-                                        style: TextStyle(fontSize: 14))),
-                                DropdownMenuItem(
-                                    value: 48,
-                                    child: Text('48 hours',
-                                        style: TextStyle(fontSize: 14))),
-                              ],
-                              onChanged: (value) {
-                                setState(() => _validityHours = value!);
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Generate Button
-                      ElevatedButton(
-                        onPressed: (_isGenerating ||
-                            _dateError != null ||
-                            _timeError != null)
-                            ? null
-                            : _generateQR,
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 52),
-                          backgroundColor: const Color(0xFFD4C4A8),
-                          foregroundColor: const Color(0xFF6B5B4F),
-                          elevation: 3,
-                          shadowColor:
-                          const Color(0xFFD4C4A8).withOpacity(0.5),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                        child: _isGenerating
-                            ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor:
-                            AlwaysStoppedAnimation<Color>(
-                                Color(0xFF6B5B4F)),
-                          ),
-                        )
-                            : const Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.qr_code, size: 20),
-                            SizedBox(width: 8),
-                            Text('Generate QR Code'),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-
-                      // Info
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color:
-                          const Color(0xFFD4C4A8).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color:
-                              const Color(0xFFD4C4A8).withOpacity(0.3)),
-                        ),
-                        child: Row(
-                          children: const [
-                            Icon(Icons.info_outline,
-                                size: 16, color: Color(0xFF8D6E63)),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'The QR code will be valid for the selected duration. Share it with your visitor for gate access. Only future dates and times can be selected.',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Color(0xFF8D6E63),
-                                  height: 1.3,
-                                ),
+                              child: Column(
+                                crossAxisAlignment:
+                                CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding:
+                                        const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFD4C4A8)
+                                              .withOpacity(0.15),
+                                          borderRadius:
+                                          BorderRadius.circular(12),
+                                        ),
+                                        child: const Icon(
+                                            Icons.timer_outlined,
+                                            color: Color(0xFF8D6E63),
+                                            size: 20),
+                                      ),
+                                      const SizedBox(width: 12),
+                                      const Text(
+                                        'QR Code Validity',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF6B5B4F),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  DropdownButtonFormField<int>(
+                                    value: _validityHours,
+                                    decoration: InputDecoration(
+                                      labelText: 'Validity Period',
+                                      labelStyle: const TextStyle(
+                                          color: Color(0xFFB8A99A),
+                                          fontSize: 13),
+                                      border: OutlineInputBorder(
+                                        borderRadius:
+                                        BorderRadius.circular(14),
+                                        borderSide: const BorderSide(
+                                            color: Color(0xFFE0D5C1)),
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius:
+                                        BorderRadius.circular(14),
+                                        borderSide: const BorderSide(
+                                            color: Color(0xFFE0D5C1)),
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius:
+                                        BorderRadius.circular(14),
+                                        borderSide: const BorderSide(
+                                            color: Color(0xFFD4C4A8),
+                                            width: 2),
+                                      ),
+                                      filled: true,
+                                      fillColor: const Color(0xFFFFF8F0),
+                                      prefixIcon: const Icon(
+                                          Icons.hourglass_empty,
+                                          color: Color(0xFFD4C4A8)),
+                                    ),
+                                    items: const [
+                                      DropdownMenuItem(
+                                          value: 1,
+                                          child: Text('1 hour',
+                                              style: TextStyle(
+                                                  fontSize: 14))),
+                                      DropdownMenuItem(
+                                          value: 2,
+                                          child: Text('2 hours',
+                                              style: TextStyle(
+                                                  fontSize: 14))),
+                                      DropdownMenuItem(
+                                          value: 4,
+                                          child: Text('4 hours',
+                                              style: TextStyle(
+                                                  fontSize: 14))),
+                                      DropdownMenuItem(
+                                          value: 8,
+                                          child: Text('8 hours',
+                                              style: TextStyle(
+                                                  fontSize: 14))),
+                                      DropdownMenuItem(
+                                          value: 12,
+                                          child: Text('12 hours',
+                                              style: TextStyle(
+                                                  fontSize: 14))),
+                                      DropdownMenuItem(
+                                          value: 24,
+                                          child: Text('24 hours',
+                                              style: TextStyle(
+                                                  fontSize: 14))),
+                                      DropdownMenuItem(
+                                          value: 48,
+                                          child: Text('48 hours',
+                                              style: TextStyle(
+                                                  fontSize: 14))),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(
+                                              () => _validityHours = value!);
+                                    },
+                                  ),
+                                ],
                               ),
                             ),
+                            const SizedBox(height: 24),
+
+                            // Generate Button
+                            ElevatedButton(
+                              onPressed: (_isGenerating ||
+                                  _dateError != null ||
+                                  _timeError != null)
+                                  ? null
+                                  : _generateQR,
+                              style: ElevatedButton.styleFrom(
+                                minimumSize:
+                                const Size(double.infinity, 52),
+                                backgroundColor: const Color(0xFFD4C4A8),
+                                foregroundColor: const Color(0xFF6B5B4F),
+                                elevation: 3,
+                                shadowColor: const Color(0xFFD4C4A8)
+                                    .withOpacity(0.5),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                textStyle: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                              child: _isGenerating
+                                  ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor:
+                                  AlwaysStoppedAnimation<Color>(
+                                      Color(0xFF6B5B4F)),
+                                ),
+                              )
+                                  : const Row(
+                                mainAxisAlignment:
+                                MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.qr_code, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Generate QR Code'),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+
+                            // Info
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD4C4A8)
+                                    .withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                    color: const Color(0xFFD4C4A8)
+                                        .withOpacity(0.3)),
+                              ),
+                              child: Row(
+                                children: const [
+                                  Icon(Icons.info_outline,
+                                      size: 16,
+                                      color: Color(0xFF8D6E63)),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'The QR code will be valid for the selected duration. Share it with your visitor for gate access. Only future dates and times can be selected.',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Color(0xFF8D6E63),
+                                        height: 1.3,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -674,9 +808,11 @@ class _GenerateVisitorQRState extends State<GenerateVisitorQR> {
         _selectedTime.minute,
       );
 
-      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final authProvider =
+      Provider.of<AuthProvider>(context, listen: false);
       final residentId = authProvider.currentUser?.id ?? '';
-      final residentName = authProvider.currentUser?.fullName ?? 'Resident';
+      final residentName =
+          authProvider.currentUser?.fullName ?? 'Resident';
 
       String qrData = await _qrService.generateVisitorQR(
         residentId: residentId,

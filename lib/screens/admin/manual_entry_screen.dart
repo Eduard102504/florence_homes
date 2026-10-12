@@ -21,21 +21,17 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
   final _nameController = TextEditingController();
   final _reasonController = TextEditingController();
 
-  // 'delivery' or 'guest' (employee removed)
   String _selectedEntryType = 'delivery';
 
-  // Selected resident (only for guest)
   String? _selectedResidentId;
   String? _selectedResidentName;
   String? _selectedResidentHouse;
 
   bool _isSubmitting = false;
 
-  // Manual-gate state
   bool _isGateUp = false;
   bool _isGateBusy = false;
 
-  // ==================== LAYOUT ====================
   final double contentMaxWidth = kIsWeb ? 900 : double.infinity;
   final double outerPadding = kIsWeb ? 20 : 16;
 
@@ -45,7 +41,6 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     _tcpService.connect();
   }
 
-  // ==================== MANUAL GATE ====================
   Future<void> _manualUp() async {
     if (_isGateBusy || _isGateUp) return;
     setState(() => _isGateBusy = true);
@@ -136,7 +131,6 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     }
   }
 
-  // ==================== RESIDENT PICKER ====================
   Future<void> _showResidentPicker() async {
     String searchText = '';
     final searchController = TextEditingController();
@@ -156,10 +150,9 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       };
     }).toList();
 
-    residents.sort((a, b) =>
-        (a['name'] as String).toLowerCase().compareTo(
-          (b['name'] as String).toLowerCase(),
-        ));
+    residents.sort((a, b) => (a['name'] as String)
+        .toLowerCase()
+        .compareTo((b['name'] as String).toLowerCase()));
 
     if (!mounted) return;
 
@@ -274,7 +267,8 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                           return InkWell(
                             onTap: () {
                               setState(() {
-                                _selectedResidentId = r['id'] as String;
+                                _selectedResidentId =
+                                r['id'] as String;
                                 _selectedResidentName =
                                 r['name'] as String;
                                 _selectedResidentHouse =
@@ -305,7 +299,8 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                                     ),
                                     child: Center(
                                       child: Text(
-                                        (r['name'] as String).isNotEmpty
+                                        (r['name'] as String)
+                                            .isNotEmpty
                                             ? (r['name'] as String)[0]
                                             .toUpperCase()
                                             : '?',
@@ -326,7 +321,8 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                                           r['name'] as String,
                                           style: const TextStyle(
                                             fontSize: 13,
-                                            fontWeight: FontWeight.w600,
+                                            fontWeight:
+                                            FontWeight.w600,
                                             color: Color(0xFF6B5B4F),
                                           ),
                                         ),
@@ -371,9 +367,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     );
   }
 
-  // ==================== SUBMIT ====================
   Future<void> _submitManualEntry() async {
-    // Guest flow: require resident
     if (_selectedEntryType == 'guest') {
       if (_selectedResidentId == null) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -403,29 +397,26 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       residentName = '📦 Delivery: $visitorName';
       residentId = 'manual_${DateTime.now().millisecondsSinceEpoch}';
     } else {
-      // Guest
       residentName =
       '👤 Guest: $visitorName → ${_selectedResidentName ?? 'Unknown'}';
       residentId = _selectedResidentId!;
     }
 
     try {
-      // ============ Log gate entry ============
-      final entryRef = await _firestore.collection('gate_entries').add({
+      await _firestore.collection('gate_entries').add({
         'residentId': residentId,
         'residentName': residentName,
         'entryType': 'manual',
         'timestamp': DateTime.now().toIso8601String(),
         'visitorName': visitorName,
         'status': 'entry',
-        // Guest metadata
         if (_selectedEntryType == 'guest') ...{
           'visitingResidentId': _selectedResidentId,
           'visitingResidentName': _selectedResidentName,
           'visitingResidentHouse': _selectedResidentHouse,
           'note': _reasonController.text.trim(),
           'isGuest': true,
-          'visitStatus': 'inside', // becomes 'outside' when guard marks exit
+          'visitStatus': 'inside',
           'checkInTime': DateTime.now().toIso8601String(),
         },
       });
@@ -454,14 +445,14 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                   ? '✅ Entry recorded and gate opened'
                   : '⚠️ Entry recorded but gate failed to open',
             ),
-            backgroundColor:
-            gateOpened ? const Color(0xFF8D6E63) : const Color(0xFFFF9800),
+            backgroundColor: gateOpened
+                ? const Color(0xFF8D6E63)
+                : const Color(0xFFFF9800),
             behavior: SnackBarBehavior.floating,
           ),
         );
       }
 
-      // Reset
       _nameController.clear();
       _reasonController.clear();
       setState(() {
@@ -484,28 +475,95 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     }
   }
 
-  // ==================== BUILD ====================
+  // ============================================================
+  // REUSABLE HEADER (inline)
+  // ============================================================
+  Widget _buildHeader() {
+    return Container(
+      color: const Color(0xFFD4C4A8),
+      padding: EdgeInsets.fromLTRB(
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            height: 40,
+            child: Row(
+              children: [
+                _iconPill(
+                  icon: Icons.arrow_back,
+                  tooltip: 'Back',
+                  onTap: () => Navigator.pop(context),
+                ),
+                const Spacer(),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: const [
+              Icon(Icons.edit, size: 26, color: Color(0xFFFFF8F0)),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Manual Gate Entry',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                    fontSize: 22,
+                    color: Color(0xFFFFF8F0),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _iconPill({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8F0).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFFFFF8F0).withOpacity(0.25),
+              width: 1,
+            ),
+          ),
+          child: Tooltip(
+            message: tooltip,
+            child: Icon(icon, color: const Color(0xFFFFF8F0), size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: const [
-            Icon(Icons.edit, size: 20, color: Color(0xFFFFF8F0)),
-            SizedBox(width: 8),
-            Text(
-              'Manual Gate Entry',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-                fontSize: 15,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFFD4C4A8),
-        elevation: 0,
-      ),
+      backgroundColor: const Color(0xFFD4C4A8),
       body: Container(
         constraints: const BoxConstraints.expand(),
         decoration: const BoxDecoration(
@@ -520,343 +578,354 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.all(outerPadding),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: contentMaxWidth),
-                child: Form(
-                  key: _formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      // ============ MANUAL GATE CONTROL ============
-                      _buildCard(
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.all(outerPadding),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(maxWidth: contentMaxWidth),
+                      child: Form(
+                        key: _formKey,
                         child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFFFF9800),
-                                        Color(0xFFF5A623),
-                                      ],
-                                    ),
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                  child: const Icon(Icons.door_front_door,
-                                      size: 28, color: Color(0xFFFFF8F0)),
-                                ),
-                                const SizedBox(width: 10),
-                                const Text(
-                                  'Manual Gate Control',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF6B5B4F),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 10),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: _isGateUp
-                                    ? const Color(0xFFFF9800).withOpacity(0.15)
-                                    : const Color(0xFFD4C4A8)
-                                    .withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
+                            _buildCard(
+                              child: Column(
                                 children: [
-                                  Icon(
-                                    _isGateUp
-                                        ? Icons.arrow_upward
-                                        : Icons.arrow_downward,
-                                    size: 14,
-                                    color: _isGateUp
-                                        ? const Color(0xFFFF9800)
-                                        : const Color(0xFF8D6E63),
+                                  Row(
+                                    mainAxisAlignment:
+                                    MainAxisAlignment.center,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(10),
+                                        decoration: BoxDecoration(
+                                          gradient: const LinearGradient(
+                                            colors: [
+                                              Color(0xFFFF9800),
+                                              Color(0xFFF5A623),
+                                            ],
+                                          ),
+                                          borderRadius:
+                                          BorderRadius.circular(14),
+                                        ),
+                                        child: const Icon(
+                                            Icons.door_front_door,
+                                            size: 28,
+                                            color: Color(0xFFFFF8F0)),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      const Text(
+                                        'Manual Gate Control',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF6B5B4F),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _isGateUp
-                                        ? 'GATE UP — SCANNING PAUSED'
-                                        : 'GATE DOWN — SCANNING ACTIVE',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 0.5,
+                                  const SizedBox(height: 10),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
                                       color: _isGateUp
                                           ? const Color(0xFFFF9800)
-                                          : const Color(0xFF8D6E63),
+                                          .withOpacity(0.15)
+                                          : const Color(0xFFD4C4A8)
+                                          .withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(20),
                                     ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          _isGateUp
+                                              ? Icons.arrow_upward
+                                              : Icons.arrow_downward,
+                                          size: 14,
+                                          color: _isGateUp
+                                              ? const Color(0xFFFF9800)
+                                              : const Color(0xFF8D6E63),
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          _isGateUp
+                                              ? 'GATE UP — SCANNING PAUSED'
+                                              : 'GATE DOWN — SCANNING ACTIVE',
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.5,
+                                            color: _isGateUp
+                                                ? const Color(0xFFFF9800)
+                                                : const Color(0xFF8D6E63),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: ElevatedButton.icon(
+                                          onPressed:
+                                          (_isGateBusy || _isGateUp)
+                                              ? null
+                                              : _manualUp,
+                                          icon: (_isGateBusy && !_isGateUp)
+                                              ? const SizedBox(
+                                            width: 18,
+                                            height: 18,
+                                            child:
+                                            CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor:
+                                              AlwaysStoppedAnimation<
+                                                  Color>(Color(
+                                                  0xFFFFF8F0)),
+                                            ),
+                                          )
+                                              : const Icon(
+                                              Icons.keyboard_arrow_up,
+                                              size: 20),
+                                          label: const Text('Manual Up'),
+                                          style: ElevatedButton.styleFrom(
+                                            minimumSize: const Size(
+                                                double.infinity, 46),
+                                            backgroundColor:
+                                            const Color(0xFFFF9800),
+                                            foregroundColor:
+                                            const Color(0xFFFFF8F0),
+                                            disabledBackgroundColor:
+                                            const Color(0xFFFF9800)
+                                                .withOpacity(0.4),
+                                            disabledForegroundColor:
+                                            const Color(0xFFFFF8F0)
+                                                .withOpacity(0.7),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                              BorderRadius.circular(12),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: ElevatedButton.icon(
+                                          onPressed: _isGateBusy
+                                              ? null
+                                              : _manualDown,
+                                          icon: const Icon(
+                                              Icons.keyboard_arrow_down,
+                                              size: 20),
+                                          label: const Text('Manual Down'),
+                                          style: ElevatedButton.styleFrom(
+                                            minimumSize: const Size(
+                                                double.infinity, 46),
+                                            backgroundColor:
+                                            const Color(0xFF6B5B4F),
+                                            foregroundColor:
+                                            const Color(0xFFFFF8F0),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                              BorderRadius.circular(12),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
                             ),
-                            const SizedBox(height: 14),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    onPressed:
-                                    (_isGateBusy || _isGateUp)
-                                        ? null
-                                        : _manualUp,
-                                    icon: (_isGateBusy && !_isGateUp)
-                                        ? const SizedBox(
-                                      width: 18,
-                                      height: 18,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                        AlwaysStoppedAnimation<
-                                            Color>(Color(
-                                            0xFFFFF8F0)),
-                                      ),
-                                    )
-                                        : const Icon(
-                                        Icons.keyboard_arrow_up,
-                                        size: 20),
-                                    label: const Text('Manual Up'),
-                                    style: ElevatedButton.styleFrom(
-                                      minimumSize:
-                                      const Size(double.infinity, 46),
-                                      backgroundColor:
-                                      const Color(0xFFFF9800),
-                                      foregroundColor:
-                                      const Color(0xFFFFF8F0),
-                                      disabledBackgroundColor:
-                                      const Color(0xFFFF9800)
-                                          .withOpacity(0.4),
-                                      disabledForegroundColor:
-                                      const Color(0xFFFFF8F0)
-                                          .withOpacity(0.7),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                        BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    onPressed:
-                                    _isGateBusy ? null : _manualDown,
-                                    icon: const Icon(
-                                        Icons.keyboard_arrow_down,
-                                        size: 20),
-                                    label: const Text('Manual Down'),
-                                    style: ElevatedButton.styleFrom(
-                                      minimumSize:
-                                      const Size(double.infinity, 46),
-                                      backgroundColor:
-                                      const Color(0xFF6B5B4F),
-                                      foregroundColor:
-                                      const Color(0xFFFFF8F0),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius:
-                                        BorderRadius.circular(12),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
 
-                      const SizedBox(height: 16),
+                            const SizedBox(height: 16),
 
-                      // ============ ENTRY TYPE ============
-                      _buildCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                _iconBox(Icons.category),
-                                const SizedBox(width: 10),
-                                const Text(
-                                  'Entry Type',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF6B5B4F),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _buildEntryTypeButton(
-                                    'delivery',
-                                    Icons.local_shipping,
-                                    '📦 Delivery',
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _buildEntryTypeButton(
-                                    'guest',
-                                    Icons.people,
-                                    '👤 Guest',
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // ============ PERSON INFO ============
-                      _buildCard(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                _iconBox(Icons.person),
-                                const SizedBox(width: 10),
-                                Text(
-                                  _selectedEntryType == 'delivery'
-                                      ? 'Courier Information'
-                                      : 'Visitor Information',
-                                  style: const TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xFF6B5B4F),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 14),
-                            TextFormField(
-                              controller: _nameController,
-                              decoration: _inputDecoration(
-                                label: _selectedEntryType == 'delivery'
-                                    ? '🚚 Courier Name'
-                                    : '👤 Visitor Full Name',
-                                icon: Icons.person_outline,
-                              ),
-                              validator: (value) {
-                                if (value == null || value.trim().isEmpty) {
-                                  return 'Please enter name';
-                                }
-                                return null;
-                              },
-                            ),
-
-                            // ============ RESIDENT PICKER (guest only) ============
-                            if (_selectedEntryType == 'guest') ...[
-                              const SizedBox(height: 14),
-                              _buildResidentPickerTile(),
-                            ],
-                          ],
-                        ),
-                      ),
-
-                      // ============ GUEST NOTE + ID REMINDER ============
-                      if (_selectedEntryType == 'guest') ...[
-                        const SizedBox(height: 16),
-                        _buildCard(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                            _buildCard(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  _iconBox(Icons.info),
-                                  const SizedBox(width: 10),
-                                  const Text(
-                                    'Purpose & Note',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: Color(0xFF6B5B4F),
-                                    ),
+                                  Row(
+                                    children: [
+                                      _iconBox(Icons.category),
+                                      const SizedBox(width: 10),
+                                      const Text(
+                                        'Entry Type',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF6B5B4F),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 14),
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildEntryTypeButton(
+                                          'delivery',
+                                          Icons.local_shipping,
+                                          '📦 Delivery',
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: _buildEntryTypeButton(
+                                          'guest',
+                                          Icons.people,
+                                          '👤 Guest',
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
-                              const SizedBox(height: 14),
-                              TextFormField(
-                                controller: _reasonController,
-                                decoration: _inputDecoration(
-                                  label: '💡 Reason for Visit',
-                                  icon: Icons.description_outlined,
-                                  hint: 'e.g., Visiting family, Friend visit',
-                                ),
-                                maxLines: 3,
-                                validator: (value) {
-                                  if (_selectedEntryType == 'guest' &&
-                                      (value == null ||
-                                          value.trim().isEmpty)) {
-                                    return 'Please enter a reason';
-                                  }
-                                  return null;
-                                },
-                              ),
-                              const SizedBox(height: 12),
+                            ),
 
-                              // ============ ID REMINDER BOX ============
-                              Container(
-                                padding: const EdgeInsets.all(12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFFF9800)
-                                      .withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: const Color(0xFFFF9800)
-                                        .withOpacity(0.3),
-                                    width: 1.5,
+                            const SizedBox(height: 16),
+
+                            _buildCard(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      _iconBox(Icons.person),
+                                      const SizedBox(width: 10),
+                                      Text(
+                                        _selectedEntryType == 'delivery'
+                                            ? 'Courier Information'
+                                            : 'Visitor Information',
+                                        style: const TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color(0xFF6B5B4F),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                                child: Row(
+                                  const SizedBox(height: 14),
+                                  TextFormField(
+                                    controller: _nameController,
+                                    decoration: _inputDecoration(
+                                      label:
+                                      _selectedEntryType == 'delivery'
+                                          ? '🚚 Courier Name'
+                                          : '👤 Visitor Full Name',
+                                      icon: Icons.person_outline,
+                                    ),
+                                    validator: (value) {
+                                      if (value == null ||
+                                          value.trim().isEmpty) {
+                                        return 'Please enter name';
+                                      }
+                                      return null;
+                                    },
+                                  ),
+                                  if (_selectedEntryType == 'guest') ...[
+                                    const SizedBox(height: 14),
+                                    _buildResidentPickerTile(),
+                                  ],
+                                ],
+                              ),
+                            ),
+
+                            if (_selectedEntryType == 'guest') ...[
+                              const SizedBox(height: 16),
+                              _buildCard(
+                                child: Column(
                                   crossAxisAlignment:
                                   CrossAxisAlignment.start,
                                   children: [
-                                    const Icon(
-                                      Icons.badge_outlined,
-                                      color: Color(0xFFFF9800),
-                                      size: 20,
+                                    Row(
+                                      children: [
+                                        _iconBox(Icons.info),
+                                        const SizedBox(width: 10),
+                                        const Text(
+                                          'Purpose & Note',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.bold,
+                                            color: Color(0xFF6B5B4F),
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                    const SizedBox(width: 10),
-                                    Expanded(
-                                      child: Column(
+                                    const SizedBox(height: 14),
+                                    TextFormField(
+                                      controller: _reasonController,
+                                      decoration: _inputDecoration(
+                                        label: '💡 Reason for Visit',
+                                        icon: Icons.description_outlined,
+                                        hint:
+                                        'e.g., Visiting family, Friend visit',
+                                      ),
+                                      maxLines: 3,
+                                      validator: (value) {
+                                        if (_selectedEntryType == 'guest' &&
+                                            (value == null ||
+                                                value.trim().isEmpty)) {
+                                          return 'Please enter a reason';
+                                        }
+                                        return null;
+                                      },
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFF9800)
+                                            .withOpacity(0.1),
+                                        borderRadius:
+                                        BorderRadius.circular(12),
+                                        border: Border.all(
+                                          color: const Color(0xFFFF9800)
+                                              .withOpacity(0.3),
+                                          width: 1.5,
+                                        ),
+                                      ),
+                                      child: Row(
                                         crossAxisAlignment:
                                         CrossAxisAlignment.start,
-                                        children: const [
-                                          Text(
-                                            'IMPORTANT — ID Required',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              fontWeight: FontWeight.bold,
-                                              color: Color(0xFFE65100),
-                                              letterSpacing: 0.5,
-                                            ),
+                                        children: [
+                                          const Icon(
+                                            Icons.badge_outlined,
+                                            color: Color(0xFFFF9800),
+                                            size: 20,
                                           ),
-                                          SizedBox(height: 4),
-                                          Text(
-                                            'Hand over your valid ID to the guard. '
-                                                'The ID will be returned when you leave the premises.',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: Color(0xFF6B5B4F),
-                                              height: 1.4,
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                              children: const [
+                                                Text(
+                                                  'IMPORTANT — ID Required',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    fontWeight: FontWeight.bold,
+                                                    color: Color(0xFFE65100),
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                ),
+                                                SizedBox(height: 4),
+                                                Text(
+                                                  'Hand over your valid ID to the guard. '
+                                                      'The ID will be returned when you leave the premises.',
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: Color(0xFF6B5B4F),
+                                                    height: 1.4,
+                                                  ),
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ],
@@ -866,65 +935,65 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
                                 ),
                               ),
                             ],
-                          ),
-                        ),
-                      ],
 
-                      const SizedBox(height: 20),
+                            const SizedBox(height: 20),
 
-                      // ============ SUBMIT ============
-                      ElevatedButton(
-                        onPressed:
-                        _isSubmitting ? null : _submitManualEntry,
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 52),
-                          backgroundColor: const Color(0xFFD4C4A8),
-                          foregroundColor: const Color(0xFF6B5B4F),
-                          elevation: 3,
-                          shadowColor:
-                          const Color(0xFFD4C4A8).withOpacity(0.5),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          textStyle: const TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1,
-                          ),
-                        ),
-                        child: _isSubmitting
-                            ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                                Color(0xFF6B5B4F)),
-                          ),
-                        )
-                            : const Row(
-                          mainAxisAlignment:
-                          MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.record_voice_over, size: 20),
-                            SizedBox(width: 8),
-                            Text('Record Entry & Open Gate'),
+                            ElevatedButton(
+                              onPressed:
+                              _isSubmitting ? null : _submitManualEntry,
+                              style: ElevatedButton.styleFrom(
+                                minimumSize: const Size(double.infinity, 52),
+                                backgroundColor: const Color(0xFFD4C4A8),
+                                foregroundColor: const Color(0xFF6B5B4F),
+                                elevation: 3,
+                                shadowColor: const Color(0xFFD4C4A8)
+                                    .withOpacity(0.5),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                textStyle: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1,
+                                ),
+                              ),
+                              child: _isSubmitting
+                                  ? const SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor:
+                                  AlwaysStoppedAnimation<Color>(
+                                      Color(0xFF6B5B4F)),
+                                ),
+                              )
+                                  : const Row(
+                                mainAxisAlignment:
+                                MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.record_voice_over,
+                                      size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Record Entry & Open Gate'),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 16),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // ==================== RESIDENT PICKER TILE ====================
   Widget _buildResidentPickerTile() {
     final hasSelection = _selectedResidentId != null;
     return InkWell(
@@ -1022,7 +1091,6 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     );
   }
 
-  // ==================== HELPERS ====================
   Widget _buildCard({required Widget child}) {
     return Container(
       decoration: BoxDecoration(
@@ -1068,8 +1136,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       hintText: hint,
       labelStyle:
       const TextStyle(color: Color(0xFFB8A99A), fontSize: 12),
-      hintStyle:
-      const TextStyle(color: Color(0xFFD4C4A8), fontSize: 12),
+      hintStyle: const TextStyle(color: Color(0xFFD4C4A8), fontSize: 12),
       prefixIcon: Icon(icon, color: const Color(0xFFD4C4A8), size: 20),
       border: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -1081,8 +1148,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide:
-        const BorderSide(color: Color(0xFFD4C4A8), width: 2),
+        borderSide: const BorderSide(color: Color(0xFFD4C4A8), width: 2),
       ),
       filled: true,
       fillColor: const Color(0xFFFFF8F0),

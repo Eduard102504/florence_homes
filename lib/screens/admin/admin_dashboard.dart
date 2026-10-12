@@ -3,26 +3,153 @@ import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../providers/auth_provider.dart';
+import '../../services/archive_service.dart';
 import 'manage_residents.dart';
 import 'gate_entries_history.dart';
 import 'pending_approvals.dart';
 import 'manual_entry_screen.dart';
 import 'scanner_management_screen.dart';
-import 'pending_visits_screen.dart'; // ← NEW
+import 'pending_visits_screen.dart';
 
-class AdminDashboard extends StatelessWidget {
+class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
+
+  @override
+  State<AdminDashboard> createState() => _AdminDashboardState();
+}
+
+class _AdminDashboardState extends State<AdminDashboard> {
+  final ArchiveService _archiveService = ArchiveService();
+
+  @override
+  void initState() {
+    super.initState();
+    _runArchiveMigration();
+  }
+
+  Future<void> _runArchiveMigration() async {
+    try {
+      final moved = await _archiveService.migrateOldArchivesToRecords();
+      if (moved > 0 && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '📖 $moved old archive${moved == 1 ? "" : "s"} moved to Records',
+            ),
+            backgroundColor: const Color(0xFF8D6E63),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Archive migration error: $e');
+    }
+  }
+
+  // ============================================================
+  // INLINE HEADER
+  // ============================================================
+  Widget _buildHeader({
+    required String title,
+    required IconData titleIcon,
+    List<Widget> actions = const [],
+    bool showBackButton = false,
+  }) {
+    return Container(
+      color: const Color(0xFFD4C4A8),
+      padding: EdgeInsets.fromLTRB(
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+        kIsWeb ? 20 : 16,
+        kIsWeb ? 14 : 12,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // ---------- TOP ROW ----------
+          SizedBox(
+            height: 40,
+            child: Row(
+              children: [
+                if (showBackButton)
+                  _iconPill(
+                    icon: Icons.arrow_back,
+                    tooltip: 'Back',
+                    onTap: () => Navigator.pop(context),
+                  ),
+                const Spacer(),
+                // Actions pinned to the right
+                ...actions,
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          // ---------- TITLE ROW ----------
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Icon(titleIcon, size: 26, color: const Color(0xFFFFF8F0)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.2,
+                    fontSize: 22,
+                    color: Color(0xFFFFF8F0),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _iconPill({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF8F0).withOpacity(0.15),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: const Color(0xFFFFF8F0).withOpacity(0.25),
+              width: 1,
+            ),
+          ),
+          child: Tooltip(
+            message: tooltip,
+            child: Icon(icon, color: const Color(0xFFFFF8F0), size: 20),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final screenWidth = MediaQuery.of(context).size.width;
 
-    // ==================== LAYOUT CONSTANTS ====================
     final double contentMaxWidth = kIsWeb ? 900 : double.infinity;
     final double outerPadding = kIsWeb ? 20 : 12;
 
-    // ==================== GRID COLUMNS ====================
     int crossAxisCount = 2;
     if (kIsWeb) {
       if (screenWidth > 1200) {
@@ -35,37 +162,12 @@ class AdminDashboard extends StatelessWidget {
     }
     if (screenWidth < 600) crossAxisCount = 2;
 
-    // ==================== GRID SIZING ====================
     final double gridAspect = kIsWeb ? 1.4 : 1.1;
     final double gridSpacing = kIsWeb ? 14 : 10;
 
     return Scaffold(
-      appBar: AppBar(
-        title: Row(
-          children: const [
-            Icon(Icons.home_work, size: 22, color: Color(0xFFFFF8F0)),
-            SizedBox(width: 8),
-            Text(
-              'Admin Dashboard',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1,
-                fontSize: 18,
-              ),
-            ),
-          ],
-        ),
-        backgroundColor: const Color(0xFFD4C4A8),
-        elevation: 0,
-        centerTitle: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, size: 20),
-            onPressed: () => _showLogoutConfirmation(context, authProvider),
-            color: const Color(0xFFFFF8F0),
-          ),
-        ],
-      ),
+      // ❌ NO appBar here anymore
+      backgroundColor: const Color(0xFFD4C4A8),
       body: Container(
         constraints: const BoxConstraints.expand(),
         decoration: const BoxDecoration(
@@ -80,251 +182,297 @@ class AdminDashboard extends StatelessWidget {
           ),
         ),
         child: SafeArea(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: EdgeInsets.all(outerPadding),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: BoxConstraints(maxWidth: contentMaxWidth),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // ==================== WELCOME CARD ====================
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFD4C4A8).withOpacity(0.2),
-                            blurRadius: 10,
-                            offset: const Offset(0, 3),
-                          ),
-                        ],
-                      ),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: const Color(0xFFE0D5C1),
-                            width: 1.5,
-                          ),
-                        ),
-                        padding: const EdgeInsets.all(14),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                gradient: const LinearGradient(
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                  colors: [
-                                    Color(0xFFD4C4A8),
-                                    Color(0xFFC4A882),
-                                  ],
+          child: Column(
+            children: [
+              _buildHeader(
+                title: 'Admin Dashboard',
+                titleIcon: Icons.home_work,
+                actions: [
+                  _iconPill(
+                    icon: Icons.logout,
+                    tooltip: 'Logout',
+                    onTap: () =>
+                        _showLogoutConfirmation(context, authProvider),
+                  ),
+                ],
+              ),
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: EdgeInsets.all(outerPadding),
+                  child: Center(
+                    child: ConstrainedBox(
+                      constraints:
+                      BoxConstraints(maxWidth: contentMaxWidth),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFFD4C4A8)
+                                      .withOpacity(0.2),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 3),
                                 ),
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Icon(
-                                Icons.admin_panel_settings,
-                                size: kIsWeb ? 28 : 26,
-                                color: const Color(0xFFFFF8F0),
-                              ),
+                              ],
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: const Color(0xFFE0D5C1),
+                                  width: 1.5,
+                                ),
+                              ),
+                              padding: const EdgeInsets.all(14),
+                              child: Row(
                                 children: [
-                                  Text(
-                                    'Welcome, ${authProvider.currentUser?.fullName ?? 'Admin'}!',
-                                    style: TextStyle(
-                                      fontSize: kIsWeb ? 16 : 14,
-                                      fontWeight: FontWeight.bold,
-                                      color: const Color(0xFF6B5B4F),
+                                  Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      gradient: const LinearGradient(
+                                        begin: Alignment.topLeft,
+                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Color(0xFFD4C4A8),
+                                          Color(0xFFC4A882),
+                                        ],
+                                      ),
+                                      borderRadius:
+                                      BorderRadius.circular(12),
                                     ),
-                                    overflow: TextOverflow.ellipsis,
+                                    child: Icon(
+                                      Icons.admin_panel_settings,
+                                      size: kIsWeb ? 28 : 26,
+                                      color: const Color(0xFFFFF8F0),
+                                    ),
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Manage residents, gate access, and view reports',
-                                    style: TextStyle(
-                                      fontSize: kIsWeb ? 11 : 10,
-                                      color: const Color(0xFFB8A99A),
-                                      fontWeight: FontWeight.w500,
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Welcome, ${authProvider.currentUser?.fullName ?? 'Admin'}!',
+                                          style: TextStyle(
+                                            fontSize: kIsWeb ? 16 : 14,
+                                            fontWeight: FontWeight.bold,
+                                            color:
+                                            const Color(0xFF6B5B4F),
+                                          ),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          'Manage residents, gate access, and view reports',
+                                          style: TextStyle(
+                                            fontSize: kIsWeb ? 11 : 10,
+                                            color:
+                                            const Color(0xFFB8A99A),
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ],
                                     ),
                                   ),
                                 ],
                               ),
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 14),
+
+                          StreamBuilder<QuerySnapshot>(
+                            stream: FirebaseFirestore.instance
+                                .collection('users')
+                                .where('userType',
+                                isEqualTo: 'resident')
+                                .snapshots(),
+                            builder: (context, snapshot) {
+                              if (!snapshot.hasData) {
+                                return Wrap(
+                                  spacing: 8,
+                                  runSpacing: 8,
+                                  alignment: WrapAlignment.center,
+                                  children: [
+                                    _buildStatCard(
+                                        'Total',
+                                        '...',
+                                        Icons.people,
+                                        const Color(0xFFD4C4A8),
+                                        screenWidth),
+                                    _buildStatCard(
+                                        'RFID',
+                                        '...',
+                                        Icons.nfc,
+                                        const Color(0xFFC4A882),
+                                        screenWidth),
+                                    _buildStatCard(
+                                        'Pending',
+                                        '...',
+                                        Icons.pending,
+                                        const Color(0xFFB8A99A),
+                                        screenWidth),
+                                  ],
+                                );
+                              }
+
+                              final residents = snapshot.data!.docs;
+                              final totalResidents = residents.length;
+                              final rfidRegistered =
+                                  residents.where((doc) {
+                                    final data =
+                                    doc.data() as Map<String, dynamic>;
+                                    return data['rfidTag'] != null &&
+                                        data['rfidTag']
+                                            .toString()
+                                            .isNotEmpty;
+                                  }).length;
+                              final pendingApprovals =
+                                  residents.where((doc) {
+                                    final data =
+                                    doc.data() as Map<String, dynamic>;
+                                    return data['isApproved'] != true;
+                                  }).length;
+
+                              return Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                alignment: WrapAlignment.center,
+                                children: [
+                                  _buildStatCard(
+                                      'Total',
+                                      totalResidents.toString(),
+                                      Icons.people,
+                                      const Color(0xFFD4C4A8),
+                                      screenWidth),
+                                  _buildStatCard(
+                                      'RFID',
+                                      rfidRegistered.toString(),
+                                      Icons.nfc,
+                                      const Color(0xFFC4A882),
+                                      screenWidth),
+                                  _buildStatCard(
+                                      'Pending',
+                                      pendingApprovals.toString(),
+                                      Icons.pending,
+                                      const Color(0xFFB8A99A),
+                                      screenWidth),
+                                ],
+                              );
+                            },
+                          ),
+
+                          const SizedBox(height: 14),
+
+                          GridView.count(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            crossAxisCount: crossAxisCount,
+                            crossAxisSpacing: gridSpacing,
+                            mainAxisSpacing: gridSpacing,
+                            childAspectRatio: gridAspect,
+                            children: [
+                              _buildMenuCard(
+                                context,
+                                title: '👥 Residents',
+                                icon: Icons.people,
+                                color: const Color(0xFFD4C4A8),
+                                description: 'Manage residents',
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (context) =>
+                                      const ManageResidents()),
+                                ),
+                              ),
+                              _buildMenuCard(
+                                context,
+                                title: '📜 History',
+                                icon: Icons.history,
+                                color: const Color(0xFFC4A882),
+                                description: 'Gate entries',
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (context) =>
+                                      const GateEntriesHistory()),
+                                ),
+                              ),
+                              _buildMenuCard(
+                                context,
+                                title: '⏳ Pending',
+                                icon: Icons.pending_actions,
+                                color: const Color(0xFFB8A99A),
+                                description: 'Approve residents',
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (context) =>
+                                      const PendingApprovals()),
+                                ),
+                              ),
+                              _buildMenuCard(
+                                context,
+                                title: '✏️ Manual',
+                                icon: Icons.edit,
+                                color: const Color(0xFF8D6E63),
+                                description: 'Manual entry',
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (context) =>
+                                      const ManualEntryScreen()),
+                                ),
+                              ),
+                              _buildMenuCard(
+                                context,
+                                title: '📡 QR Scanner',
+                                icon: Icons.scanner,
+                                color: const Color(0xFFA89070),
+                                description: 'For Visitors',
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (context) =>
+                                      const ScannerManagementScreen()),
+                                ),
+                              ),
+                              _buildMenuCard(
+                                context,
+                                title: '🚪 Pending Visits',
+                                icon: Icons.exit_to_app,
+                                color: const Color(0xFFFF9800),
+                                description: 'Guests still inside',
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (context) =>
+                                      const PendingVisitsScreen()),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 14),
-
-                    // ==================== STATS ====================
-                    StreamBuilder<QuerySnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('users')
-                          .where('userType', isEqualTo: 'resident')
-                          .snapshots(),
-                      builder: (context, snapshot) {
-                        if (!snapshot.hasData) {
-                          return Wrap(
-                            spacing: 8,
-                            runSpacing: 8,
-                            alignment: WrapAlignment.center,
-                            children: [
-                              _buildStatCard('Total', '...', Icons.people,
-                                  const Color(0xFFD4C4A8), screenWidth),
-                              _buildStatCard('RFID', '...', Icons.nfc,
-                                  const Color(0xFFC4A882), screenWidth),
-                              _buildStatCard('Pending', '...', Icons.pending,
-                                  const Color(0xFFB8A99A), screenWidth),
-                            ],
-                          );
-                        }
-
-                        final residents = snapshot.data!.docs;
-                        final totalResidents = residents.length;
-                        final rfidRegistered = residents.where((doc) {
-                          final data = doc.data() as Map<String, dynamic>;
-                          return data['rfidTag'] != null &&
-                              data['rfidTag'].toString().isNotEmpty;
-                        }).length;
-                        final pendingApprovals = residents.where((doc) {
-                          final data = doc.data() as Map<String, dynamic>;
-                          return data['isApproved'] != true;
-                        }).length;
-
-                        return Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          alignment: WrapAlignment.center,
-                          children: [
-                            _buildStatCard('Total', totalResidents.toString(),
-                                Icons.people, const Color(0xFFD4C4A8),
-                                screenWidth),
-                            _buildStatCard('RFID', rfidRegistered.toString(),
-                                Icons.nfc, const Color(0xFFC4A882),
-                                screenWidth),
-                            _buildStatCard(
-                                'Pending',
-                                pendingApprovals.toString(),
-                                Icons.pending,
-                                const Color(0xFFB8A99A),
-                                screenWidth),
-                          ],
-                        );
-                      },
-                    ),
-
-                    const SizedBox(height: 14),
-
-                    // ==================== MENU GRID ====================
-                    GridView.count(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      crossAxisCount: crossAxisCount,
-                      crossAxisSpacing: gridSpacing,
-                      mainAxisSpacing: gridSpacing,
-                      childAspectRatio: gridAspect,
-                      children: [
-                        _buildMenuCard(
-                          context,
-                          title: '👥 Residents',
-                          icon: Icons.people,
-                          color: const Color(0xFFD4C4A8),
-                          description: 'Manage residents',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) =>
-                                const ManageResidents()),
-                          ),
-                        ),
-                        _buildMenuCard(
-                          context,
-                          title: '📜 History',
-                          icon: Icons.history,
-                          color: const Color(0xFFC4A882),
-                          description: 'Gate entries',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) =>
-                                const GateEntriesHistory()),
-                          ),
-                        ),
-                        _buildMenuCard(
-                          context,
-                          title: '⏳ Pending',
-                          icon: Icons.pending_actions,
-                          color: const Color(0xFFB8A99A),
-                          description: 'Approve residents',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) =>
-                                const PendingApprovals()),
-                          ),
-                        ),
-                        _buildMenuCard(
-                          context,
-                          title: '✏️ Manual',
-                          icon: Icons.edit,
-                          color: const Color(0xFF8D6E63),
-                          description: 'Manual entry',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) =>
-                                const ManualEntryScreen()),
-                          ),
-                        ),
-                        _buildMenuCard(
-                          context,
-                          title: '📡 QR Scanner',
-                          icon: Icons.scanner,
-                          color: const Color(0xFFA89070),
-                          description: 'For Visitors',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) =>
-                                const ScannerManagementScreen()),
-                          ),
-                        ),
-                        // ==================== NEW: PENDING VISITS ====================
-                        _buildMenuCard(
-                          context,
-                          title: '🚪 Pending Visits',
-                          icon: Icons.exit_to_app,
-                          color: const Color(0xFFFF9800),
-                          description: 'Guests still inside',
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (context) =>
-                                const PendingVisitsScreen()),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                  ],
+                  ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // ==================== LOGOUT ====================
   void _showLogoutConfirmation(
       BuildContext context, AuthProvider authProvider) {
     showDialog(
@@ -389,7 +537,6 @@ class AdminDashboard extends StatelessWidget {
     );
   }
 
-  // ==================== STAT CARD ====================
   Widget _buildStatCard(String title, String value, IconData icon,
       Color color, double screenWidth) {
     double cardWidth = screenWidth < 600 ? (screenWidth / 3) - 12 : 100;
@@ -434,7 +581,6 @@ class AdminDashboard extends StatelessWidget {
     );
   }
 
-  // ==================== MENU CARD ====================
   Widget _buildMenuCard(
       BuildContext context, {
         required String title,
