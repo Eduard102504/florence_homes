@@ -33,6 +33,17 @@ class ArchiveService {
       archiveDoc.remove('plaintextPassword'); // never store sensitive data
 
       await _firestore.collection(archiveCollection).add(archiveDoc);
+
+      // 🔥 CHANGED — also delete the private doc when archiving
+      try {
+        await _firestore
+            .collection('users_private')
+            .doc(originalId)
+            .delete();
+      } catch (e) {
+        print('Private doc cleanup skipped: $e');
+      }
+
       return true;
     } catch (e) {
       print('Archive error: $e');
@@ -108,8 +119,6 @@ class ArchiveService {
     }
   }
 
-  /// Permanently delete ONE archived record
-  /// (This is the ONLY destructive operation — explicitly triggered by admin.)
   Future<bool> permanentlyDelete(String archiveId) async {
     try {
       await _firestore.collection(archiveCollection).doc(archiveId).delete();
@@ -120,7 +129,6 @@ class ArchiveService {
     }
   }
 
-  /// Clear entire archive
   Future<int> clearAllArchive() async {
     try {
       final snap = await _firestore.collection(archiveCollection).get();
@@ -139,9 +147,6 @@ class ArchiveService {
   // ============================================================
   // MOVE ARCHIVE → RECORDS
   // ============================================================
-
-  /// Move a single archived resident to Records
-  /// Called from archive screen ("Move to Records" button)
   Future<Map<String, dynamic>> moveToRecords(
       ArchivedResidentModel archived, {
         String? adminUid,
@@ -172,12 +177,10 @@ class ArchiveService {
         movedByName: adminName ?? 'System (auto)',
       );
 
-      // Save record
       await _firestore
           .collection(recordsCollection)
           .add(record.toMap());
 
-      // Remove from archive
       await _firestore
           .collection(archiveCollection)
           .doc(archived.archiveId)
@@ -196,9 +199,6 @@ class ArchiveService {
     }
   }
 
-  /// Auto-migrate archives older than 30 days to Records.
-  /// Called silently when admin opens dashboard.
-  /// ✅ NEVER DELETES — just moves.
   Future<int> migrateOldArchivesToRecords() async {
     try {
       final cutoff =
@@ -217,7 +217,6 @@ class ArchiveService {
       for (final doc in snap.docs) {
         final data = doc.data();
 
-        // Build record payload (reuse archived data)
         final recordPayload = <String, dynamic>{
           'originalId': data['originalId'],
           'residentId': data['residentId'],
@@ -238,12 +237,10 @@ class ArchiveService {
           'movedByName': 'System (auto 30d)',
         };
 
-        // Add to records collection
         final newRecordRef =
         _firestore.collection(recordsCollection).doc();
         batch.set(newRecordRef, recordPayload);
 
-        // Remove from archive
         batch.delete(doc.reference);
         moved++;
       }
@@ -260,8 +257,6 @@ class ArchiveService {
   // ============================================================
   // RECORDS (READ-ONLY)
   // ============================================================
-
-  /// Stream of all records (newest first)
   Stream<List<ResidentRecordModel>> streamResidentRecords() {
     return _firestore
         .collection(recordsCollection)
@@ -275,7 +270,6 @@ class ArchiveService {
     });
   }
 
-  /// Permanent delete from Records (only explicit admin action)
   Future<bool> permanentlyDeleteRecord(String recordId) async {
     try {
       await _firestore.collection(recordsCollection).doc(recordId).delete();
@@ -286,7 +280,6 @@ class ArchiveService {
     }
   }
 
-  /// Clear entire records collection
   Future<int> clearAllRecords() async {
     try {
       final snap = await _firestore.collection(recordsCollection).get();

@@ -173,6 +173,7 @@ class AuthService {
   }
 
   // ==================== MANUAL REGISTRATION (ADMIN) ====================
+  // 🔥 CHANGED — password now stored in `users_private`
   Future<Map<String, dynamic>> registerResidentManually({
     required String fullName,
     required String password,
@@ -230,13 +231,19 @@ class AuthService {
         phoneNumber: phoneNumber,
       );
 
+      // Public users doc (NO password)
       await _firestore.collection('users').doc(userId).set({
         ...user.toMap(),
         'authEmail': authEmail,
         'hasRealEmail': hasRealEmail,
         'isManualRegistration': true,
+      });
+
+      // Private users_private doc (password only)
+      await _firestore.collection('users_private').doc(userId).set({
         'plaintextPassword': password,
       });
+
       print('✅ Firestore user created for: $residentId');
 
       await _auth.signOut();
@@ -258,6 +265,7 @@ class AuthService {
   }
 
   // ==================== SELF-REGISTRATION (EMAIL VERIFIED) ====================
+  // 🔥 CHANGED — password now stored in `users_private`
   Future<Map<String, dynamic>> registerUser(
       String email,
       String password,
@@ -310,13 +318,19 @@ class AuthService {
         phoneNumber: phoneNumber,
       );
 
+      // Public users doc (NO password)
       await _firestore.collection('users').doc(userId).set({
         ...user.toMap(),
         'authEmail': normalizedEmail,
         'hasRealEmail': true,
         'isManualRegistration': false,
+      });
+
+      // Private users_private doc (password only)
+      await _firestore.collection('users_private').doc(userId).set({
         'plaintextPassword': password,
       });
+
       print('✅ Firestore user created for: $normalizedEmail');
 
       await _auth.signOut();
@@ -465,7 +479,6 @@ class AuthService {
         };
       }
 
-      // Check if email already in use by another account
       List<String> signInMethods =
       await _auth.fetchSignInMethodsForEmail(normalizedEmail);
       if (signInMethods.isNotEmpty) {
@@ -480,7 +493,6 @@ class AuthService {
         return {'success': false, 'message': 'Not logged in'};
       }
 
-      // Verify current password by re-authenticating
       final credential = EmailAuthProvider.credential(
         email: user.email ?? '',
         password: currentPassword,
@@ -495,10 +507,8 @@ class AuthService {
         };
       }
 
-      // Update Firebase Auth email
       await user.updateEmail(normalizedEmail);
 
-      // Update Firestore
       await _firestore.collection('users').doc(userId).update({
         'email': normalizedEmail,
         'authEmail': normalizedEmail,
@@ -519,7 +529,6 @@ class AuthService {
   }
 
   // ==================== CHANGE PASSWORD VIA OTP ====================
-  // Step 1: Send OTP to the resident's email
   Future<Map<String, dynamic>> sendPasswordChangeCode(String userId) async {
     try {
       DocumentSnapshot userDoc =
@@ -574,7 +583,6 @@ class AuthService {
     }
   }
 
-  // Step 2: Verify code & change password
   Future<Map<String, dynamic>> changePasswordWithCode({
     required String userId,
     required String email,
@@ -655,9 +663,15 @@ class AuthService {
     }
   }
 
+  // 🔥 CHANGED — also deletes users_private doc
   Future<bool> rejectUser(String userId, String reason) async {
     try {
+      // Clean up private doc first
+      await _firestore.collection('users_private').doc(userId).delete();
+
+      // Delete user doc
       await _firestore.collection('users').doc(userId).delete();
+
       User? user = _auth.currentUser;
       if (user != null && user.uid == userId) {
         await user.delete();

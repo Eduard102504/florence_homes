@@ -135,18 +135,36 @@ class _PendingApprovalsState extends State<PendingApprovals> {
     });
   }
 
+  // ==================== APPROVE ====================
+  // 🔥 CHANGED — password now read from `users_private`
   Future<void> _approveUser(UserModel user) async {
     setState(() => _isProcessing = true);
 
     try {
+      // Read public user doc (for residentId, email, hasRealEmail)
       final userDoc = await _firestore.collection('users').doc(user.id).get();
       final data = userDoc.data() as Map<String, dynamic>;
 
       final residentId = data['residentId'] as String?;
-      final plaintextPassword = data['plaintextPassword'] as String?;
       final hasRealEmail = data['hasRealEmail'] == true;
       final storedEmail = (data['email'] as String?) ?? '';
 
+      // 🔥 Read password from private collection
+      String? plaintextPassword;
+      try {
+        final privateDoc = await _firestore
+            .collection('users_private')
+            .doc(user.id)
+            .get();
+        if (privateDoc.exists) {
+          plaintextPassword =
+          (privateDoc.data()?['plaintextPassword']) as String?;
+        }
+      } catch (e) {
+        print('⚠️ Could not read users_private: $e');
+      }
+
+      // Mark as approved
       await _firestore.collection('users').doc(user.id).update({
         'isApproved': true,
       });
@@ -165,10 +183,16 @@ class _PendingApprovalsState extends State<PendingApprovals> {
           password: plaintextPassword,
         );
 
+        // 🔥 Delete the private doc after successful email
         if (emailSent) {
-          await _firestore.collection('users').doc(user.id).update({
-            'plaintextPassword': FieldValue.delete(),
-          });
+          try {
+            await _firestore
+                .collection('users_private')
+                .doc(user.id)
+                .delete();
+          } catch (e) {
+            print('⚠️ Could not delete users_private: $e');
+          }
         }
 
         message = emailSent
@@ -293,6 +317,8 @@ class _PendingApprovalsState extends State<PendingApprovals> {
     );
   }
 
+  // ==================== REJECT ====================
+  // 🔥 CHANGED — also deletes `users_private` doc
   Future<void> _rejectUser(UserModel user) async {
     setState(() => _isProcessing = true);
 
@@ -311,6 +337,14 @@ class _PendingApprovalsState extends State<PendingApprovals> {
         );
       }
 
+      // 🔥 Delete private doc first
+      try {
+        await _firestore.collection('users_private').doc(user.id).delete();
+      } catch (e) {
+        print('⚠️ Could not delete users_private: $e');
+      }
+
+      // Delete user doc
       await _firestore.collection('users').doc(user.id).delete();
 
       if (mounted) {
