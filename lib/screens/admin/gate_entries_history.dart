@@ -59,7 +59,11 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     } else if (timestamp is DateTime) {
       utcTime = timestamp;
     } else if (timestamp is String) {
-      utcTime = DateTime.parse(timestamp);
+      try {
+        utcTime = DateTime.parse(timestamp);
+      } catch (_) {
+        return DateTime.now();
+      }
     } else {
       return DateTime.now();
     }
@@ -125,13 +129,19 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
         .snapshots()
         .listen(
           (snapshot) {
-        final names = <String, String>{};
-        for (var doc in snapshot.docs) {
-          names[doc.id] = (doc.get('fullName') as String?) ?? 'Unknown';
+        try {
+          final names = <String, String>{};
+          for (var doc in snapshot.docs) {
+            names[doc.id] = (doc.get('fullName') as String?) ?? 'Unknown';
+          }
+          if (mounted) setState(() => _residentNames = names);
+        } catch (e) {
+          print('🔴 residents parse error: $e');
         }
-        if (mounted) setState(() => _residentNames = names);
       },
-      onError: (e) => print('Residents stream error: $e'),
+      onError: (e) {
+        print('🔴 residents stream error: $e');
+      },
     );
   }
 
@@ -142,26 +152,41 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
         .snapshots()
         .listen(
           (snapshot) {
-        final list = snapshot.docs.map((doc) {
-          final data = doc.data() as Map<String, dynamic>;
-          data['id'] = doc.id;
-          return data;
-        }).toList();
+        try {
+          final list = snapshot.docs.map((doc) {
+            final data = doc.data() as Map<String, dynamic>;
+            data['id'] = doc.id;
+            return data;
+          }).toList();
 
-        list.sort((a, b) =>
-            _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a)));
+          list.sort((a, b) =>
+              _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a)));
 
-        if (mounted) {
+          print('🔍 gate_entries stream docs: ${list.length}');
+
+          if (!mounted) return;
+
+          _allEntries = list;
+          _applyFiltersInternal();
+
           setState(() {
-            _allEntries = list;
-            _applyFiltersInternal();
             if (_currentPage > _totalPages) _currentPage = _totalPages;
+            if (_currentPage < 1) _currentPage = 1;
             _errorMessage = null;
           });
+        } catch (e, st) {
+          print('🔴 entries stream processing error: $e\n$st');
+          if (mounted) {
+            setState(() {
+              _allEntries = [];
+              _entries = [];
+              _errorMessage = 'Error: $e';
+            });
+          }
         }
       },
       onError: (e) {
-        print('Entries stream error: $e');
+        print('🔴 entries stream error: $e');
         if (mounted) setState(() => _errorMessage = 'Error: $e');
       },
     );
@@ -169,32 +194,37 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
 
   // ==================== FILTERS ====================
   void _applyFiltersInternal() {
-    List<Map<String, dynamic>> filtered = List.from(_allEntries);
+    try {
+      List<Map<String, dynamic>> filtered = List.from(_allEntries);
 
-    if (_selectedResident != 'all') {
-      filtered = filtered
-          .where((e) => e['residentId'] == _selectedResident)
-          .toList();
+      if (_selectedResident != 'all') {
+        filtered = filtered
+            .where((e) => e['residentId'] == _selectedResident)
+            .toList();
+      }
+
+      if (_selectedEntryType != 'all') {
+        filtered = filtered
+            .where((e) => e['entryType'] == _selectedEntryType)
+            .toList();
+      }
+
+      if (_dateRange != null) {
+        filtered = filtered.where((entry) {
+          final t = _getEntryTimestamp(entry);
+          return t.isAfter(_dateRange!.start) &&
+              t.isBefore(_dateRange!.end.add(const Duration(days: 1)));
+        }).toList();
+      }
+
+      filtered.sort((a, b) =>
+          _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a)));
+
+      _entries = filtered;
+    } catch (e) {
+      print('🔴 _applyFiltersInternal error: $e');
+      _entries = List.from(_allEntries);
     }
-
-    if (_selectedEntryType != 'all') {
-      filtered = filtered
-          .where((e) => e['entryType'] == _selectedEntryType)
-          .toList();
-    }
-
-    if (_dateRange != null) {
-      filtered = filtered.where((entry) {
-        final t = _getEntryTimestamp(entry);
-        return t.isAfter(_dateRange!.start) &&
-            t.isBefore(_dateRange!.end.add(const Duration(days: 1)));
-      }).toList();
-    }
-
-    filtered.sort((a, b) =>
-        _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a)));
-
-    _entries = filtered;
   }
 
   void _applyFilters() {
@@ -219,15 +249,978 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     }
   }
 
-  // ==================== EXPORT PDF ====================
+  // ==================== BUILD ====================
+  @override
+  Widget build(BuildContext context) {
+    // 🖥️ WEB LAYOUT
+    if (kIsWeb) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F0E8),
+        body: Row(
+          children: [
+            _buildWebSidebar(),
+            Expanded(
+              child: Column(
+                children: [
+                  _buildWebHeader(),
+                  Expanded(
+                    // ✅ SAFE BUILD WRAPPER
+                    child: _buildWebBodySafely(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 📱 MOBILE LAYOUT
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F0E8),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildMobileHeader(),
+            Expanded(child: _buildMobileBodySafely()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // 🖥️ WEB SAFE BODY
+  // ============================================================
+  Widget _buildWebBodySafely() {
+    try {
+      // 1. Loading
+      if (_allEntries.isEmpty && _entries.isEmpty && _errorMessage == null) {
+        return const Center(
+            child: CircularProgressIndicator(color: Color(0xFF8D6E63)));
+      }
+
+      // 2. Error
+      if (_errorMessage != null) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline,
+                  size: 48, color: Color(0xFFD32F2F)),
+              const SizedBox(height: 12),
+              Text(_errorMessage!,
+                  style: const TextStyle(color: Color(0xFFD32F2F))),
+            ],
+          ),
+        );
+      }
+
+      // 3. Empty
+      if (_entries.isEmpty) {
+        return const Center(
+            child: Text('No gate entries found.',
+                style: TextStyle(fontSize: 18, color: Color(0xFF8D6E63))));
+      }
+
+      // 4. Data
+      final paginated = _paginatedEntries;
+      final total = _totalPages;
+
+      return SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Stats
+            Wrap(
+              spacing: 20,
+              runSpacing: 20,
+              children: [
+                _buildWebStatCard('Total Entries', _entries.length.toString(),
+                    Icons.door_front_door, const Color(0xFF8D6E63)),
+                _buildWebStatCard(
+                    'RFID Scans',
+                    _entries
+                        .where((e) =>
+                    e['entryType'] == 'rfid' ||
+                        e['entryType'] == 'uhf_rfid')
+                        .length
+                        .toString(),
+                    Icons.nfc,
+                    const Color(0xFFC4A882)),
+                _buildWebStatCard(
+                    'QR Visitors',
+                    _entries
+                        .where((e) => e['entryType'] == 'qr_visitor')
+                        .length
+                        .toString(),
+                    Icons.qr_code,
+                    const Color(0xFFA89070)),
+                _buildWebStatCard(
+                    'Manual',
+                    _entries
+                        .where((e) => e['entryType'] == 'manual')
+                        .length
+                        .toString(),
+                    Icons.person,
+                    const Color(0xFFFF9800)),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Chips
+            if (_dateRange != null ||
+                _selectedResident != 'all' ||
+                _selectedEntryType != 'all')
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE0D5C1))),
+                child: Row(
+                  children: [
+                    const Icon(Icons.filter_alt,
+                        size: 16, color: Color(0xFF8D6E63)),
+                    const SizedBox(width: 8),
+                    if (_dateRange != null)
+                      _buildWebFilterChip(
+                          '📅 ${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}',
+                              () {
+                            setState(() => _dateRange = null);
+                            _applyFilters();
+                          }),
+                    if (_selectedResident != 'all')
+                      _buildWebFilterChip(
+                          '👤 ${_residentNames[_selectedResident] ?? 'Unknown'}',
+                              () {
+                            setState(() => _selectedResident = 'all');
+                            _applyFilters();
+                          }),
+                    if (_selectedEntryType != 'all')
+                      _buildWebFilterChip(
+                          '🔖 ${_selectedEntryType.toUpperCase()}', () {
+                        setState(() => _selectedEntryType = 'all');
+                        _applyFilters();
+                      }),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () {
+                        setState(() {
+                          _dateRange = null;
+                          _selectedResident = 'all';
+                          _selectedEntryType = 'all';
+                        });
+                        _applyFilters();
+                      },
+                      child: const Text('Clear All',
+                          style: TextStyle(
+                              color: Color(0xFFD32F2F), fontSize: 12)),
+                    ),
+                  ],
+                ),
+              ),
+
+            // ✅ LIST: Not wrapped in Expanded, perfectly fine inside SingleChildScrollView
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: paginated.length,
+              itemBuilder: (context, index) {
+                final entry = paginated[index];
+                final timestamp = _getEntryTimestamp(entry);
+                final entryType = entry['entryType'] ?? 'unknown';
+                final residentName = entry['residentName'] ?? 'Unknown';
+                final visitorName = entry['visitorName'];
+                final status = entry['status'] ?? 'entry';
+                final openedBy = entry['openedBy'] ?? entry['closedBy'];
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFFE0D5C1)),
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black.withOpacity(0.02),
+                            blurRadius: 4,
+                            offset: const Offset(0, 2))
+                      ]),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                            color: _getTypeColor(entryType).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10)),
+                        child: Icon(_getTypeIcon(entryType),
+                            color: _getTypeColor(entryType), size: 24),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(residentName,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                    color: Color(0xFF5D4037))),
+                            if (visitorName != null)
+                              Text('Visitor: $visitorName',
+                                  style: const TextStyle(
+                                      fontSize: 12, color: Color(0xFF8D6E63))),
+                          ],
+                        ),
+                      ),
+                      Expanded(
+                          flex: 1,
+                          child: Text(_getEntryTypeDisplay(entryType),
+                              style: const TextStyle(
+                                  fontSize: 13, color: Color(0xFF8D6E63)))),
+                      Expanded(
+                          flex: 1,
+                          child: Text(
+                              DateFormat('MMM dd, yyyy • hh:mm a')
+                                  .format(timestamp),
+                              style: const TextStyle(
+                                  fontSize: 13, color: Color(0xFF8D6E63)))),
+                      Expanded(
+                          flex: 1,
+                          child: Text(
+                              openedBy != null ? 'By: $openedBy' : '—',
+                              style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Color(0xFF8D6E63),
+                                  fontWeight: FontWeight.bold))),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                            color: status == 'entry'
+                                ? const Color(0xFF4CAF50).withOpacity(0.1)
+                                : const Color(0xFFD32F2F).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(20)),
+                        child: Text(status == 'entry' ? '🟢 IN' : '🔴 OUT',
+                            style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: status == 'entry'
+                                    ? const Color(0xFF4CAF50)
+                                    : const Color(0xFFD32F2F))),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+
+            // Pagination
+            if (_pageSize != 0 && total > 1)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    IconButton(
+                        onPressed: _currentPage > 1
+                            ? () => _goToPage(_currentPage - 1)
+                            : null,
+                        icon: const Icon(Icons.chevron_left)),
+                    Text('Page $_currentPage of $total',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF5D4037))),
+                    IconButton(
+                        onPressed: _currentPage < total
+                            ? () => _goToPage(_currentPage + 1)
+                            : null,
+                        icon: const Icon(Icons.chevron_right)),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      );
+    } catch (e, stack) {
+      // ✅ CATCH RENDERING CRASHES
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.warning_amber_rounded,
+                size: 60, color: Color(0xFFD32F2F)),
+            const SizedBox(height: 16),
+            const Text('Data Render Error (Admin Web)',
+                style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFFD32F2F))),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.all(24),
+              child: Text('$e\n\n$stack',
+                  style: const TextStyle(color: Colors.black54, fontSize: 12),
+                  textAlign: TextAlign.center),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+
+  // ============================================================
+  // 📱 MOBILE SAFE BODY
+  // ============================================================
+  Widget _buildMobileBodySafely() {
+    try {
+      if (_allEntries.isEmpty && _entries.isEmpty && _errorMessage == null) {
+        return const Center(
+            child: CircularProgressIndicator(color: Color(0xFFD4C4A8)));
+      }
+      if (_errorMessage != null && _allEntries.isEmpty) {
+        return const Center(
+            child: Text('Error loading data',
+                style: TextStyle(color: Color(0xFFD32F2F))));
+      }
+      if (_entries.isEmpty) {
+        return const Center(
+            child: Text('No entries found',
+                style: TextStyle(fontSize: 16, color: Color(0xFF8D6E63))));
+      }
+
+      final paginated = _paginatedEntries;
+      final total = _totalPages;
+
+      return SingleChildScrollView(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                _buildMobileStatCard('Total', _entries.length.toString(),
+                    Icons.door_front_door, const Color(0xFF5D4037)),
+                const SizedBox(width: 8),
+                _buildMobileStatCard(
+                    'RFID',
+                    _entries
+                        .where((e) =>
+                    e['entryType'] == 'rfid' ||
+                        e['entryType'] == 'uhf_rfid')
+                        .length
+                        .toString(),
+                    Icons.nfc,
+                    const Color(0xFF8D6E63)),
+                const SizedBox(width: 8),
+                _buildMobileStatCard(
+                    'Manual',
+                    _entries
+                        .where((e) => e['entryType'] == 'manual')
+                        .length
+                        .toString(),
+                    Icons.person,
+                    const Color(0xFFFF9800)),
+              ],
+            ),
+            const SizedBox(height: 20),
+
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: paginated.length,
+              itemBuilder: (context, index) {
+                final entry = paginated[index];
+                final timestamp = _getEntryTimestamp(entry);
+                final entryType = entry['entryType'] ?? 'unknown';
+                final residentName = entry['residentName'] ?? 'Unknown';
+                final visitorName = entry['visitorName'];
+                final status = entry['status'] ?? 'entry';
+                final openedBy = entry['openedBy'] ?? entry['closedBy'];
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border:
+                      Border.all(color: const Color(0xFFE0D5C1), width: 1),
+                      boxShadow: [
+                        BoxShadow(
+                            color: Colors.black.withOpacity(0.03),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2))
+                      ]),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                  color:
+                                  _getTypeColor(entryType).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(10)),
+                              child: Icon(_getTypeIcon(entryType),
+                                  size: 20, color: _getTypeColor(entryType)),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(residentName,
+                                      style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 15,
+                                          color: Color(0xFF5D4037))),
+                                  if (visitorName != null)
+                                    Text('👤 $visitorName',
+                                        style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Color(0xFF8D6E63))),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                  color: status == 'entry'
+                                      ? const Color(0xFF4CAF50)
+                                      .withOpacity(0.1)
+                                      : const Color(0xFFD32F2F).withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                      color: status == 'entry'
+                                          ? const Color(0xFF4CAF50)
+                                          .withOpacity(0.3)
+                                          : const Color(0xFFD32F2F)
+                                          .withOpacity(0.3))),
+                              child: Text(status == 'entry' ? '🟢 IN' : '🔴 OUT',
+                                  style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: status == 'entry'
+                                          ? const Color(0xFF4CAF50)
+                                          : const Color(0xFFD32F2F))),
+                            ),
+                          ],
+                        ),
+                        const Divider(color: Color(0xFFE0D5C1), height: 24),
+                        _mobileInfoRow(Icons.access_time, 'Time',
+                            DateFormat('MMM dd, yyyy • hh:mm a')
+                                .format(timestamp)),
+                        const SizedBox(height: 6),
+                        _mobileInfoRow(Icons.category, 'Type',
+                            _getEntryTypeDisplay(entryType)),
+                        if (openedBy != null) ...[
+                          const SizedBox(height: 6),
+                          _mobileInfoRow(
+                              Icons.badge, 'Processed By', openedBy),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+
+            if (_pageSize != 0 && total > 1)
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE0D5C1))),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      IconButton(
+                          onPressed: _currentPage > 1
+                              ? () => _goToPage(_currentPage - 1)
+                              : null,
+                          icon: const Icon(Icons.chevron_left,
+                              color: Color(0xFF8D6E63))),
+                      Text('Page $_currentPage of $total',
+                          style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF5D4037))),
+                      IconButton(
+                          onPressed: _currentPage < total
+                              ? () => _goToPage(_currentPage + 1)
+                              : null,
+                          icon: const Icon(Icons.chevron_right,
+                              color: Color(0xFF8D6E63))),
+                    ],
+                  ),
+                ),
+              ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      );
+    } catch (e, stack) {
+      return Center(
+        child: Text('Render Error: $e',
+            style: const TextStyle(color: Color(0xFFD32F2F))),
+      );
+    }
+  }
+
+  // ============================================================
+  // 🖥️ HEADER / SIDEBAR (UNCHANGED)
+  // ============================================================
+  Widget _buildWebSidebar() {
+    return Container(
+      width: 260,
+      color: const Color(0xFF5D4037),
+      child: Column(
+        children: [
+          const SizedBox(height: 40),
+          const Icon(Icons.home_work, size: 48, color: Color(0xFFFFF8F0)),
+          const SizedBox(height: 12),
+          const Text('Florence Homes',
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFFFF8F0),
+                  letterSpacing: 1)),
+          const Text('Admin Portal',
+              style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
+          const SizedBox(height: 40),
+          _buildWebSidebarItem(Icons.dashboard, 'Dashboard',
+              onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.people, 'Residents',
+              onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.security, 'Guards',
+              onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.pending_actions, 'Pending Approvals',
+              onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.history, 'Gate History',
+              isActive: true, onTap: () {}),
+          const Spacer(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)),
+            title: const Text('Back to Dashboard',
+                style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)),
+            onTap: () => Navigator.pop(context),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebSidebarItem(IconData icon, String title,
+      {bool isActive = false, required VoidCallback onTap}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: ListTile(
+        onTap: onTap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        tileColor: isActive
+            ? const Color(0xFFD4C4A8).withOpacity(0.15)
+            : Colors.transparent,
+        leading: Icon(icon,
+            color: isActive ? const Color(0xFFFFF8F0) : const Color(0xFFD4C4A8)),
+        title: Text(title,
+            style: TextStyle(
+                color: isActive ? const Color(0xFFFFF8F0) : const Color(0xFFD4C4A8),
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
+      ),
+    );
+  }
+
+  Widget _buildWebHeader() {
+    return Container(
+      height: 80,
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(bottom: BorderSide(color: Color(0xFFE0D5C1), width: 1))),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('Gate History',
+              style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF5D4037))),
+          Row(
+            children: [
+              _headerIconButton(
+                  icon: Icons.filter_list,
+                  tooltip: 'Filter',
+                  onTap: _showFilterDialog,
+                  color: const Color(0xFF8D6E63)),
+              const SizedBox(width: 12),
+              _headerIconButton(
+                  icon: Icons.picture_as_pdf,
+                  tooltip: 'Save as PDF',
+                  onTap: _isExporting ? () {} : _exportToPDF,
+                  showSpinner: _isExporting,
+                  color: const Color(0xFFD32F2F)),
+              const SizedBox(width: 24),
+              Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                    color: const Color(0xFF4CAF50).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                        color: const Color(0xFF4CAF50).withOpacity(0.3))),
+                child: const Row(
+                  children: [
+                    Icon(Icons.circle, size: 10, color: Color(0xFF4CAF50)),
+                    SizedBox(width: 6),
+                    Text('LIVE',
+                        style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF4CAF50))),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileHeader() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+      decoration: const BoxDecoration(
+        color: Color(0xFF5D4037),
+        borderRadius: BorderRadius.only(
+            bottomLeft: Radius.circular(30),
+            bottomRight: Radius.circular(30)),
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+              right: -20,
+              top: -20,
+              child: Icon(Icons.history,
+                  size: 120, color: Colors.white.withOpacity(0.05))),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12)),
+                          child: const Icon(Icons.arrow_back,
+                              color: Color(0xFFFFF8F0), size: 20),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text('Gate History',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                              color: Color(0xFFFFF8F0),
+                              letterSpacing: 1)),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: _showFilterDialog,
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12)),
+                          child: const Icon(Icons.filter_list,
+                              color: Color(0xFFFFF8F0), size: 20),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: _isExporting ? null : _exportToPDF,
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12)),
+                          child: _isExporting
+                              ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                      Color(0xFFFFF8F0))))
+                              : const Icon(Icons.picture_as_pdf,
+                              color: Color(0xFFFFF8F0), size: 20),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Live Activity Log',
+                      style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFFFF8F0))),
+                  Container(
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: const Color(0xFF4CAF50).withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF4CAF50))),
+                    child: const Text('LIVE',
+                        style: TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFF4CAF50),
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // SHARED WIDGETS
+  // ============================================================
+  Widget _buildWebStatCard(
+      String title, String value, IconData icon, Color color) {
+    return Container(
+      width: 200,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE0D5C1)),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 8,
+                offset: const Offset(0, 4))
+          ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(8)),
+                  child: Icon(icon, size: 20, color: color)),
+              Text(value,
+                  style: TextStyle(
+                      fontSize: 24, fontWeight: FontWeight.bold, color: color)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(title,
+              style: const TextStyle(
+                  fontSize: 13,
+                  color: Color(0xFF8D6E63),
+                  fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileStatCard(
+      String title, String value, IconData icon, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 3))
+            ]),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                  color: color.withOpacity(0.1), shape: BoxShape.circle),
+              child: Icon(icon, color: color, size: 20),
+            ),
+            const SizedBox(height: 8),
+            Text(value,
+                style: TextStyle(
+                    fontSize: 20, fontWeight: FontWeight.bold, color: color)),
+            const SizedBox(height: 2),
+            Text(title,
+                style: const TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFF8D6E63),
+                    fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWebFilterChip(String label, VoidCallback onDelete) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+          color: const Color(0xFFF5F0E8),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE0D5C1))),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label,
+              style:
+              const TextStyle(fontSize: 12, color: Color(0xFF5D4037))),
+          const SizedBox(width: 4),
+          InkWell(
+              onTap: onDelete,
+              child: const Icon(Icons.close,
+                  size: 14, color: Color(0xFF8D6E63))),
+        ],
+      ),
+    );
+  }
+
+  Widget _mobileInfoRow(IconData icon, String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, size: 14, color: const Color(0xFFD4C4A8)),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 100,
+          child: Text(label,
+              style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF8D6E63),
+                  fontWeight: FontWeight.w500)),
+        ),
+        Expanded(
+          child: Text(value,
+              style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF5D4037),
+                  fontWeight: FontWeight.bold)),
+        ),
+      ],
+    );
+  }
+
+  Widget _headerIconButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+    bool showSpinner = false,
+    Color color = const Color(0xFF5D4037),
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withOpacity(0.3), width: 1)),
+          child: Tooltip(
+            message: tooltip,
+            child: showSpinner
+                ? SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(color)))
+                : Icon(icon, color: color, size: 20),
+          ),
+        ),
+      ),
+    );
+  }
+
+  IconData _getTypeIcon(String type) {
+    switch (type) {
+      case 'rfid':
+      case 'uhf_rfid':
+        return Icons.nfc;
+      case 'qr_visitor':
+        return Icons.qr_code;
+      case 'manual':
+        return Icons.person;
+      default:
+        return Icons.door_front_door;
+    }
+  }
+
+  Color _getTypeColor(String type) {
+    switch (type) {
+      case 'rfid':
+      case 'uhf_rfid':
+        return const Color(0xFFD4C4A8);
+      case 'qr_visitor':
+        return const Color(0xFFC4A882);
+      case 'manual':
+        return const Color(0xFFB8A99A);
+      default:
+        return const Color(0xFF8D6E63);
+    }
+  }
+
+  // ==================== PDF EXPORT ====================
   Future<void> _exportToPDF() async {
     if (_entries.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No entries to export'),
-          backgroundColor: Color(0xFFFF9800),
-          behavior: SnackBarBehavior.floating,
-        ),
+            content: Text('No entries to export'),
+            backgroundColor: Color(0xFFFF9800),
+            behavior: SnackBarBehavior.floating),
       );
       return;
     }
@@ -236,7 +1229,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
 
     try {
       final pdf = pw.Document();
-
       pw.MemoryImage? logoImage;
       try {
         final logoBytes =
@@ -286,80 +1278,61 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                   pw.SizedBox(height: 40),
                   if (logoImage != null)
                     pw.Container(
-                      width: 200,
-                      height: 200,
-                      decoration: pw.BoxDecoration(
-                        border: pw.Border.all(color: _brandCream, width: 3),
-                        borderRadius: pw.BorderRadius.circular(16),
-                      ),
-                      padding: pw.EdgeInsets.all(10),
-                      child: pw.Image(logoImage, fit: pw.BoxFit.contain),
-                    )
+                        width: 200,
+                        height: 200,
+                        decoration: pw.BoxDecoration(
+                            border:
+                            pw.Border.all(color: _brandCream, width: 3),
+                            borderRadius: pw.BorderRadius.circular(16)),
+                        padding: pw.EdgeInsets.all(10),
+                        child: pw.Image(logoImage, fit: pw.BoxFit.contain))
                   else
                     pw.Container(
-                      width: 200,
-                      height: 200,
-                      decoration: pw.BoxDecoration(
-                        color: _brandBeige,
-                        border: pw.Border.all(color: _brandCream, width: 3),
-                        borderRadius: pw.BorderRadius.circular(16),
-                      ),
-                      child: pw.Center(
-                        child: pw.Text('🏠',
-                            style: pw.TextStyle(fontSize: 72)),
-                      ),
-                    ),
+                        width: 200,
+                        height: 200,
+                        decoration: pw.BoxDecoration(
+                            color: _brandBeige,
+                            border:
+                            pw.Border.all(color: _brandCream, width: 3),
+                            borderRadius: pw.BorderRadius.circular(16)),
+                        child: pw.Center(
+                            child: pw.Text('🏠',
+                                style: pw.TextStyle(fontSize: 72)))),
                   pw.SizedBox(height: 30),
-                  pw.Text(
-                    'FLORENCE HOMES',
-                    style: pw.TextStyle(
-                      fontSize: 28,
-                      fontWeight: pw.FontWeight.bold,
-                      color: _brandBrown,
-                      letterSpacing: 3,
-                    ),
-                  ),
+                  pw.Text('FLORENCE HOMES',
+                      style: pw.TextStyle(
+                          fontSize: 28,
+                          fontWeight: pw.FontWeight.bold,
+                          color: _brandBrown,
+                          letterSpacing: 3)),
                   pw.SizedBox(height: 6),
-                  pw.Text(
-                    'MAGDALENA',
-                    style: pw.TextStyle(
-                      fontSize: 18,
-                      fontWeight: pw.FontWeight.bold,
-                      color: _brandTan,
-                      letterSpacing: 6,
-                    ),
-                  ),
+                  pw.Text('MAGDALENA',
+                      style: pw.TextStyle(
+                          fontSize: 18,
+                          fontWeight: pw.FontWeight.bold,
+                          color: _brandTan,
+                          letterSpacing: 6)),
                   pw.SizedBox(height: 4),
-                  pw.Text(
-                    'House & Land Development Corp.',
-                    style: pw.TextStyle(
-                      fontSize: 11,
-                      color: _brandBrown,
-                      letterSpacing: 1,
-                    ),
-                  ),
+                  pw.Text('House & Land Development Corp.',
+                      style: pw.TextStyle(
+                          fontSize: 11, color: _brandBrown, letterSpacing: 1)),
                   pw.SizedBox(height: 40),
                   pw.Container(width: 120, height: 3, color: _brandCream),
                   pw.SizedBox(height: 30),
-                  pw.Text(
-                    'GATE ENTRY REPORT',
-                    style: pw.TextStyle(
-                      fontSize: 22,
-                      fontWeight: pw.FontWeight.bold,
-                      color: _brandBrown,
-                      letterSpacing: 2,
-                    ),
-                  ),
+                  pw.Text('GATE ENTRY REPORT',
+                      style: pw.TextStyle(
+                          fontSize: 22,
+                          fontWeight: pw.FontWeight.bold,
+                          color: _brandBrown,
+                          letterSpacing: 2)),
                   pw.SizedBox(height: 20),
                   pw.Container(
                     width: 350,
                     padding: pw.EdgeInsets.all(16),
                     decoration: pw.BoxDecoration(
-                      color: _pdfWhite,
-                      border:
-                      pw.Border.all(color: _brandBorder, width: 1.5),
-                      borderRadius: pw.BorderRadius.circular(10),
-                    ),
+                        color: _pdfWhite,
+                        border: pw.Border.all(color: _brandBorder, width: 1.5),
+                        borderRadius: pw.BorderRadius.circular(10)),
                     child: pw.Column(
                       children: [
                         _pdfMetaRow('Date Range', dateRangeLabel),
@@ -370,29 +1343,22 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                         pw.SizedBox(height: 6),
                         _pdfMetaRow('Total Records', '$totalEntries'),
                         pw.SizedBox(height: 6),
-                        _pdfMetaRow(
-                          'Generated',
-                          DateFormat('MMM dd, yyyy • hh:mm a')
-                              .format(DateTime.now()),
-                        ),
+                        _pdfMetaRow('Generated',
+                            DateFormat('MMM dd, yyyy • hh:mm a').format(DateTime.now())),
                       ],
                     ),
                   ),
                   pw.Spacer(),
                   pw.Container(
-                    padding: pw.EdgeInsets.all(12),
-                    color: _brandBeige,
-                    child: pw.Center(
-                      child: pw.Text(
-                        'Florence Homes Magdalena  •  Village Gate Access System',
-                        style: pw.TextStyle(
-                          fontSize: 10,
-                          color: _brandBrown,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ),
+                      padding: pw.EdgeInsets.all(12),
+                      color: _brandBeige,
+                      child: pw.Center(
+                          child: pw.Text(
+                              'Florence Homes Magdalena  •  Village Gate Access System',
+                              style: pw.TextStyle(
+                                  fontSize: 10,
+                                  color: _brandBrown,
+                                  letterSpacing: 0.5)))),
                 ],
               ),
             );
@@ -410,36 +1376,29 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
           build: (pw.Context context) {
             return [
               pw.SizedBox(height: 20),
-              pw.Text(
-                'Report Summary',
-                style: pw.TextStyle(
-                  fontSize: 20,
-                  fontWeight: pw.FontWeight.bold,
-                  color: _brandBrown,
-                ),
-              ),
+              pw.Text('Report Summary',
+                  style: pw.TextStyle(
+                      fontSize: 20,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _brandBrown)),
               pw.SizedBox(height: 4),
               pw.Container(width: 60, height: 3, color: _brandCream),
               pw.SizedBox(height: 20),
               pw.Container(
                 padding: pw.EdgeInsets.all(14),
                 decoration: pw.BoxDecoration(
-                  color: _brandLight,
-                  border: pw.Border.all(color: _brandBorder),
-                  borderRadius: pw.BorderRadius.circular(8),
-                ),
+                    color: _brandLight,
+                    border: pw.Border.all(color: _brandBorder),
+                    borderRadius: pw.BorderRadius.circular(8)),
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text(
-                      'FILTERS APPLIED',
-                      style: pw.TextStyle(
-                        fontSize: 10,
-                        fontWeight: pw.FontWeight.bold,
-                        color: _brandTan,
-                        letterSpacing: 1,
-                      ),
-                    ),
+                    pw.Text('FILTERS APPLIED',
+                        style: pw.TextStyle(
+                            fontSize: 10,
+                            fontWeight: pw.FontWeight.bold,
+                            color: _brandTan,
+                            letterSpacing: 1)),
                     pw.SizedBox(height: 10),
                     _pdfFilterRow(
                         Icons.calendar_today, 'Date Range', dateRangeLabel),
@@ -454,37 +1413,29 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
               pw.Container(
                 padding: pw.EdgeInsets.all(20),
                 decoration: pw.BoxDecoration(
-                  color: _brandCream,
-                  borderRadius: pw.BorderRadius.circular(12),
-                ),
+                    color: _brandCream,
+                    borderRadius: pw.BorderRadius.circular(12)),
                 child: pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text(
-                          'TOTAL ENTRIES',
-                          style: pw.TextStyle(
-                            fontSize: 11,
-                            fontWeight: pw.FontWeight.bold,
-                            color: _brandBrown,
-                            letterSpacing: 1.5,
-                          ),
-                        ),
+                        pw.Text('TOTAL ENTRIES',
+                            style: pw.TextStyle(
+                                fontSize: 11,
+                                fontWeight: pw.FontWeight.bold,
+                                color: _brandBrown,
+                                letterSpacing: 1.5)),
                         pw.SizedBox(height: 4),
-                        pw.Text(
-                          totalEntries.toString(),
-                          style: pw.TextStyle(
-                            fontSize: 36,
-                            fontWeight: pw.FontWeight.bold,
-                            color: _brandBrown,
-                          ),
-                        ),
+                        pw.Text(totalEntries.toString(),
+                            style: pw.TextStyle(
+                                fontSize: 36,
+                                fontWeight: pw.FontWeight.bold,
+                                color: _brandBrown)),
                       ],
                     ),
-                    pw.Icon(pw.IconData(0xe1c7),
-                        size: 56, color: _brandBrown),
+                    pw.Icon(pw.IconData(0xe1c7), size: 56, color: _brandBrown),
                   ],
                 ),
               ),
@@ -492,20 +1443,16 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
               pw.Row(
                 children: [
                   pw.Expanded(
-                    child: _pdfStatCard('RFID Scans',
-                        rfidEntries.toString(), PdfColor.fromHex('#4CAF50')),
-                  ),
+                      child: _pdfStatCard('RFID Scans', rfidEntries.toString(),
+                          PdfColor.fromHex('#4CAF50'))),
                   pw.SizedBox(width: 10),
                   pw.Expanded(
-                    child: _pdfStatCard('QR Visitors',
-                        qrEntries.toString(), PdfColor.fromHex('#9C27B0')),
-                  ),
+                      child: _pdfStatCard('QR Visitors', qrEntries.toString(),
+                          PdfColor.fromHex('#9C27B0'))),
                   pw.SizedBox(width: 10),
                   pw.Expanded(
-                    child: _pdfStatCard('Manual',
-                        manualEntries.toString(),
-                        PdfColor.fromHex('#FF9800')),
-                  ),
+                      child: _pdfStatCard('Manual', manualEntries.toString(),
+                          PdfColor.fromHex('#FF9800'))),
                 ],
               ),
             ];
@@ -523,14 +1470,11 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
           build: (pw.Context context) {
             return [
               pw.SizedBox(height: 10),
-              pw.Text(
-                'Gate Entry Details',
-                style: pw.TextStyle(
-                  fontSize: 18,
-                  fontWeight: pw.FontWeight.bold,
-                  color: _brandBrown,
-                ),
-              ),
+              pw.Text('Gate Entry Details',
+                  style: pw.TextStyle(
+                      fontSize: 18,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _brandBrown)),
               pw.SizedBox(height: 4),
               pw.Container(width: 60, height: 3, color: _brandCream),
               pw.SizedBox(height: 16),
@@ -542,18 +1486,16 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                   'Resident',
                   'Type',
                   'Visitor',
+                  'Status',
+                  'Processed By'
                 ],
                 headerStyle: pw.TextStyle(
-                  fontWeight: pw.FontWeight.bold,
-                  color: _brandBrown,
-                  fontSize: 10,
-                ),
+                    fontWeight: pw.FontWeight.bold,
+                    color: _brandBrown,
+                    fontSize: 10),
                 headerDecoration: pw.BoxDecoration(color: _brandCream),
                 headerHeight: 26,
-                cellStyle: pw.TextStyle(
-                  fontSize: 9,
-                  color: _brandBrown,
-                ),
+                cellStyle: pw.TextStyle(fontSize: 9, color: _brandBrown),
                 cellAlignment: pw.Alignment.centerLeft,
                 cellPadding:
                 pw.EdgeInsets.symmetric(horizontal: 6, vertical: 5),
@@ -570,70 +1512,54 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                     entry['residentName'] ?? 'Unknown',
                     _getEntryTypeDisplay(entry['entryType']),
                     entry['visitorName'] ?? '—',
+                    entry['status'] == 'entry' ? 'IN' : 'OUT',
+                    entry['openedBy'] ?? entry['closedBy'] ?? '—',
                   ];
                 }).toList(),
               ),
               pw.SizedBox(height: 14),
-              pw.Text(
-                'Total records: ${_entries.length}',
-                style: pw.TextStyle(
-                  fontSize: 10,
-                  color: _brandTan,
-                  fontWeight: pw.FontWeight.bold,
-                ),
-              ),
+              pw.Text('Total records: ${_entries.length}',
+                  style: pw.TextStyle(
+                      fontSize: 10,
+                      color: _brandTan,
+                      fontWeight: pw.FontWeight.bold)),
             ];
           },
         ),
       );
 
-      // SAVE
       final Uint8List bytes = await pdf.save();
-      final fileName =
-          'gate_report_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final fileName = 'gate_report_${DateTime.now().millisecondsSinceEpoch}.pdf';
 
       if (kIsWeb) {
         pdf_download.downloadPdf(bytes, fileName);
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
               content: Text('📥 PDF downloaded'),
               backgroundColor: Color(0xFF8D6E63),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+              behavior: SnackBarBehavior.floating));
         }
       } else {
         final tempDir = await getTemporaryDirectory();
         final file = File('${tempDir.path}/$fileName');
         await file.writeAsBytes(bytes);
-
-        await Share.shareXFiles(
-          [XFile(file.path)],
-          subject: 'Florence Homes — Gate Entry Report',
-          text: 'Florence Homes Magdalena — Gate Entry Report',
-        );
-
+        await Share.shareXFiles([XFile(file.path)],
+            subject: 'Florence Homes — Gate Entry Report',
+            text: 'Florence Homes Magdalena — Gate Entry Report');
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
               content: Text('✅ PDF report generated'),
               backgroundColor: Color(0xFF8D6E63),
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
+              behavior: SnackBarBehavior.floating));
         }
       }
     } catch (e) {
       print('PDF generation error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text('Error generating PDF: $e'),
             backgroundColor: const Color(0xFFD32F2F),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+            behavior: SnackBarBehavior.floating));
       }
     } finally {
       if (mounted) setState(() => _isExporting = false);
@@ -645,55 +1571,42 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     return pw.Container(
       padding: pw.EdgeInsets.only(bottom: 10),
       decoration: pw.BoxDecoration(
-        border: pw.Border(
-          bottom: pw.BorderSide(color: _brandCream, width: 2),
-        ),
-      ),
+          border: pw.Border(bottom: pw.BorderSide(color: _brandCream, width: 2))),
       child: pw.Row(
         crossAxisAlignment: pw.CrossAxisAlignment.center,
         children: [
           if (logo != null)
             pw.Container(
-              width: 36,
-              height: 36,
-              child: pw.Image(logo, fit: pw.BoxFit.contain),
-            )
+                width: 36,
+                height: 36,
+                child: pw.Image(logo, fit: pw.BoxFit.contain))
           else
             pw.Container(
-              width: 36,
-              height: 36,
-              decoration: pw.BoxDecoration(
-                color: _brandBeige,
-                borderRadius: pw.BorderRadius.circular(6),
-              ),
-              child: pw.Center(
-                child: pw.Text('🏠', style: pw.TextStyle(fontSize: 18)),
-              ),
-            ),
+                width: 36,
+                height: 36,
+                decoration: pw.BoxDecoration(
+                    color: _brandBeige,
+                    borderRadius: pw.BorderRadius.circular(6)),
+                child: pw.Center(
+                    child:
+                    pw.Text('🏠', style: pw.TextStyle(fontSize: 18)))),
           pw.SizedBox(width: 10),
           pw.Column(
             crossAxisAlignment: pw.CrossAxisAlignment.start,
             children: [
-              pw.Text(
-                'FLORENCE HOMES MAGDALENA',
-                style: pw.TextStyle(
-                  fontSize: 12,
-                  fontWeight: pw.FontWeight.bold,
-                  color: _brandBrown,
-                  letterSpacing: 1,
-                ),
-              ),
-              pw.Text(
-                'Village Gate Access System',
-                style: pw.TextStyle(fontSize: 9, color: _brandTan),
-              ),
+              pw.Text('FLORENCE HOMES MAGDALENA',
+                  style: pw.TextStyle(
+                      fontSize: 12,
+                      fontWeight: pw.FontWeight.bold,
+                      color: _brandBrown,
+                      letterSpacing: 1)),
+              pw.Text('Village Gate Access System',
+                  style: pw.TextStyle(fontSize: 9, color: _brandTan)),
             ],
           ),
           pw.Spacer(),
-          pw.Text(
-            DateFormat('MMM dd, yyyy').format(DateTime.now()),
-            style: pw.TextStyle(fontSize: 9, color: _brandTan),
-          ),
+          pw.Text(DateFormat('MMM dd, yyyy').format(DateTime.now()),
+              style: pw.TextStyle(fontSize: 9, color: _brandTan)),
         ],
       ),
     );
@@ -703,21 +1616,14 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     return pw.Container(
       padding: pw.EdgeInsets.only(top: 8),
       decoration: pw.BoxDecoration(
-        border: pw.Border(
-          top: pw.BorderSide(color: _brandBorder, width: 0.5),
-        ),
-      ),
+          border: pw.Border(top: pw.BorderSide(color: _brandBorder, width: 0.5))),
       child: pw.Row(
         mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
         children: [
-          pw.Text(
-            'Florence Homes Magdalena — Confidential',
-            style: pw.TextStyle(fontSize: 8, color: _brandTan),
-          ),
-          pw.Text(
-            'Page ${context.pageNumber} of ${context.pagesCount}',
-            style: pw.TextStyle(fontSize: 8, color: _brandTan),
-          ),
+          pw.Text('Florence Homes Magdalena — Confidential',
+              style: pw.TextStyle(fontSize: 8, color: _brandTan)),
+          pw.Text('Page ${context.pageNumber} of ${context.pagesCount}',
+              style: pw.TextStyle(fontSize: 8, color: _brandTan)),
         ],
       ),
     );
@@ -727,19 +1633,13 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     return pw.Row(
       mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
       children: [
-        pw.Text(
-          label,
-          style: pw.TextStyle(
-            fontSize: 10,
-            color: _brandTan,
-            fontWeight: pw.FontWeight.bold,
-            letterSpacing: 0.5,
-          ),
-        ),
-        pw.Text(
-          value,
-          style: pw.TextStyle(fontSize: 10, color: _brandBrown),
-        ),
+        pw.Text(label,
+            style: pw.TextStyle(
+                fontSize: 10,
+                color: _brandTan,
+                fontWeight: pw.FontWeight.bold,
+                letterSpacing: 0.5)),
+        pw.Text(value, style: pw.TextStyle(fontSize: 10, color: _brandBrown)),
       ],
     );
   }
@@ -750,22 +1650,15 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
         pw.Icon(pw.IconData(icon.codePoint), size: 12, color: _brandTan),
         pw.SizedBox(width: 8),
         pw.SizedBox(
-          width: 90,
-          child: pw.Text(
-            label,
-            style: pw.TextStyle(
-              fontSize: 10,
-              color: _brandTan,
-              fontWeight: pw.FontWeight.bold,
-            ),
-          ),
-        ),
+            width: 90,
+            child: pw.Text(label,
+                style: pw.TextStyle(
+                    fontSize: 10,
+                    color: _brandTan,
+                    fontWeight: pw.FontWeight.bold))),
         pw.Expanded(
-          child: pw.Text(
-            value,
-            style: pw.TextStyle(fontSize: 10, color: _brandBrown),
-          ),
-        ),
+            child: pw.Text(value,
+                style: pw.TextStyle(fontSize: 10, color: _brandBrown))),
       ],
     );
   }
@@ -774,791 +1667,27 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     return pw.Container(
       padding: pw.EdgeInsets.all(12),
       decoration: pw.BoxDecoration(
-        color: _pdfWhite,
-        border: pw.Border.all(color: _brandBorder),
-        borderRadius: pw.BorderRadius.circular(8),
-      ),
+          color: _pdfWhite,
+          border: pw.Border.all(color: _brandBorder),
+          borderRadius: pw.BorderRadius.circular(8)),
       child: pw.Column(
         crossAxisAlignment: pw.CrossAxisAlignment.start,
         children: [
-          pw.Text(
-            label.toUpperCase(),
-            style: pw.TextStyle(
-              fontSize: 9,
-              color: _brandTan,
-              fontWeight: pw.FontWeight.bold,
-              letterSpacing: 1,
-            ),
-          ),
+          pw.Text(label.toUpperCase(),
+              style: pw.TextStyle(
+                  fontSize: 9,
+                  color: _brandTan,
+                  fontWeight: pw.FontWeight.bold,
+                  letterSpacing: 1)),
           pw.SizedBox(height: 6),
-          pw.Text(
-            value,
-            style: pw.TextStyle(
-              fontSize: 20,
-              fontWeight: pw.FontWeight.bold,
-              color: accent,
-            ),
-          ),
+          pw.Text(value,
+              style: pw.TextStyle(
+                  fontSize: 20,
+                  fontWeight: pw.FontWeight.bold,
+                  color: accent)),
         ],
       ),
     );
-  }
-
-  // ==================== BUILD ====================
-  @override
-  Widget build(BuildContext context) {
-    final screenWidth = MediaQuery.of(context).size.width;
-
-    return Scaffold(
-      backgroundColor: const Color(0xFFD4C4A8),
-      body: Container(
-        constraints: const BoxConstraints.expand(),
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFFFF8F0),
-              Color(0xFFF5F0E8),
-              Color(0xFFEDE5D8),
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              // ==================== CUSTOM TWO-ROW HEADER ====================
-              _buildHeader(),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: kIsWeb ? 900 : double.infinity,
-                    ),
-                    child: _buildBody(screenWidth),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // CUSTOM TWO-ROW HEADER
-  // Top: back (left) + LIVE badge + filter + PDF + CSV (right)
-  // Bottom: large title
-  // ============================================================
-  Widget _buildHeader() {
-    return Container(
-      color: const Color(0xFFD4C4A8),
-      padding: EdgeInsets.fromLTRB(
-        kIsWeb ? 20 : 16,
-        kIsWeb ? 14 : 12,
-        kIsWeb ? 20 : 16,
-        kIsWeb ? 14 : 12,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              _headerIconButton(
-                icon: Icons.arrow_back,
-                tooltip: 'Back',
-                onTap: () => Navigator.pop(context),
-              ),
-              const Spacer(),
-              // LIVE badge
-              Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFF8F0).withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: const Color(0xFFFFF8F0).withOpacity(0.25),
-                    width: 1,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF4CAF50),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    const Text(
-                      'LIVE',
-                      style: TextStyle(
-                        fontSize: 10,
-                        color: Color(0xFFFFF8F0),
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              _headerIconButton(
-                icon: Icons.filter_list,
-                tooltip: 'Filter',
-                onTap: _showFilterDialog,
-              ),
-              const SizedBox(width: 8),
-              _headerIconButton(
-                icon: Icons.picture_as_pdf,
-                tooltip: 'Save as PDF',
-                onTap: _isExporting ? () {} : _exportToPDF,
-                showSpinner: _isExporting,
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: const [
-              Icon(Icons.history, size: 26, color: Color(0xFFFFF8F0)),
-              SizedBox(width: 10),
-              Flexible(
-                child: Text(
-                  'Gate History',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                    fontSize: 22,
-                    color: Color(0xFFFFF8F0),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _headerIconButton({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onTap,
-    bool showSpinner = false,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFF8F0).withOpacity(0.15),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: const Color(0xFFFFF8F0).withOpacity(0.25),
-              width: 1,
-            ),
-          ),
-          child: Tooltip(
-            message: tooltip,
-            child: showSpinner
-                ? const SizedBox(
-              width: 20,
-              height: 20,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                valueColor: AlwaysStoppedAnimation<Color>(
-                    Color(0xFFFFF8F0)),
-              ),
-            )
-                : Icon(icon, color: const Color(0xFFFFF8F0), size: 20),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBody(double screenWidth) {
-    if (_allEntries.isEmpty && _errorMessage == null) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8)),
-            ),
-            SizedBox(height: 16),
-            Text('Loading gate entries...',
-                style: TextStyle(color: Color(0xFFB8A99A))),
-          ],
-        ),
-      );
-    }
-
-    if (_errorMessage != null && _allEntries.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error, size: 48, color: Color(0xFFD32F2F)),
-            const SizedBox(height: 16),
-            Text(_errorMessage!,
-                style: const TextStyle(color: Color(0xFF8D6E63))),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: () {
-                _entriesSub?.cancel();
-                _startEntriesStream();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFD4C4A8),
-                foregroundColor: const Color(0xFF6B5B4F),
-              ),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_entries.isEmpty) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.history, size: 70, color: Color(0xFFE0D5C1)),
-            SizedBox(height: 16),
-            Text(
-              'No gate entries found',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                  color: Color(0xFF6B5B4F)),
-            ),
-            SizedBox(height: 8),
-            Text(
-              'Scan RFID tags or generate QR codes to see entries',
-              style: TextStyle(color: Color(0xFFB8A99A), fontSize: 13),
-            ),
-          ],
-        ),
-      );
-    }
-
-    final paginated = _paginatedEntries;
-    final total = _totalPages;
-    final padding = kIsWeb ? 20.0 : 12.0;
-
-    return Column(
-      children: [
-        // Filter chips
-        if (_dateRange != null ||
-            _selectedResident != 'all' ||
-            _selectedEntryType != 'all')
-          Container(
-            margin: EdgeInsets.fromLTRB(padding, padding, padding, 0),
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFD4C4A8).withOpacity(0.15),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  const Icon(Icons.filter_alt,
-                      size: 14, color: Color(0xFF8D6E63)),
-                  const SizedBox(width: 6),
-                  if (_dateRange != null)
-                    Chip(
-                      backgroundColor: Colors.white,
-                      label: Text(
-                        '📅 ${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}',
-                        style: const TextStyle(
-                            color: Color(0xFF6B5B4F), fontSize: 11),
-                      ),
-                      deleteIconColor: const Color(0xFFB8A99A),
-                      onDeleted: () {
-                        setState(() => _dateRange = null);
-                        _applyFilters();
-                      },
-                    ),
-                  if (_selectedResident != 'all')
-                    Chip(
-                      backgroundColor: Colors.white,
-                      label: Text(
-                        '👤 ${_residentNames[_selectedResident] ?? 'Unknown'}',
-                        style: const TextStyle(
-                            color: Color(0xFF6B5B4F), fontSize: 11),
-                      ),
-                      deleteIconColor: const Color(0xFFB8A99A),
-                      onDeleted: () {
-                        setState(() => _selectedResident = 'all');
-                        _applyFilters();
-                      },
-                    ),
-                  if (_selectedEntryType != 'all')
-                    Chip(
-                      backgroundColor: Colors.white,
-                      label: Text(
-                        '🔖 ${_selectedEntryType.toUpperCase().replaceFirst('UHF_', '')}',
-                        style: const TextStyle(
-                            color: Color(0xFF6B5B4F), fontSize: 11),
-                      ),
-                      deleteIconColor: const Color(0xFFB8A99A),
-                      onDeleted: () {
-                        setState(() => _selectedEntryType = 'all');
-                        _applyFilters();
-                      },
-                    ),
-                  const SizedBox(width: 6),
-                  TextButton(
-                    onPressed: () {
-                      setState(() {
-                        _dateRange = null;
-                        _selectedResident = 'all';
-                        _selectedEntryType = 'all';
-                      });
-                      _applyFilters();
-                    },
-                    style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFF8D6E63),
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
-                      minimumSize: Size.zero,
-                    ),
-                    child: const Text('Clear All',
-                        style: TextStyle(fontSize: 11)),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-        // Stat cards
-        Padding(
-          padding: EdgeInsets.all(padding),
-          child: Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            alignment: WrapAlignment.center,
-            children: [
-              _buildStatCard('📊 Total', _entries.length.toString(),
-                  Icons.door_front_door, const Color(0xFFD4C4A8), screenWidth),
-              _buildStatCard(
-                  '📡 RFID',
-                  _entries
-                      .where((e) =>
-                  e['entryType'] == 'uhf_rfid' ||
-                      e['entryType'] == 'rfid')
-                      .length
-                      .toString(),
-                  Icons.nfc,
-                  const Color(0xFFC4A882),
-                  screenWidth),
-              _buildStatCard(
-                  '👥 Visitors',
-                  _entries
-                      .where((e) => e['entryType'] == 'qr_visitor')
-                      .length
-                      .toString(),
-                  Icons.people,
-                  const Color(0xFFB8A99A),
-                  screenWidth),
-            ],
-          ),
-        ),
-
-        // Page size selector
-        Container(
-          margin: EdgeInsets.symmetric(horizontal: padding),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
-            boxShadow: [
-              BoxShadow(
-                color: const Color(0xFFD4C4A8).withOpacity(0.15),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.list_alt,
-                  size: 14, color: Color(0xFFB8A99A)),
-              const SizedBox(width: 6),
-              const Text('Per page:',
-                  style: TextStyle(
-                      fontSize: 11,
-                      color: Color(0xFFB8A99A),
-                      fontWeight: FontWeight.w500)),
-              const Spacer(),
-              ..._pageSizeOptions(),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 10),
-
-        // List
-        Expanded(
-          child: ListView.builder(
-            padding: EdgeInsets.symmetric(horizontal: padding),
-            itemCount: paginated.length,
-            itemBuilder: (context, index) {
-              final entry = paginated[index];
-              final timestamp = _getEntryTimestamp(entry);
-              final entryType = entry['entryType'] ?? 'unknown';
-              final residentName = entry['residentName'] ?? 'Unknown';
-              final visitorName = entry['visitorName'];
-
-              final globalIndex = _pageSize == 0
-                  ? index + 1
-                  : ((_currentPage - 1) * _pageSize) + index + 1;
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFFD4C4A8).withOpacity(0.15),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Container(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(14),
-                    border:
-                    Border.all(color: const Color(0xFFE0D5C1), width: 1),
-                  ),
-                  child: ListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 6),
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            _getTypeColor(entryType),
-                            _getTypeColor(entryType).withOpacity(0.7),
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        _getTypeIcon(entryType),
-                        color: const Color(0xFFFFF8F0),
-                        size: 20,
-                      ),
-                    ),
-                    title: Row(
-                      children: [
-                        SizedBox(
-                          width: 32,
-                          child: Text(
-                            '#$globalIndex',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Color(0xFFB8A99A),
-                              fontWeight: FontWeight.w600,
-                              fontFamily: 'monospace',
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Expanded(
-                          child: Text(
-                            residentName,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF6B5B4F),
-                              fontSize: 13,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ),
-                      ],
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 2),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFD4C4A8).withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            _getEntryTypeDisplay(entryType),
-                            style: const TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF8D6E63),
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                            maxLines: 1,
-                          ),
-                        ),
-                        if (visitorName != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 2),
-                            child: Text(
-                              '👤 $visitorName',
-                              style: const TextStyle(
-                                  fontSize: 10, color: Color(0xFFB8A99A)),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
-                            ),
-                          ),
-                        Text(
-                          '🕐 ${DateFormat('MMM dd, yyyy • hh:mm a').format(timestamp)}',
-                          style: const TextStyle(
-                              fontSize: 10, color: Color(0xFFD4C4A8)),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-
-        // Pagination
-        if (_pageSize != 0 && total > 1)
-          Container(
-            margin: EdgeInsets.fromLTRB(padding, 0, padding, padding),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFD4C4A8).withOpacity(0.15),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.first_page, size: 20),
-                  onPressed: _currentPage > 1 ? () => _goToPage(1) : null,
-                  color: const Color(0xFF8D6E63),
-                  disabledColor: const Color(0xFFE0D5C1),
-                  tooltip: 'First page',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_left, size: 20),
-                  onPressed: _currentPage > 1
-                      ? () => _goToPage(_currentPage - 1)
-                      : null,
-                  color: const Color(0xFF8D6E63),
-                  disabledColor: const Color(0xFFE0D5C1),
-                  tooltip: 'Previous page',
-                ),
-                Expanded(
-                  child: Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFD4C4A8).withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        'Page $_currentPage of $total  •  ${_entries.length} entries',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF6B5B4F),
-                          fontWeight: FontWeight.w600,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.chevron_right, size: 20),
-                  onPressed: _currentPage < total
-                      ? () => _goToPage(_currentPage + 1)
-                      : null,
-                  color: const Color(0xFF8D6E63),
-                  disabledColor: const Color(0xFFE0D5C1),
-                  tooltip: 'Next page',
-                ),
-                IconButton(
-                  icon: const Icon(Icons.last_page, size: 20),
-                  onPressed: _currentPage < total
-                      ? () => _goToPage(total)
-                      : null,
-                  color: const Color(0xFF8D6E63),
-                  disabledColor: const Color(0xFFE0D5C1),
-                  tooltip: 'Last page',
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-
-  List<Widget> _pageSizeOptions() {
-    const options = <Map<String, dynamic>>[
-      {'label': '10', 'value': 10},
-      {'label': '20', 'value': 20},
-      {'label': '50', 'value': 50},
-      {'label': '100', 'value': 100},
-      {'label': 'All', 'value': 0},
-    ];
-
-    return options.map((opt) {
-      final value = opt['value'] as int;
-      final isSelected = _pageSize == value;
-      return Padding(
-        padding: const EdgeInsets.only(left: 4),
-        child: GestureDetector(
-          onTap: () => _changePageSize(value),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? const Color(0xFFD4C4A8)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isSelected
-                    ? const Color(0xFFD4C4A8)
-                    : const Color(0xFFE0D5C1),
-                width: 1,
-              ),
-            ),
-            child: Text(
-              opt['label'] as String,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight:
-                isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected
-                    ? const Color(0xFFFFF8F0)
-                    : const Color(0xFF8D6E63),
-              ),
-            ),
-          ),
-        ),
-      );
-    }).toList();
-  }
-
-  Widget _buildStatCard(String title, String value, IconData icon,
-      Color color, double screenWidth) {
-    double cardWidth = screenWidth < 600 ? (screenWidth / 3) - 16 : 100;
-    double iconSize = screenWidth < 600 ? 14 : 16;
-    double fontSize = screenWidth < 600 ? 11 : 13;
-    double labelSize = screenWidth < 600 ? 8 : 9;
-
-    return Container(
-      width: cardWidth.clamp(80, 120),
-      padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.3), width: 1),
-        boxShadow: [
-          BoxShadow(
-            color: const Color(0xFFD4C4A8).withOpacity(0.12),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: color, size: iconSize),
-          const SizedBox(height: 2),
-          Text(value,
-              style: TextStyle(
-                  fontSize: fontSize,
-                  fontWeight: FontWeight.bold,
-                  color: color),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1),
-          Text(title,
-              style: TextStyle(
-                  fontSize: labelSize,
-                  color: color,
-                  fontWeight: FontWeight.w500),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 1,
-              textAlign: TextAlign.center),
-        ],
-      ),
-    );
-  }
-
-  IconData _getTypeIcon(String type) {
-    switch (type) {
-      case 'rfid':
-      case 'uhf_rfid':
-        return Icons.nfc;
-      case 'qr_visitor':
-        return Icons.qr_code;
-      case 'manual':
-        return Icons.person;
-      default:
-        return Icons.door_front_door;
-    }
-  }
-
-  Color _getTypeColor(String type) {
-    switch (type) {
-      case 'rfid':
-      case 'uhf_rfid':
-        return const Color(0xFFD4C4A8);
-      case 'qr_visitor':
-        return const Color(0xFFC4A882);
-      case 'manual':
-        return const Color(0xFFB8A99A);
-      default:
-        return const Color(0xFF8D6E63);
-    }
   }
 
   // ==================== FILTER DIALOG ====================
@@ -1572,8 +1701,8 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
         allResidents.add(entry);
       }
     }
-    allResidents.sort((a, b) =>
-        a.value.toLowerCase().compareTo(b.value.toLowerCase()));
+    allResidents
+        .sort((a, b) => a.value.toLowerCase().compareTo(b.value.toLowerCase()));
 
     showDialog(
       context: context,
@@ -1583,9 +1712,8 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
             final filteredResidents = searchText.isEmpty
                 ? allResidents
                 : allResidents
-                .where((r) => r.value
-                .toLowerCase()
-                .contains(searchText.toLowerCase()))
+                .where((r) =>
+                r.value.toLowerCase().contains(searchText.toLowerCase()))
                 .toList();
 
             return AlertDialog(
@@ -1596,10 +1724,8 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                       fontSize: 15)),
               backgroundColor: const Color(0xFFFFF8F0),
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(18),
-                side:
-                const BorderSide(color: Color(0xFFE0D5C1), width: 1.5),
-              ),
+                  borderRadius: BorderRadius.circular(18),
+                  side: const BorderSide(color: Color(0xFFE0D5C1), width: 1.5)),
               content: SizedBox(
                 width: 380,
                 child: SingleChildScrollView(
@@ -1616,10 +1742,9 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                               return Theme(
                                 data: Theme.of(context).copyWith(
                                   colorScheme: const ColorScheme.light(
-                                    primary: Color(0xFFD4C4A8),
-                                    onPrimary: Color(0xFFFFF8F0),
-                                    surface: Color(0xFFFFF8F0),
-                                  ),
+                                      primary: Color(0xFFD4C4A8),
+                                      onPrimary: Color(0xFFFFF8F0),
+                                      surface: Color(0xFFFFF8F0)),
                                 ),
                                 child: child!,
                               );
@@ -1634,24 +1759,20 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 12, vertical: 10),
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                                color: const Color(0xFFE0D5C1), width: 1),
-                          ),
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                  color: const Color(0xFFE0D5C1), width: 1)),
                           child: Row(
                             children: [
                               const Icon(Icons.calendar_today,
                                   size: 16, color: Color(0xFFD4C4A8)),
                               const SizedBox(width: 10),
-                              const Text(
-                                '📅 Date Range',
-                                style: TextStyle(
-                                  color: Color(0xFF6B5B4F),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
+                              const Text('📅 Date Range',
+                                  style: TextStyle(
+                                      color: Color(0xFF6B5B4F),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600)),
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
@@ -1659,14 +1780,13 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                                       ? 'Select range'
                                       : '${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}',
                                   style: TextStyle(
-                                    color: _dateRange == null
-                                        ? const Color(0xFFB8A99A)
-                                        : const Color(0xFF8D6E63),
-                                    fontSize: 11,
-                                    fontWeight: _dateRange == null
-                                        ? FontWeight.normal
-                                        : FontWeight.w600,
-                                  ),
+                                      color: _dateRange == null
+                                          ? const Color(0xFFB8A99A)
+                                          : const Color(0xFF8D6E63),
+                                      fontSize: 11,
+                                      fontWeight: _dateRange == null
+                                          ? FontWeight.normal
+                                          : FontWeight.w600),
                                   textAlign: TextAlign.right,
                                   overflow: TextOverflow.ellipsis,
                                   maxLines: 1,
@@ -1675,28 +1795,23 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                               if (_dateRange != null) ...[
                                 const SizedBox(width: 6),
                                 GestureDetector(
-                                  onTap: () => setDialogState(
-                                          () => _dateRange = null),
-                                  child: const Icon(Icons.clear,
-                                      size: 16,
-                                      color: Color(0xFFB8A99A)),
-                                ),
+                                    onTap: () => setDialogState(
+                                            () => _dateRange = null),
+                                    child: const Icon(Icons.clear,
+                                        size: 16, color: Color(0xFFB8A99A))),
                               ],
                             ],
                           ),
                         ),
                       ),
-
                       const SizedBox(height: 12),
-
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                              color: const Color(0xFFE0D5C1), width: 1),
-                        ),
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color: const Color(0xFFE0D5C1), width: 1)),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
@@ -1718,38 +1833,33 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                               decoration: InputDecoration(
                                 hintText: 'Search resident name...',
                                 hintStyle: const TextStyle(
-                                    color: Color(0xFFB8A99A),
-                                    fontSize: 12),
+                                    color: Color(0xFFB8A99A), fontSize: 12),
                                 prefixIcon: const Icon(Icons.search,
                                     size: 18, color: Color(0xFFD4C4A8)),
                                 suffixIcon: searchText.isNotEmpty
                                     ? IconButton(
-                                  icon: const Icon(Icons.clear,
-                                      size: 16,
-                                      color: Color(0xFFB8A99A)),
-                                  onPressed: () {
-                                    searchController.clear();
-                                    setDialogState(
-                                            () => searchText = '');
-                                  },
-                                )
+                                    icon: const Icon(Icons.clear,
+                                        size: 16,
+                                        color: Color(0xFFB8A99A)),
+                                    onPressed: () {
+                                      searchController.clear();
+                                      setDialogState(
+                                              () => searchText = '');
+                                    })
                                     : null,
                                 isDense: true,
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFFE0D5C1)),
-                                ),
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: const BorderSide(
+                                        color: Color(0xFFE0D5C1))),
                                 enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFFE0D5C1)),
-                                ),
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: const BorderSide(
+                                        color: Color(0xFFE0D5C1))),
                                 focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(10),
-                                  borderSide: const BorderSide(
-                                      color: Color(0xFFD4C4A8), width: 2),
-                                ),
+                                    borderRadius: BorderRadius.circular(10),
+                                    borderSide: const BorderSide(
+                                        color: Color(0xFFD4C4A8), width: 2)),
                                 filled: true,
                                 fillColor: const Color(0xFFFFF8F0),
                                 contentPadding: const EdgeInsets.symmetric(
@@ -1764,30 +1874,27 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 10, vertical: 6),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFD4C4A8)
-                                    .withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
+                                  color: const Color(0xFFD4C4A8)
+                                      .withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(8)),
                               child: Row(
                                 children: [
                                   const Icon(Icons.check_circle,
                                       size: 14, color: Color(0xFF8D6E63)),
                                   const SizedBox(width: 6),
                                   Expanded(
-                                    child: Text(
-                                      _selectedResident == 'all'
-                                          ? 'All Residents'
-                                          : _residentNames[
-                                      _selectedResident] ??
-                                          'Unknown',
-                                      style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Color(0xFF6B5B4F),
-                                          fontWeight: FontWeight.w600),
-                                      overflow: TextOverflow.ellipsis,
-                                      maxLines: 1,
-                                    ),
-                                  ),
+                                      child: Text(
+                                          _selectedResident == 'all'
+                                              ? 'All Residents'
+                                              : _residentNames[
+                                          _selectedResident] ??
+                                              'Unknown',
+                                          style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Color(0xFF6B5B4F),
+                                              fontWeight: FontWeight.w600),
+                                          overflow: TextOverflow.ellipsis,
+                                          maxLines: 1)),
                                   if (_selectedResident != 'all')
                                     GestureDetector(
                                       onTap: () => setDialogState(
@@ -1806,44 +1913,40 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                               constraints:
                               const BoxConstraints(maxHeight: 200),
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(10),
-                                border: Border.all(
-                                    color: const Color(0xFFE0D5C1),
-                                    width: 1),
-                              ),
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(
+                                      color: const Color(0xFFE0D5C1),
+                                      width: 1)),
                               child: SingleChildScrollView(
                                 child: Column(
                                   children: [
                                     _buildResidentOption(
-                                      id: 'all',
-                                      name: 'All Residents',
-                                      isSelected: _selectedResident == 'all',
-                                      onTap: () => setDialogState(
-                                              () => _selectedResident = 'all'),
-                                    ),
+                                        id: 'all',
+                                        name: 'All Residents',
+                                        isSelected:
+                                        _selectedResident == 'all',
+                                        onTap: () => setDialogState(
+                                                () => _selectedResident = 'all')),
                                     const Divider(height: 1),
                                     if (filteredResidents.isEmpty)
                                       const Padding(
-                                        padding: EdgeInsets.all(12),
-                                        child: Text(
-                                          'No residents match your search',
-                                          style: TextStyle(
-                                              fontSize: 11,
-                                              color: Color(0xFFB8A99A),
-                                              fontStyle: FontStyle.italic),
-                                        ),
-                                      )
+                                          padding: EdgeInsets.all(12),
+                                          child: Text(
+                                              'No residents match your search',
+                                              style: TextStyle(
+                                                  fontSize: 11,
+                                                  color: Color(0xFFB8A99A),
+                                                  fontStyle:
+                                                  FontStyle.italic)))
                                     else
                                       ...filteredResidents.map((r) {
                                         return _buildResidentOption(
-                                          id: r.key,
-                                          name: r.value,
-                                          isSelected:
-                                          _selectedResident == r.key,
-                                          onTap: () => setDialogState(
-                                                  () =>
-                                              _selectedResident = r.key),
-                                        );
+                                            id: r.key,
+                                            name: r.value,
+                                            isSelected:
+                                            _selectedResident == r.key,
+                                            onTap: () => setDialogState(() =>
+                                            _selectedResident = r.key));
                                       }).toList(),
                                   ],
                                 ),
@@ -1852,9 +1955,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 12),
-
                       DropdownButtonFormField<String>(
                         value: _selectedEntryType,
                         decoration: InputDecoration(
@@ -1862,20 +1963,17 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                           labelStyle: const TextStyle(
                               color: Color(0xFFB8A99A), fontSize: 11),
                           border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide:
-                            const BorderSide(color: Color(0xFFE0D5C1)),
-                          ),
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide:
+                              const BorderSide(color: Color(0xFFE0D5C1))),
                           enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide:
-                            const BorderSide(color: Color(0xFFE0D5C1)),
-                          ),
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide:
+                              const BorderSide(color: Color(0xFFE0D5C1))),
                           focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(10),
-                            borderSide: const BorderSide(
-                                color: Color(0xFFD4C4A8), width: 2),
-                          ),
+                              borderRadius: BorderRadius.circular(10),
+                              borderSide: const BorderSide(
+                                  color: Color(0xFFD4C4A8), width: 2)),
                           contentPadding: const EdgeInsets.symmetric(
                               horizontal: 10, vertical: 8),
                         ),
@@ -1906,23 +2004,21 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  style: TextButton.styleFrom(
-                      foregroundColor: const Color(0xFFB8A99A)),
-                  child:
-                  const Text('Cancel', style: TextStyle(fontSize: 12)),
-                ),
+                    onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                        foregroundColor: const Color(0xFFB8A99A)),
+                    child: const Text('Cancel',
+                        style: TextStyle(fontSize: 12))),
                 ElevatedButton(
                   onPressed: () {
                     Navigator.pop(context);
                     _applyFilters();
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFD4C4A8),
-                    foregroundColor: const Color(0xFF6B5B4F),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
-                  ),
+                      backgroundColor: const Color(0xFFD4C4A8),
+                      foregroundColor: const Color(0xFF6B5B4F),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10))),
                   child:
                   const Text('Apply', style: TextStyle(fontSize: 12)),
                 ),
@@ -1934,12 +2030,11 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     );
   }
 
-  Widget _buildResidentOption({
-    required String id,
-    required String name,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
+  Widget _buildResidentOption(
+      {required String id,
+        required String name,
+        required bool isSelected,
+        required VoidCallback onTap}) {
     return InkWell(
       onTap: onTap,
       child: Container(
@@ -1950,28 +2045,23 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
         child: Row(
           children: [
             Icon(
-              isSelected
-                  ? Icons.radio_button_checked
-                  : Icons.radio_button_off,
-              size: 16,
-              color: isSelected
-                  ? const Color(0xFF8D6E63)
-                  : const Color(0xFFB8A99A),
-            ),
+                isSelected
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+                size: 16,
+                color: isSelected
+                    ? const Color(0xFF8D6E63)
+                    : const Color(0xFFB8A99A)),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                name,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: const Color(0xFF6B5B4F),
-                  fontWeight:
-                  isSelected ? FontWeight.bold : FontWeight.normal,
-                ),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
-            ),
+                child: Text(name,
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: const Color(0xFF6B5B4F),
+                        fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1)),
           ],
         ),
       ),

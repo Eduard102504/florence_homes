@@ -245,8 +245,9 @@ class _LoginScreenState extends State<LoginScreen> {
           TextFormField(
             controller: _identifierController,
             decoration: InputDecoration(
-              labelText: 'Email or Resident ID',
-              hintText: 'e.g., you@email.com or FHM-001',
+              // 🔥 UPDATED: Mention Guard ID
+              labelText: 'Email, Resident ID, or Guard ID',
+              hintText: 'e.g., you@email.com, FHM-001, or GRD-001',
               hintStyle: const TextStyle(
                 color: Color(0xFFD4C4A8),
                 fontSize: 12,
@@ -282,7 +283,7 @@ class _LoginScreenState extends State<LoginScreen> {
             textInputAction: TextInputAction.next,
             validator: (value) {
               if (value == null || value.isEmpty) {
-                return 'Please enter your email or Resident ID';
+                return 'Please enter your email or ID';
               }
               return null;
             },
@@ -394,8 +395,11 @@ class _LoginScreenState extends State<LoginScreen> {
                 if (!mounted) return;
 
                 if (success) {
+                  // 🔥 ROUTING LOGIC
                   if (authProvider.isAdmin) {
                     Navigator.pushReplacementNamed(context, '/admin');
+                  } else if (authProvider.isGuard) {
+                    Navigator.pushReplacementNamed(context, '/guard');
                   } else {
                     Navigator.pushReplacementNamed(context, '/resident');
                   }

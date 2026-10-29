@@ -17,7 +17,7 @@ class AuthService {
     try {
       String email = identifier.trim();
 
-      // If user typed an FHM-### ID, resolve it to the email
+      // 🔥 If user typed an FHM-### (Resident) or GRD-### (Guard) ID, resolve it
       if (email.toUpperCase().startsWith('FHM-')) {
         print('🔎 Resident ID login attempt: $email');
         final query = await _firestore
@@ -38,6 +38,26 @@ class AuthService {
             (docData['email'] as String?) ??
             '';
         print('✅ Resolved Resident ID to auth email: $email');
+      } else if (email.toUpperCase().startsWith('GRD-')) {
+        print('🔎 Guard ID login attempt: $email');
+        final query = await _firestore
+            .collection('users')
+            .where('guardId', isEqualTo: email.toUpperCase())
+            .limit(1)
+            .get();
+
+        if (query.docs.isEmpty) {
+          return {
+            'success': false,
+            'message': 'Guard ID not found',
+          };
+        }
+
+        final docData = query.docs.first.data() as Map<String, dynamic>;
+        email = (docData['authEmail'] as String?) ??
+            (docData['email'] as String?) ??
+            '';
+        print('✅ Resolved Guard ID to auth email: $email');
       }
 
       // Check if it's the hardcoded admin account
@@ -78,6 +98,7 @@ class AuthService {
           await _firestore.collection('users').doc(userId).get();
 
           if (!adminDoc.exists || isNewAdmin) {
+            print('Creating admin in Firestore...');
             UserModel adminUser = UserModel(
               id: userId,
               email: adminEmail,
@@ -90,6 +111,7 @@ class AuthService {
                 .collection('users')
                 .doc(userId)
                 .set(adminUser.toMap());
+            print('Admin created in Firestore');
 
             return {
               'success': true,
@@ -172,8 +194,117 @@ class AuthService {
     });
   }
 
+  // ==================== GUARD ID GENERATION (NEW) ====================
+  Future<String> _generateGuardId() async {
+    final counterRef = _firestore.collection('system').doc('counters');
+
+    return await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(counterRef);
+      int nextNumber = 1;
+
+      if (snapshot.exists) {
+        nextNumber = ((snapshot.data()?['guardCounter'] ?? 0) as int) + 1;
+      }
+
+      transaction.set(
+        counterRef,
+        {'guardCounter': nextNumber},
+        SetOptions(merge: true),
+      );
+
+      return 'GRD-${nextNumber.toString().padLeft(3, '0')}';
+    });
+  }
+
+  // ==================== REGISTER GUARD (NEW) ====================
+  Future<Map<String, dynamic>> registerGuard({
+    required String fullName,
+    required String password,
+    required String phoneNumber,
+    String? email, // Optional email
+  }) async {
+    try {
+      final guardId = await _generateGuardId();
+      print('🆔 Generated Guard ID: $guardId');
+
+      String? normalizedEmail = email?.trim().toLowerCase();
+      bool hasRealEmail = normalizedEmail != null && normalizedEmail.isNotEmpty;
+
+      // If no email is provided, generate a placeholder based on Guard ID
+      String authEmail = hasRealEmail
+          ? normalizedEmail!
+          : '${guardId.toLowerCase()}@florencehomes.local';
+
+      if (hasRealEmail) {
+        if (authEmail == adminEmail.toLowerCase()) {
+          return {
+            'success': false,
+            'message': 'This email is reserved for system administrator.',
+          };
+        }
+        List<String> signInMethods =
+        await _auth.fetchSignInMethodsForEmail(authEmail);
+        if (signInMethods.isNotEmpty) {
+          return {
+            'success': false,
+            'message': 'An account with this email already exists.',
+          };
+        }
+      }
+
+      UserCredential userCredential =
+      await _auth.createUserWithEmailAndPassword(
+        email: authEmail,
+        password: password,
+      );
+
+      String userId = userCredential.user!.uid;
+      print('✅ Guard Auth user created: $userId ($authEmail)');
+
+      UserModel guard = UserModel(
+        id: userId,
+        guardId: guardId,
+        email: hasRealEmail ? authEmail : '',
+        fullName: fullName,
+        userType: 'guard',
+        isApproved: true,
+        createdAt: DateTime.now(),
+        phoneNumber: phoneNumber,
+      );
+
+      // Public users doc
+      await _firestore.collection('users').doc(userId).set({
+        ...guard.toMap(),
+        'authEmail': authEmail,
+        'hasRealEmail': hasRealEmail,
+        'isManualRegistration': true,
+      });
+
+      // Private users_private doc
+      await _firestore.collection('users_private').doc(userId).set({
+        'plaintextPassword': password,
+      });
+
+      print('✅ Firestore guard created for: $fullName');
+
+      await _auth.signOut(); // Keep admin logged in
+
+      return {
+        'success': true,
+        'message': 'Guard added successfully.',
+        'userId': userId,
+        'guardId': guardId,
+      };
+    } catch (e) {
+      print('❌ Guard registration error: $e');
+      return {
+        'success': false,
+        'message': e.toString(),
+      };
+    }
+  }
+
   // ==================== MANUAL REGISTRATION (ADMIN) ====================
-  // 🔥 CHANGED — password now stored in `users_private`
   Future<Map<String, dynamic>> registerResidentManually({
     required String fullName,
     required String password,
@@ -265,7 +396,6 @@ class AuthService {
   }
 
   // ==================== SELF-REGISTRATION (EMAIL VERIFIED) ====================
-  // 🔥 CHANGED — password now stored in `users_private`
   Future<Map<String, dynamic>> registerUser(
       String email,
       String password,
@@ -663,7 +793,6 @@ class AuthService {
     }
   }
 
-  // 🔥 CHANGED — also deletes users_private doc
   Future<bool> rejectUser(String userId, String reason) async {
     try {
       // Clean up private doc first

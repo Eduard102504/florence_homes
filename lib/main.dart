@@ -12,6 +12,7 @@ import 'screens/auth/register_form_screen.dart';
 import 'screens/admin/admin_dashboard.dart';
 import 'screens/admin/pending_approvals.dart';
 import 'screens/resident/resident_dashboard.dart';
+import 'screens/guard/guard_dashboard.dart'; // 🔥 IMPORTED GUARD DASHBOARD
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,6 +58,8 @@ class MyApp extends StatelessWidget {
         return MaterialPageRoute(
           builder: (_) => const RegisterFormScreen(email: ''),
         );
+
+    // ==================== ADMIN ROUTES ====================
       case '/admin':
         return _guardedRoute(
           builder: (_) => const AdminDashboard(),
@@ -67,11 +70,21 @@ class MyApp extends StatelessWidget {
           builder: (_) => const PendingApprovals(),
           requiredRole: 'admin',
         );
+
+    // ==================== GUARD ROUTES (NEW) ====================
+      case '/guard':
+        return _guardedRoute(
+          builder: (_) => const GuardDashboard(),
+          requiredRole: 'guard',
+        );
+
+    // ==================== RESIDENT ROUTES ====================
       case '/resident':
         return _guardedRoute(
           builder: (_) => const ResidentDashboard(),
           requiredRole: 'resident',
         );
+
       default:
         return MaterialPageRoute(builder: (_) => const _NotFoundScreen());
     }
@@ -116,7 +129,6 @@ class _AuthGuardState extends State<_AuthGuard> {
   }
 
   Future<void> _checkAccess() async {
-    // Wait for Firebase Auth to restore the session (up to 2 seconds)
     User? user = FirebaseAuth.instance.currentUser;
     if (user == null) {
       for (int i = 0; i < 20; i++) {
@@ -126,13 +138,11 @@ class _AuthGuardState extends State<_AuthGuard> {
       }
     }
 
-    // Not signed in → login
     if (user == null) {
       _redirect('/login');
       return;
     }
 
-    // Signed in — check role in Firestore
     try {
       final doc = await FirebaseFirestore.instance
           .collection('users')
@@ -148,9 +158,16 @@ class _AuthGuardState extends State<_AuthGuard> {
       final userType = data['userType'] as String?;
       final isApproved = data['isApproved'] as bool? ?? false;
 
-      // Role mismatch → send to correct dashboard
+      // 🔥 Role mismatch → send to correct dashboard based on their role
       if (userType != widget.requiredRole) {
-        final correctRoute = userType == 'admin' ? '/admin' : '/resident';
+        String correctRoute = '/login';
+        if (userType == 'admin') {
+          correctRoute = '/admin';
+        } else if (userType == 'guard') {
+          correctRoute = '/guard';
+        } else if (userType == 'resident') {
+          correctRoute = '/resident';
+        }
         _redirect(correctRoute);
         return;
       }
@@ -162,7 +179,6 @@ class _AuthGuardState extends State<_AuthGuard> {
         return;
       }
 
-      // All checks passed
       if (!mounted) return;
       setState(() {
         _checked = true;

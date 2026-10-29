@@ -11,6 +11,7 @@ class AuthProvider extends ChangeNotifier {
   bool get isLoading => _isLoading;
   bool get isAdmin => _currentUser?.userType == 'admin';
   bool get isResident => _currentUser?.userType == 'resident';
+  bool get isGuard => _currentUser?.userType == 'guard'; // 🔥 NEW
 
   Future<bool> login(String email, String password) async {
     _isLoading = true;
@@ -56,9 +57,6 @@ class AuthProvider extends ChangeNotifier {
     return result;
   }
 
-  // ==================== RELOAD CURRENT USER ====================
-  // Re-fetches the current user's document from Firestore
-  // (used after adding an email, RFID registration, etc.)
   Future<void> reloadCurrentUser() async {
     final uid = _authService.getCurrentUserId();
     if (uid == null) return;

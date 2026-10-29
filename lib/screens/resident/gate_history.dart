@@ -1,3 +1,4 @@
+// lib/screens/admin/gate_history.dart
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
@@ -19,9 +20,6 @@ class _GateHistoryState extends State<GateHistory> {
   bool _hasLoadedOnce = false;
   String? _errorMessage;
   StreamSubscription<QuerySnapshot>? _sub;
-
-  final double contentMaxWidth = kIsWeb ? 900 : double.infinity;
-  final double outerPadding = kIsWeb ? 24 : 12;
 
   DateTime _parseTimestamp(dynamic timestamp) {
     if (timestamp == null) return DateTime.now();
@@ -50,8 +48,7 @@ class _GateHistoryState extends State<GateHistory> {
   }
 
   void _startStream() {
-    final authProvider =
-    Provider.of<AuthProvider>(context, listen: false);
+    final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final residentId = authProvider.currentUser?.id;
 
     if (residentId == null) {
@@ -102,90 +99,437 @@ class _GateHistoryState extends State<GateHistory> {
     );
   }
 
-  // ============================================================
-  // INLINE HEADER
-  // ============================================================
-  Widget _buildHeader() {
-    return Container(
-      color: const Color(0xFFD4C4A8),
-      padding: EdgeInsets.fromLTRB(
-        kIsWeb ? 20 : 16,
-        kIsWeb ? 14 : 12,
-        kIsWeb ? 20 : 16,
-        kIsWeb ? 14 : 12,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            height: 40,
-            child: Row(
-              children: [
-                _iconPill(
-                  icon: Icons.arrow_back,
-                  tooltip: 'Back',
-                  onTap: () => Navigator.pop(context),
-                ),
-                const Spacer(),
-                // LIVE badge
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF8F0).withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: const Color(0xFFFFF8F0).withOpacity(0.25),
-                      width: 1,
+  // ==================== BUILD ====================
+  @override
+  Widget build(BuildContext context) {
+    if (kIsWeb) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F0E8),
+        body: Row(
+          children: [
+            _buildWebSidebar(),
+            Expanded(
+              child: Column(
+                children: [
+                  _buildWebHeader(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(32),
+                      child: _buildWebContent(),
                     ),
                   ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF4CAF50),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      const Text(
-                        'LIVE',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Color(0xFFFFF8F0),
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F0E8),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildMobileHeader(),
+            Expanded(child: _buildMobileContent()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // 🖥️ WEB COMPONENTS
+  // ============================================================
+
+  Widget _buildWebSidebar() {
+    return Container(
+      width: 260,
+      color: const Color(0xFF5D4037),
+      child: Column(
+        children: [
+          const SizedBox(height: 40),
+          const Icon(Icons.home_work, size: 48, color: Color(0xFFFFF8F0)),
+          const SizedBox(height: 12),
+          const Text('Florence Homes',
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFFFF8F0),
+                  letterSpacing: 1)),
+          const Text('Resident Portal',
+              style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
+          const SizedBox(height: 40),
+          _buildWebSidebarItem(Icons.dashboard, 'Dashboard',
+              onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.qr_code_scanner, 'My QR Code',
+              onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.history, 'Gate History',
+              isActive: true, onTap: () {}),
+          _buildWebSidebarItem(Icons.person, 'Profile',
+              onTap: () => Navigator.pop(context)),
+          const Spacer(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)),
+            title: const Text('Back to Dashboard',
+                style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)),
+            onTap: () => Navigator.pop(context),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebSidebarItem(IconData icon, String title,
+      {bool isActive = false, required VoidCallback onTap}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: ListTile(
+        onTap: onTap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        tileColor: isActive
+            ? const Color(0xFFD4C4A8).withOpacity(0.15)
+            : Colors.transparent,
+        leading: Icon(icon,
+            color: isActive ? const Color(0xFFFFF8F0) : const Color(0xFFD4C4A8)),
+        title: Text(title,
+            style: TextStyle(
+                color: isActive ? const Color(0xFFFFF8F0) : const Color(0xFFD4C4A8),
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
+      ),
+    );
+  }
+
+  Widget _buildWebHeader() {
+    return Container(
+      height: 80,
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(bottom: BorderSide(color: Color(0xFFE0D5C1), width: 1))),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('Gate History',
+              style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF5D4037))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+                color: const Color(0xFF4CAF50).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: const Color(0xFF4CAF50).withOpacity(0.3))),
+            child: Row(
+              children: const [
+                Icon(Icons.circle, size: 10, color: Color(0xFF4CAF50)),
+                SizedBox(width: 6),
+                Text('LIVE',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF4CAF50))),
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: const [
-              Icon(Icons.history, size: 26, color: Color(0xFFFFF8F0)),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Gate History',
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebContent() {
+    if (!_hasLoadedOnce) {
+      return const Center(
+          child: CircularProgressIndicator(color: Color(0xFF8D6E63)));
+    }
+    if (_errorMessage != null && _entries.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error, size: 48, color: Color(0xFFD32F2F)),
+            const SizedBox(height: 16),
+            Text(_errorMessage!,
+                style: const TextStyle(color: Color(0xFF5D4037)),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _startStream,
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF5D4037),
+                  foregroundColor: Colors.white),
+              child: const Text('Retry'),
+            ),
+          ],
+        ),
+      );
+    }
+    if (_entries.isEmpty) {
+      return Container(
+        padding: const EdgeInsets.all(40),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE0D5C1))),
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.history, size: 70, color: Color(0xFFE0D5C1)),
+              SizedBox(height: 16),
+              Text('No gate entries found',
                   style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                    fontSize: 22,
-                    color: Color(0xFFFFF8F0),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
+                      fontSize: 16,
+                      color: Color(0xFF5D4037),
+                      fontWeight: FontWeight.bold)),
+              SizedBox(height: 8),
+              Text('Your gate access history will appear here',
+                  style: TextStyle(color: Color(0xFF8D6E63), fontSize: 12)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Stat card
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: const Color(0xFFE0D5C1)),
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4))
+              ]),
+          child: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                    gradient: const LinearGradient(colors: [
+                      Color(0xFF5D4037),
+                      Color(0xFF8D6E63)
+                    ]),
+                    borderRadius: BorderRadius.circular(12)),
+                child: const Icon(Icons.history,
+                    color: Color(0xFFFFF8F0), size: 24),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Total Gate Entries',
+                        style: TextStyle(
+                            fontSize: 13,
+                            color: Color(0xFF8D6E63),
+                            fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 4),
+                    Text('${_entries.length}',
+                        style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF5D4037))),
+                  ],
                 ),
               ),
+              Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                    color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: const [
+                    Icon(Icons.check_circle,
+                        size: 14, color: Color(0xFF8D6E63)),
+                    SizedBox(width: 4),
+                    Text('Last 50',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: Color(0xFF8D6E63),
+                            fontWeight: FontWeight.w500)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Entries
+        ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _entries.length,
+          itemBuilder: (context, index) => _buildWebEntryRow(_entries[index]),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildWebEntryRow(Map<String, dynamic> entry) {
+    final timestamp = _parseTimestamp(entry['timestamp']);
+    final entryType = entry['entryType'] ?? 'unknown';
+    final status = entry['status'] ?? 'entry';
+    final visitorName = entry['visitorName'];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE0D5C1)),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 4,
+                offset: const Offset(0, 2))
+          ]),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+                gradient: LinearGradient(colors: [
+                  _getTypeColor(entryType),
+                  _getTypeColor(entryType).withOpacity(0.7)
+                ]),
+                borderRadius: BorderRadius.circular(10)),
+            child: Icon(_getTypeIcon(entryType),
+                color: const Color(0xFFFFF8F0), size: 22),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_getEntryTypeLabel(entryType),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF5D4037),
+                        fontSize: 15)),
+                if (visitorName != null)
+                  Text('👤 $visitorName',
+                      style: const TextStyle(
+                          fontSize: 12, color: Color(0xFF8D6E63))),
+              ],
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: Text(
+                DateFormat('MMM dd, yyyy • hh:mm a').format(timestamp),
+                style: const TextStyle(
+                    fontSize: 13, color: Color(0xFF8D6E63))),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+                color: status == 'entry'
+                    ? const Color(0xFF4CAF50).withOpacity(0.1)
+                    : const Color(0xFFD32F2F).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                    color: status == 'entry'
+                        ? const Color(0xFF4CAF50).withOpacity(0.3)
+                        : const Color(0xFFD32F2F).withOpacity(0.3))),
+            child: Text(status == 'entry' ? '🟢 IN' : '🔴 OUT',
+                style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: status == 'entry'
+                        ? const Color(0xFF4CAF50)
+                        : const Color(0xFFD32F2F))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // 📱 MOBILE COMPONENTS
+  // ============================================================
+
+  Widget _buildMobileHeader() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+      decoration: const BoxDecoration(
+        color: Color(0xFF5D4037),
+        borderRadius: BorderRadius.only(
+            bottomLeft: Radius.circular(30),
+            bottomRight: Radius.circular(30)),
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+              right: -20,
+              top: -20,
+              child: Icon(Icons.history,
+                  size: 120, color: Colors.white.withOpacity(0.05))),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12)),
+                          child: const Icon(Icons.arrow_back,
+                              color: Color(0xFFFFF8F0), size: 20),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text('Gate History',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                              color: Color(0xFFFFF8F0),
+                              letterSpacing: 1)),
+                    ],
+                  ),
+                  Container(
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: const Color(0xFF4CAF50).withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFF4CAF50))),
+                    child: const Text('LIVE',
+                        style: TextStyle(
+                            fontSize: 10,
+                            color: Color(0xFF4CAF50),
+                            fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              const Text('Access Log',
+                  style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFFFFF8F0))),
             ],
           ),
         ],
@@ -193,483 +537,238 @@ class _GateHistoryState extends State<GateHistory> {
     );
   }
 
-  Widget _iconPill({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFF8F0).withOpacity(0.15),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: const Color(0xFFFFF8F0).withOpacity(0.25),
-              width: 1,
+  Widget _buildMobileContent() {
+    if (!_hasLoadedOnce) {
+      return const Center(
+          child: CircularProgressIndicator(color: Color(0xFFD4C4A8)));
+    }
+    if (_errorMessage != null && _entries.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error, size: 48, color: Color(0xFFD32F2F)),
+            const SizedBox(height: 16),
+            Text(_errorMessage!,
+                style: const TextStyle(color: Color(0xFF5D4037)),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _startStream,
+              style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF5D4037),
+                  foregroundColor: Colors.white),
+              child: const Text('Retry'),
             ),
-          ),
-          child: Tooltip(
-            message: tooltip,
-            child: Icon(icon, color: const Color(0xFFFFF8F0), size: 20),
-          ),
+          ],
         ),
-      ),
-    );
-  }
-
-  // ==================== BUILD ====================
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFD4C4A8),
-      body: Container(
-        constraints: const BoxConstraints.expand(),
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFFFF8F0),
-              Color(0xFFF5F0E8),
-              Color(0xFFEDE5D8),
-            ],
-          ),
+      );
+    }
+    if (_entries.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.history, size: 70, color: Color(0xFFD4C4A8)),
+            SizedBox(height: 16),
+            Text('No gate entries found',
+                style: TextStyle(
+                    fontSize: 16,
+                    color: Color(0xFF5D4037),
+                    fontWeight: FontWeight.bold)),
+            SizedBox(height: 8),
+            Text('Your gate access history will appear here',
+                style: TextStyle(color: Color(0xFF8D6E63), fontSize: 12)),
+          ],
         ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(),
-              Expanded(
-                child: !_hasLoadedOnce
-                    ? const Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      CircularProgressIndicator(
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                            Color(0xFFD4C4A8)),
-                      ),
-                      SizedBox(height: 16),
-                      Text('Loading history...',
-                          style:
-                          TextStyle(color: Color(0xFFB8A99A))),
-                    ],
-                  ),
-                )
-                    : _errorMessage != null && _entries.isEmpty
-                    ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.error,
-                          size: 48, color: Color(0xFFD32F2F)),
-                      const SizedBox(height: 16),
-                      Text(
-                        _errorMessage!,
-                        style: const TextStyle(
-                            color: Color(0xFF6B5B4F)),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                        onPressed: _startStream,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor:
-                          const Color(0xFFD4C4A8),
-                          foregroundColor:
-                          const Color(0xFF6B5B4F),
-                        ),
-                        child: const Text('Retry'),
-                      ),
-                    ],
-                  ),
-                )
-                    : _entries.isEmpty
-                    ? const Center(
-                  child: Column(
-                    mainAxisAlignment:
-                    MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.history,
-                          size: 70,
-                          color: Color(0xFFE0D5C1)),
-                      SizedBox(height: 16),
-                      Text(
-                        'No gate entries found',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: Color(0xFF6B5B4F),
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Your gate access history will appear here',
-                        style: TextStyle(
-                            color: Color(0xFFB8A99A),
-                            fontSize: 12),
-                      ),
-                    ],
-                  ),
-                )
-                    : SingleChildScrollView(
-                  physics:
-                  const BouncingScrollPhysics(),
-                  padding:
-                  EdgeInsets.all(outerPadding),
-                  child: Center(
-                    child: ConstrainedBox(
-                      constraints: BoxConstraints(
-                          maxWidth: contentMaxWidth),
-                      child: Column(
-                        children: [
-                          // ==================== STATS CARD ====================
-                          Container(
-                            width: double.infinity,
-                            margin: const EdgeInsets.only(
-                                bottom: 16),
-                            padding: EdgeInsets.all(
-                                kIsWeb ? 14 : 16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius:
-                              BorderRadius.circular(
-                                  16),
-                              border: Border.all(
-                                  color: const Color(
-                                      0xFFE0D5C1),
-                                  width: 1),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: const Color(
-                                      0xFFD4C4A8)
-                                      .withOpacity(0.15),
-                                  blurRadius: 6,
-                                  offset:
-                                  const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: EdgeInsets.all(
-                                      kIsWeb ? 8 : 10),
-                                  decoration: BoxDecoration(
-                                    gradient:
-                                    const LinearGradient(
-                                      begin: Alignment
-                                          .topLeft,
-                                      end: Alignment
-                                          .bottomRight,
-                                      colors: [
-                                        Color(0xFFD4C4A8),
-                                        Color(0xFFC4A882)
-                                      ],
-                                    ),
-                                    borderRadius:
-                                    BorderRadius
-                                        .circular(12),
-                                  ),
-                                  child: Icon(
-                                      Icons.history,
-                                      color: const Color(
-                                          0xFFFFF8F0),
-                                      size: kIsWeb
-                                          ? 22
-                                          : 28),
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                    CrossAxisAlignment
-                                        .start,
-                                    children: [
-                                      Text(
-                                        'Total Gate Entries',
-                                        style: TextStyle(
-                                          fontSize:
-                                          kIsWeb
-                                              ? 11
-                                              : 12,
-                                          color: const Color(
-                                              0xFFB8A99A),
-                                          fontWeight:
-                                          FontWeight
-                                              .w500,
-                                        ),
-                                      ),
-                                      const SizedBox(
-                                          height: 4),
-                                      Text(
-                                        '${_entries.length}',
-                                        style: TextStyle(
-                                          fontSize: kIsWeb
-                                              ? 22
-                                              : 28,
-                                          fontWeight:
-                                          FontWeight
-                                              .bold,
-                                          color: const Color(
-                                              0xFF5D4037),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets
-                                      .symmetric(
-                                      horizontal: 10,
-                                      vertical: 6),
-                                  decoration: BoxDecoration(
-                                    color: const Color(
-                                        0xFFD4C4A8)
-                                        .withOpacity(0.15),
-                                    borderRadius:
-                                    BorderRadius
-                                        .circular(20),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize:
-                                    MainAxisSize.min,
-                                    children: const [
-                                      Icon(
-                                          Icons
-                                              .check_circle,
-                                          size: 14,
-                                          color: Color(
-                                              0xFF8D6E63)),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'Last 50',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          color: Color(
-                                              0xFF8D6E63),
-                                          fontWeight:
-                                          FontWeight
-                                              .w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+      );
+    }
 
-                          // ==================== ENTRIES LIST ====================
-                          ListView.builder(
-                            shrinkWrap: true,
-                            physics:
-                            const NeverScrollableScrollPhysics(),
-                            itemCount: _entries.length,
-                            itemBuilder: (context, index) {
-                              final entry =
-                              _entries[index];
-                              final timestamp =
-                              _parseTimestamp(
-                                  entry['timestamp']);
-                              final entryType =
-                                  entry['entryType'] ??
-                                      'unknown';
-                              final status =
-                                  entry['status'] ?? 'entry';
-                              final visitorName =
-                              entry['visitorName'];
-
-                              return Container(
-                                margin:
-                                const EdgeInsets.only(
-                                    bottom: 10),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius:
-                                  BorderRadius.circular(
-                                      14),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: const Color(
-                                          0xFFD4C4A8)
-                                          .withOpacity(
-                                          0.15),
-                                      blurRadius: 4,
-                                      offset: const Offset(
-                                          0, 2),
-                                    ),
-                                  ],
-                                ),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    borderRadius:
-                                    BorderRadius
-                                        .circular(14),
-                                    border: Border.all(
-                                        color: const Color(
-                                            0xFFE0D5C1),
-                                        width: 1),
-                                  ),
-                                  child: ListTile(
-                                    contentPadding:
-                                    const EdgeInsets
-                                        .symmetric(
-                                        horizontal: 12,
-                                        vertical: 8),
-                                    leading: Container(
-                                      padding:
-                                      const EdgeInsets
-                                          .all(8),
-                                      decoration:
-                                      BoxDecoration(
-                                        gradient:
-                                        LinearGradient(
-                                          begin: Alignment
-                                              .topLeft,
-                                          end: Alignment
-                                              .bottomRight,
-                                          colors: [
-                                            _getTypeColor(
-                                                entryType),
-                                            _getTypeColor(
-                                                entryType)
-                                                .withOpacity(
-                                                0.7),
-                                          ],
-                                        ),
-                                        borderRadius:
-                                        BorderRadius
-                                            .circular(
-                                            10),
-                                      ),
-                                      child: Icon(
-                                        _getTypeIcon(
-                                            entryType),
-                                        color: const Color(
-                                            0xFFFFF8F0),
-                                        size: 20,
-                                      ),
-                                    ),
-                                    title: Text(
-                                      _getEntryTypeLabel(
-                                          entryType),
-                                      style:
-                                      const TextStyle(
-                                        fontWeight:
-                                        FontWeight.bold,
-                                        color: Color(
-                                            0xFF6B5B4F),
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                    subtitle: Column(
-                                      crossAxisAlignment:
-                                      CrossAxisAlignment
-                                          .start,
-                                      children: [
-                                        const SizedBox(
-                                            height: 2),
-                                        Text(
-                                          DateFormat(
-                                              'MMM dd, yyyy • hh:mm a')
-                                              .format(
-                                              timestamp),
-                                          style:
-                                          const TextStyle(
-                                            fontSize: 10,
-                                            color: Color(
-                                                0xFFB8A99A),
-                                          ),
-                                        ),
-                                        if (visitorName !=
-                                            null)
-                                          Padding(
-                                            padding:
-                                            const EdgeInsets
-                                                .only(
-                                                top: 2),
-                                            child: Text(
-                                              '👤 $visitorName',
-                                              style: const TextStyle(
-                                                  fontSize:
-                                                  10,
-                                                  color: Color(
-                                                      0xFFD4C4A8)),
-                                            ),
-                                          ),
-                                      ],
-                                    ),
-                                    trailing: Container(
-                                      padding:
-                                      const EdgeInsets
-                                          .symmetric(
-                                          horizontal: 8,
-                                          vertical: 4),
-                                      decoration:
-                                      BoxDecoration(
-                                        color: status ==
-                                            'entry'
-                                            ? const Color(
-                                            0xFF8D6E63)
-                                            .withOpacity(
-                                            0.15)
-                                            : const Color(
-                                            0xFFD32F2F)
-                                            .withOpacity(
-                                            0.15),
-                                        borderRadius:
-                                        BorderRadius
-                                            .circular(
-                                            16),
-                                        border: Border.all(
-                                          color: status ==
-                                              'entry'
-                                              ? const Color(
-                                              0xFF8D6E63)
-                                              .withOpacity(
-                                              0.3)
-                                              : const Color(
-                                              0xFFD32F2F)
-                                              .withOpacity(
-                                              0.3),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        status == 'entry'
-                                            ? '✅'
-                                            : '❌',
-                                        style:
-                                        const TextStyle(
-                                            fontSize:
-                                            12),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                      ),
-                    ),
+    return SingleChildScrollView(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Stat card
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE0D5C1)),
+                boxShadow: [
+                  BoxShadow(
+                      color: Colors.black.withOpacity(0.03),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2))
+                ]),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [
+                        Color(0xFF5D4037),
+                        Color(0xFF8D6E63)
+                      ]),
+                      borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.history,
+                      color: Color(0xFFFFF8F0), size: 26),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Total Gate Entries',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: Color(0xFF8D6E63),
+                              fontWeight: FontWeight.w500)),
+                      const SizedBox(height: 4),
+                      Text('${_entries.length}',
+                          style: const TextStyle(
+                              fontSize: 26,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF5D4037))),
+                    ],
                   ),
                 ),
-              ),
-            ],
+                Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                      color: const Color(0xFFD4C4A8).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(20)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: const [
+                      Icon(Icons.check_circle,
+                          size: 12, color: Color(0xFF8D6E63)),
+                      SizedBox(width: 4),
+                      Text('Last 50',
+                          style: TextStyle(
+                              fontSize: 10,
+                              color: Color(0xFF8D6E63),
+                              fontWeight: FontWeight.w500)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
+
+          // Entries
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _entries.length,
+            itemBuilder: (context, index) =>
+                _buildMobileEntryCard(_entries[index]),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileEntryCard(Map<String, dynamic> entry) {
+    final timestamp = _parseTimestamp(entry['timestamp']);
+    final entryType = entry['entryType'] ?? 'unknown';
+    final status = entry['status'] ?? 'entry';
+    final visitorName = entry['visitorName'];
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE0D5C1)),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.03),
+                blurRadius: 6,
+                offset: const Offset(0, 2))
+          ]),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [
+                        _getTypeColor(entryType),
+                        _getTypeColor(entryType).withOpacity(0.7)
+                      ]),
+                      borderRadius: BorderRadius.circular(10)),
+                  child: Icon(_getTypeIcon(entryType),
+                      color: const Color(0xFFFFF8F0), size: 20),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(_getEntryTypeLabel(entryType),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF5D4037),
+                              fontSize: 14)),
+                      if (visitorName != null)
+                        Text('👤 $visitorName',
+                            style: const TextStyle(
+                                fontSize: 11, color: Color(0xFF8D6E63))),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                      color: status == 'entry'
+                          ? const Color(0xFF4CAF50).withOpacity(0.1)
+                          : const Color(0xFFD32F2F).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: status == 'entry'
+                              ? const Color(0xFF4CAF50).withOpacity(0.3)
+                              : const Color(0xFFD32F2F).withOpacity(0.3))),
+                  child: Text(status == 'entry' ? '🟢 IN' : '🔴 OUT',
+                      style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: status == 'entry'
+                              ? const Color(0xFF4CAF50)
+                              : const Color(0xFFD32F2F))),
+                ),
+              ],
+            ),
+            const Divider(color: Color(0xFFE0D5C1), height: 24),
+            Row(
+              children: [
+                const Icon(Icons.access_time,
+                    size: 14, color: Color(0xFFD4C4A8)),
+                const SizedBox(width: 8),
+                Text(DateFormat('MMM dd, yyyy • hh:mm a').format(timestamp),
+                    style: const TextStyle(
+                        fontSize: 12,
+                        color: Color(0xFF5D4037),
+                        fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
+  // ==================== SHARED HELPERS ====================
   String _getEntryTypeLabel(String type) {
     switch (type) {
       case 'rfid':

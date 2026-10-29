@@ -1,7 +1,9 @@
+// lib/screens/admin/pending_visits_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
+import '../../services/auth_service.dart';
 
 class PendingVisitsScreen extends StatefulWidget {
   const PendingVisitsScreen({super.key});
@@ -12,6 +14,8 @@ class PendingVisitsScreen extends StatefulWidget {
 
 class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final AuthService _authService = AuthService();
+
   List<Map<String, dynamic>> _visits = [];
   List<Map<String, dynamic>> _filteredVisits = [];
   bool _isLoading = true;
@@ -35,6 +39,7 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     super.dispose();
   }
 
+  // ==================== LOAD ====================
   Future<void> _loadPendingVisits() async {
     setState(() {
       _isLoading = true;
@@ -77,16 +82,14 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     }
   }
 
+  // ==================== FILTERS + PAGINATION ====================
   void _applyFiltersInternal() {
     if (_searchQuery.isEmpty) {
       _filteredVisits = List.from(_visits);
     } else {
       final q = _searchQuery.toLowerCase();
       _filteredVisits = _visits.where((v) {
-        return (v['visitorName'] ?? '')
-            .toString()
-            .toLowerCase()
-            .contains(q) ||
+        return (v['visitorName'] ?? '').toString().toLowerCase().contains(q) ||
             (v['visitingResidentName'] ?? '')
                 .toString()
                 .toLowerCase()
@@ -135,8 +138,7 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
   }
 
   void _goToPage(int page) {
-    final total = _totalPages;
-    if (page < 1 || page > total) return;
+    if (page < 1 || page > _totalPages) return;
     setState(() => _currentPage = page);
   }
 
@@ -147,6 +149,7 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     });
   }
 
+  // ==================== MARK EXIT ====================
   Future<void> _markExit(Map<String, dynamic> visit) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -178,8 +181,7 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
           children: [
             Text(
               'Mark ${visit['visitorName']} as OUT?',
-              style:
-              const TextStyle(fontSize: 13, color: Color(0xFF6B5B4F)),
+              style: const TextStyle(fontSize: 13, color: Color(0xFF6B5B4F)),
             ),
             const SizedBox(height: 12),
             Container(
@@ -238,24 +240,36 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     try {
       final exitTime = DateTime.now().toIso8601String();
 
+      final guardId = _authService.getCurrentUserId();
+      String guardName = 'Staff';
+      if (guardId != null) {
+        final guardDoc =
+        await _firestore.collection('users').doc(guardId).get();
+        guardName = guardDoc.get('fullName') ?? 'Staff';
+      }
+
       await _firestore
           .collection('gate_entries')
           .doc(visit['id'])
           .update({
         'visitStatus': 'outside',
         'checkOutTime': exitTime,
+        'closedBy': guardName,
+        'closedById': guardId,
       });
 
       await _firestore.collection('gate_entries').add({
         'residentId': visit['visitingResidentId'] ?? 'guest',
         'residentName': '👤 Guest Exit: ${visit['visitorName']}',
-        'entryType': 'manual',
+        'entryType': visit['entryType'] ?? 'manual',
         'timestamp': exitTime,
         'visitorName': visit['visitorName'],
         'status': 'exit',
         'isGuestExit': true,
         'originalEntryId': visit['id'],
         'visitingResidentName': visit['visitingResidentName'],
+        'openedBy': guardName,
+        'openedById': guardId,
       });
 
       if (mounted) {
@@ -284,59 +298,514 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     }
   }
 
-  // ============================================================
-  // REUSABLE HEADER (inline)
-  // ============================================================
-  Widget _buildHeader() {
-    return Container(
-      color: const Color(0xFFD4C4A8),
-      padding: EdgeInsets.fromLTRB(
-        kIsWeb ? 20 : 16,
-        kIsWeb ? 14 : 12,
-        kIsWeb ? 20 : 16,
-        kIsWeb ? 14 : 12,
+  // ==================== BUILD ====================
+  @override
+  Widget build(BuildContext context) {
+    if (kIsWeb) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF5F0E8),
+        body: Row(
+          children: [
+            _buildWebSidebar(),
+            Expanded(
+              child: Column(
+                children: [
+                  _buildWebHeader(),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(32),
+                      child: _buildWebContent(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F0E8),
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildMobileHeader(),
+            Expanded(child: _buildMobileContent()),
+          ],
+        ),
       ),
+    );
+  }
+
+  // ============================================================
+  // 🖥️ WEB COMPONENTS
+  // ============================================================
+
+  Widget _buildWebSidebar() {
+    return Container(
+      width: 260,
+      color: const Color(0xFF5D4037),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
         children: [
-          SizedBox(
-            height: 40,
-            child: Row(
-              children: [
-                _iconPill(
-                  icon: Icons.arrow_back,
-                  tooltip: 'Back',
-                  onTap: () => Navigator.pop(context),
-                ),
-                const Spacer(),
-                _iconPill(
+          const SizedBox(height: 40),
+          const Icon(Icons.home_work, size: 48, color: Color(0xFFFFF8F0)),
+          const SizedBox(height: 12),
+          const Text('Florence Homes',
+              style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFFFFF8F0),
+                  letterSpacing: 1)),
+          const Text('Admin Portal',
+              style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
+          const SizedBox(height: 40),
+          _buildWebSidebarItem(Icons.dashboard, 'Dashboard',
+              onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.people, 'Residents',
+              onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.security, 'Guards',
+              onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.pending_actions, 'Pending Approvals',
+              onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.history, 'Gate History',
+              onTap: () => Navigator.pop(context)),
+          const Spacer(),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)),
+            title: const Text('Back to Dashboard',
+                style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)),
+            onTap: () => Navigator.pop(context),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildWebSidebarItem(IconData icon, String title,
+      {bool isActive = false, required VoidCallback onTap}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: ListTile(
+        onTap: onTap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        tileColor: isActive
+            ? const Color(0xFFD4C4A8).withOpacity(0.15)
+            : Colors.transparent,
+        leading: Icon(icon,
+            color: isActive ? const Color(0xFFFFF8F0) : const Color(0xFFD4C4A8)),
+        title: Text(title,
+            style: TextStyle(
+                color: isActive ? const Color(0xFFFFF8F0) : const Color(0xFFD4C4A8),
+                fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
+      ),
+    );
+  }
+
+  Widget _buildWebHeader() {
+    return Container(
+      height: 80,
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      decoration: const BoxDecoration(
+          color: Colors.white,
+          border: Border(bottom: BorderSide(color: Color(0xFFE0D5C1), width: 1))),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Text('Pending Visits',
+              style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF5D4037))),
+          Row(
+            children: [
+              _headerIconButton(
                   icon: Icons.refresh,
                   tooltip: 'Refresh',
                   onTap: _isProcessing ? () {} : _loadPendingVisits,
+                  color: const Color(0xFF8D6E63)),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _headerIconButton(
+      {required IconData icon,
+        required String tooltip,
+        required VoidCallback onTap,
+        Color color = const Color(0xFF5D4037)}) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: color.withOpacity(0.3))),
+          child:
+          Tooltip(message: tooltip, child: Icon(icon, color: color, size: 20)),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWebContent() {
+    if (_isLoading) {
+      return const Center(
+          child: CircularProgressIndicator(color: Color(0xFF8D6E63)));
+    }
+    if (_errorMessage != null) {
+      return Center(
+          child: Text(_errorMessage!,
+              style: const TextStyle(color: Color(0xFFD32F2F))));
+    }
+
+    final paginated = _paginatedVisits;
+    final total = _totalPages;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Stat Row
+        Row(
+          children: [
+            _buildWebStatCard('Visitors Inside', _visits.length.toString(),
+                Icons.exit_to_app, const Color(0xFFFF9800)),
+            const SizedBox(width: 20),
+            _buildWebStatCard('Filtered', _filteredVisits.length.toString(),
+                Icons.filter_alt, const Color(0xFF8D6E63)),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // Search
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE0D5C1))),
+          child: Row(
+            children: [
+              const Icon(Icons.search, color: Color(0xFF8D6E63)),
+              const SizedBox(width: 12),
+              Expanded(
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
+                  decoration: const InputDecoration(
+                      hintText: 'Search visitor, resident, or house...',
+                      border: InputBorder.none,
+                      isDense: true),
                 ),
+              ),
+              if (_searchQuery.isNotEmpty)
+                IconButton(
+                    icon: const Icon(Icons.clear, size: 20),
+                    onPressed: _clearSearch),
+            ],
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        if (paginated.isEmpty)
+          Container(
+            padding: const EdgeInsets.all(40),
+            decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE0D5C1))),
+            child: Center(
+              child: Column(
+                children: [
+                  Icon(
+                      _visits.isEmpty ? Icons.check_circle : Icons.search_off,
+                      size: 56,
+                      color: const Color(0xFFD4C4A8)),
+                  const SizedBox(height: 12),
+                  Text(
+                    _visits.isEmpty
+                        ? 'No visitors inside'
+                        : 'No matches found',
+                    style: const TextStyle(
+                        fontSize: 16,
+                        color: Color(0xFF5D4037),
+                        fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _visits.isEmpty
+                        ? 'All guests have checked out'
+                        : 'Try a different search term',
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFF8D6E63)),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: paginated.length,
+            itemBuilder: (context, index) {
+              return _buildWebVisitRow(paginated[index]);
+            },
+          ),
+
+        if (_pageSize != 0 && total > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 24),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                    onPressed:
+                    _currentPage > 1 ? () => _goToPage(_currentPage - 1) : null,
+                    icon: const Icon(Icons.chevron_left)),
+                Text('Page $_currentPage of $total',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF5D4037))),
+                IconButton(
+                    onPressed: _currentPage < total
+                        ? () => _goToPage(_currentPage + 1)
+                        : null,
+                    icon: const Icon(Icons.chevron_right)),
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: const [
-              Icon(Icons.exit_to_app,
-                  size: 26, color: Color(0xFFFFF8F0)),
-              SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  'Pending Visits',
-                  style: TextStyle(
+      ],
+    );
+  }
+
+  Widget _buildWebStatCard(
+      String title, String value, IconData icon, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFE0D5C1)),
+            boxShadow: [
+              BoxShadow(
+                  color: Colors.black.withOpacity(0.03),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4))
+            ]),
+        child: Row(
+          children: [
+            Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12)),
+                child: Icon(icon, size: 24, color: color)),
+            const SizedBox(width: 16),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(
+                        fontSize: 13,
+                        color: Color(0xFF8D6E63),
+                        fontWeight: FontWeight.w500)),
+                const SizedBox(height: 4),
+                Text(value,
+                    style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: color)),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWebVisitRow(Map<String, dynamic> visit) {
+    final checkIn = DateTime.tryParse((visit['checkInTime'] ?? '').toString());
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE0D5C1)),
+          boxShadow: [
+            BoxShadow(
+                color: Colors.black.withOpacity(0.02),
+                blurRadius: 4,
+                offset: const Offset(0, 2))
+          ]),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+                color: const Color(0xFFFF9800).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10)),
+            child: const Icon(Icons.person,
+                color: Color(0xFFFF9800), size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            flex: 2,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(visit['visitorName'] ?? 'Unknown',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                        color: Color(0xFF5D4037))),
+                Text(
+                    'Visiting: ${visit['visitingResidentName'] ?? 'Unknown'}',
+                    style: const TextStyle(
+                        fontSize: 12, color: Color(0xFF8D6E63))),
+              ],
+            ),
+          ),
+          Expanded(
+              flex: 1,
+              child: Text(visit['visitingResidentHouse'] ?? '—',
+                  style: const TextStyle(
+                      fontSize: 13, color: Color(0xFF8D6E63)))),
+          Expanded(
+              flex: 1,
+              child: Text(
+                  checkIn != null
+                      ? DateFormat('MMM dd, yyyy • hh:mm a').format(checkIn)
+                      : '—',
+                  style: const TextStyle(
+                      fontSize: 13, color: Color(0xFF8D6E63)))),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+                color: const Color(0xFFFF9800).withOpacity(0.15),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                    color: const Color(0xFFFF9800).withOpacity(0.3))),
+            child: const Text('● INSIDE',
+                style: TextStyle(
+                    color: Color(0xFFFF9800),
                     fontWeight: FontWeight.bold,
-                    letterSpacing: 1.2,
-                    fontSize: 22,
-                    color: Color(0xFFFFF8F0),
+                    fontSize: 10)),
+          ),
+          const SizedBox(width: 12),
+          ElevatedButton.icon(
+            onPressed: _isProcessing ? null : () => _markExit(visit),
+            icon: const Icon(Icons.logout, size: 14),
+            label: const Text('Mark as OUT'),
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF4CAF50),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8)),
+                elevation: 0),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // 📱 MOBILE COMPONENTS
+  // ============================================================
+
+  Widget _buildMobileHeader() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+      decoration: const BoxDecoration(
+        color: Color(0xFF5D4037),
+        borderRadius: BorderRadius.only(
+            bottomLeft: Radius.circular(30),
+            bottomRight: Radius.circular(30)),
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+              right: -20,
+              top: -20,
+              child: Icon(Icons.exit_to_app,
+                  size: 120, color: Colors.white.withOpacity(0.05))),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: () => Navigator.pop(context),
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12)),
+                          child: const Icon(Icons.arrow_back,
+                              color: Color(0xFFFFF8F0), size: 20),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Text('Pending Visits',
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 20,
+                              color: Color(0xFFFFF8F0),
+                              letterSpacing: 1)),
+                    ],
                   ),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 1,
-                ),
+                  GestureDetector(
+                    onTap: _isProcessing ? null : _loadPendingVisits,
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.refresh,
+                          color: Color(0xFFFFF8F0), size: 20),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text('Visitors Inside',
+                      style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFFFFF8F0))),
+                  Container(
+                    padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                        color: const Color(0xFFFF9800).withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFFF9800))),
+                    child: Text(
+                      '${_visits.length}',
+                      style: const TextStyle(
+                          fontSize: 14,
+                          color: Color(0xFFFF9800),
+                          fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -345,115 +814,15 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     );
   }
 
-  Widget _iconPill({
-    required IconData icon,
-    required String tooltip,
-    required VoidCallback onTap,
-  }) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFF8F0).withOpacity(0.15),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: const Color(0xFFFFF8F0).withOpacity(0.25),
-              width: 1,
-            ),
-          ),
-          child: Tooltip(
-            message: tooltip,
-            child: Icon(icon, color: const Color(0xFFFFF8F0), size: 20),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFD4C4A8),
-      body: Container(
-        constraints: const BoxConstraints.expand(),
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            end: Alignment.bottomCenter,
-            colors: [
-              Color(0xFFFFF8F0),
-              Color(0xFFF5F0E8),
-              Color(0xFFEDE5D8),
-            ],
-          ),
-        ),
-        child: SafeArea(
-          child: Column(
-            children: [
-              _buildHeader(),
-              Expanded(
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(
-                      maxWidth: kIsWeb ? 900 : double.infinity,
-                    ),
-                    child: _buildBody(),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBody() {
-    final padding = kIsWeb ? 20.0 : 16.0;
-
+  Widget _buildMobileContent() {
     if (_isLoading) {
       return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8)),
-            ),
-            SizedBox(height: 16),
-            Text('Loading pending visits...',
-                style: TextStyle(color: Color(0xFFB8A99A))),
-          ],
-        ),
-      );
+          child: CircularProgressIndicator(color: Color(0xFFD4C4A8)));
     }
-
     if (_errorMessage != null) {
       return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.error, size: 48, color: Color(0xFFD32F2F)),
-            const SizedBox(height: 16),
-            Text(_errorMessage!,
-                style: const TextStyle(color: Color(0xFF8D6E63))),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _loadPendingVisits,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFD4C4A8),
-                foregroundColor: const Color(0xFF6B5B4F),
-              ),
-              child: const Text('Retry'),
-            ),
-          ],
-        ),
-      );
+          child: Text(_errorMessage!,
+              style: const TextStyle(color: Color(0xFFD32F2F))));
     }
 
     final paginated = _paginatedVisits;
@@ -461,166 +830,52 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: EdgeInsets.fromLTRB(
-          padding, kIsWeb ? 12 : 8, padding, padding),
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Search
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFD4C4A8).withOpacity(0.15),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                TextField(
-                  controller: _searchController,
-                  onChanged: _onSearchChanged,
-                  decoration: InputDecoration(
-                    hintText: 'Search visitor or resident...',
-                    hintStyle: const TextStyle(
-                        color: Color(0xFFB8A99A), fontSize: 12),
-                    prefixIcon: const Icon(Icons.search,
-                        color: Color(0xFFD4C4A8), size: 20),
-                    suffixIcon: _searchQuery.isNotEmpty
-                        ? IconButton(
-                      icon: const Icon(Icons.clear,
-                          size: 18, color: Color(0xFFB8A99A)),
-                      onPressed: _clearSearch,
-                      tooltip: 'Clear',
-                    )
-                        : null,
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 4, vertical: 12),
-                  ),
-                ),
-                const Divider(color: Color(0xFFF5F0E8), height: 1),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.person_pin_circle,
-                        size: 14, color: Color(0xFFFF9800)),
-                    const SizedBox(width: 6),
-                    Text(
-                      '${_filteredVisits.length} inside',
-                      style: const TextStyle(
-                          fontSize: 11,
-                          color: Color(0xFF8D6E63),
-                          fontWeight: FontWeight.w600),
-                    ),
-                    const Spacer(),
-                    const Text('Per page:',
-                        style: TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFFB8A99A),
-                            fontWeight: FontWeight.w500)),
-                    const SizedBox(width: 6),
-                    ..._pageSizeOptions(),
-                  ],
-                ),
-              ],
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE0D5C1))),
+            child: TextField(
+              controller: _searchController,
+              onChanged: _onSearchChanged,
+              decoration: const InputDecoration(
+                  hintText: 'Search visitor or resident...',
+                  hintStyle:
+                  TextStyle(fontSize: 13, color: Color(0xFFB8A99A)),
+                  border: InputBorder.none,
+                  isDense: true),
             ),
           ),
-
-          const SizedBox(height: 12),
-
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [Color(0xFF8D6E63), Color(0xFFD4C4A8)],
-              ),
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFF8D6E63).withOpacity(0.3),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.25),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Icon(Icons.exit_to_app,
-                      color: Colors.white, size: 26),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'VISITORS INSIDE',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 1.2,
-                          color: Color(0xFFFFF8F0),
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        _visits.length.toString(),
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
 
           if (paginated.isEmpty)
             Container(
               padding: const EdgeInsets.all(32),
               decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border:
-                Border.all(color: const Color(0xFFE0D5C1), width: 1),
-              ),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE0D5C1))),
               child: Column(
                 children: [
                   Icon(
-                    _visits.isEmpty ? Icons.check_circle : Icons.search_off,
-                    size: 56,
-                    color: const Color(0xFFD4C4A8),
-                  ),
+                      _visits.isEmpty ? Icons.check_circle : Icons.search_off,
+                      size: 56,
+                      color: const Color(0xFFD4C4A8)),
                   const SizedBox(height: 12),
                   Text(
                     _visits.isEmpty
-                        ? ' No visitors inside'
+                        ? 'No visitors inside'
                         : 'No matches found',
                     style: const TextStyle(
-                      fontSize: 14,
-                      color: Color(0xFF6B5B4F),
-                      fontWeight: FontWeight.w600,
-                    ),
+                        fontSize: 14,
+                        color: Color(0xFF6B5B4F),
+                        fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 4),
                   Text(
@@ -642,118 +897,69 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
                 final globalIndex = _pageSize == 0
                     ? index + 1
                     : ((_currentPage - 1) * _pageSize) + index + 1;
-                return _buildVisitCard(paginated[index], globalIndex);
+                return _buildMobileVisitCard(paginated[index], globalIndex);
               },
             ),
 
-          const SizedBox(height: 12),
-
           if (_pageSize != 0 && total > 1)
-            Container(
-              padding:
-              const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                border:
-                Border.all(color: const Color(0xFFE0D5C1), width: 1),
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFFD4C4A8).withOpacity(0.15),
-                    blurRadius: 6,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.first_page, size: 20),
-                    onPressed: _currentPage > 1 ? () => _goToPage(1) : null,
-                    color: const Color(0xFF8D6E63),
-                    disabledColor: const Color(0xFFE0D5C1),
-                    tooltip: 'First page',
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.chevron_left, size: 20),
-                    onPressed: _currentPage > 1
-                        ? () => _goToPage(_currentPage - 1)
-                        : null,
-                    color: const Color(0xFF8D6E63),
-                    disabledColor: const Color(0xFFE0D5C1),
-                    tooltip: 'Previous page',
-                  ),
-                  Expanded(
-                    child: Center(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color:
-                          const Color(0xFFD4C4A8).withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          'Page $_currentPage of $total',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            color: Color(0xFF6B5B4F),
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.chevron_right, size: 20),
-                    onPressed: _currentPage < total
-                        ? () => _goToPage(_currentPage + 1)
-                        : null,
-                    color: const Color(0xFF8D6E63),
-                    disabledColor: const Color(0xFFE0D5C1),
-                    tooltip: 'Next page',
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.last_page, size: 20),
-                    onPressed: _currentPage < total
-                        ? () => _goToPage(total)
-                        : null,
-                    color: const Color(0xFF8D6E63),
-                    disabledColor: const Color(0xFFE0D5C1),
-                    tooltip: 'Last page',
-                  ),
-                ],
+            Padding(
+              padding: const EdgeInsets.only(top: 16),
+              child: Container(
+                padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE0D5C1))),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    IconButton(
+                        onPressed: _currentPage > 1
+                            ? () => _goToPage(_currentPage - 1)
+                            : null,
+                        icon: const Icon(Icons.chevron_left,
+                            color: Color(0xFF8D6E63))),
+                    Text('Page $_currentPage of $total',
+                        style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF5D4037))),
+                    IconButton(
+                        onPressed: _currentPage < total
+                            ? () => _goToPage(_currentPage + 1)
+                            : null,
+                        icon: const Icon(Icons.chevron_right,
+                            color: Color(0xFF8D6E63))),
+                  ],
+                ),
               ),
             ),
+          const SizedBox(height: 20),
         ],
       ),
     );
   }
 
-  Widget _buildVisitCard(Map<String, dynamic> visit, int index) {
-    final checkIn =
-    DateTime.tryParse((visit['checkInTime'] ?? '').toString());
+  Widget _buildMobileVisitCard(Map<String, dynamic> visit, int index) {
+    final checkIn = DateTime.tryParse((visit['checkInTime'] ?? '').toString());
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+            color: const Color(0xFFFF9800).withOpacity(0.4), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFD4C4A8).withOpacity(0.15),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 6,
+              offset: const Offset(0, 2))
         ],
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-              color: const Color(0xFFFF9800).withOpacity(0.4), width: 1.5),
-        ),
-        padding: const EdgeInsets.all(14),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -762,16 +968,11 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFFFF9800).withOpacity(0.2),
-                        const Color(0xFFFF9800).withOpacity(0.1),
-                      ],
-                    ),
+                    color: const Color(0xFFFF9800).withOpacity(0.15),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(Icons.person,
-                      size: 24, color: Color(0xFFFF9800)),
+                      size: 22, color: Color(0xFFFF9800)),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -780,24 +981,20 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
                     children: [
                       Row(
                         children: [
-                          Text(
-                            '#$index',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              color: Color(0xFFB8A99A),
-                              fontFamily: 'monospace',
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                          Text('#$index',
+                              style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Color(0xFFB8A99A),
+                                  fontFamily: 'monospace',
+                                  fontWeight: FontWeight.w600)),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
                               visit['visitorName'] ?? 'Unknown',
                               style: const TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF6B5B4F),
-                              ),
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF5D4037)),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
@@ -807,15 +1004,15 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
                       Text(
                         'Visiting: ${visit['visitingResidentName'] ?? 'Unknown'}',
                         style: const TextStyle(
-                            fontSize: 11, color: Color(0xFF8D6E63)),
+                            fontSize: 12, color: Color(0xFF8D6E63)),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 4),
+                  padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: const Color(0xFFFF9800).withOpacity(0.15),
                     borderRadius: BorderRadius.circular(16),
@@ -825,40 +1022,34 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
                   child: const Text(
                     '● INSIDE',
                     style: TextStyle(
-                      color: Color(0xFFFF9800),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 9,
-                    ),
+                        color: Color(0xFFFF9800),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 9),
                   ),
                 ),
               ],
             ),
-
-            const Divider(color: Color(0xFFE0D5C1), height: 20),
-
+            const Divider(color: Color(0xFFE0D5C1), height: 24),
             if ((visit['visitingResidentHouse'] ?? '').toString().isNotEmpty)
-              _infoRow(Icons.home, '🏠 House',
+              _mobileInfoRow(Icons.home, 'House',
                   visit['visitingResidentHouse'].toString()),
             if (checkIn != null) ...[
               const SizedBox(height: 6),
-              _infoRow(
-                Icons.login,
-                '📥 Check-In',
-                DateFormat('MMM dd, yyyy • hh:mm a').format(checkIn),
-              ),
+              _mobileInfoRow(
+                  Icons.login,
+                  'Check-In',
+                  DateFormat('MMM dd, yyyy • hh:mm a').format(checkIn)),
             ],
             if ((visit['note'] ?? '').toString().isNotEmpty) ...[
               const SizedBox(height: 6),
-              _infoRow(Icons.notes, '📝 Note', visit['note'].toString()),
+              _mobileInfoRow(
+                  Icons.notes, 'Note', visit['note'].toString()),
             ],
-
-            const SizedBox(height: 14),
-
+            const SizedBox(height: 16),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed:
-                _isProcessing ? null : () => _markExit(visit),
+                onPressed: _isProcessing ? null : () => _markExit(visit),
                 icon: const Icon(Icons.logout, size: 16),
                 label: const Text('Mark as OUT (Return ID)'),
                 style: ElevatedButton.styleFrom(
@@ -866,12 +1057,9 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
                   backgroundColor: const Color(0xFF4CAF50),
                   foregroundColor: Colors.white,
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                      borderRadius: BorderRadius.circular(12)),
                   textStyle: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+                      fontSize: 13, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
@@ -881,75 +1069,26 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     );
   }
 
-  List<Widget> _pageSizeOptions() {
-    const options = <Map<String, dynamic>>[
-      {'label': '5', 'value': 5},
-      {'label': '10', 'value': 10},
-      {'label': '20', 'value': 20},
-      {'label': '50', 'value': 50},
-      {'label': 'All', 'value': 0},
-    ];
-
-    return options.map((opt) {
-      final value = opt['value'] as int;
-      final isSelected = _pageSize == value;
-      return Padding(
-        padding: const EdgeInsets.only(left: 4),
-        child: GestureDetector(
-          onTap: () => _changePageSize(value),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? const Color(0xFFD4C4A8)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isSelected
-                    ? const Color(0xFFD4C4A8)
-                    : const Color(0xFFE0D5C1),
-                width: 1,
-              ),
-            ),
-            child: Text(
-              opt['label'] as String,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight:
-                isSelected ? FontWeight.bold : FontWeight.w500,
-                color: isSelected
-                    ? const Color(0xFFFFF8F0)
-                    : const Color(0xFF8D6E63),
-              ),
-            ),
-          ),
-        ),
-      );
-    }).toList();
-  }
-
-  Widget _infoRow(IconData icon, String label, String value) {
+  Widget _mobileInfoRow(IconData icon, String label, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Icon(icon, size: 14, color: const Color(0xFFD4C4A8)),
         const SizedBox(width: 8),
         SizedBox(
-          width: 76,
-          child: Text(
-            label,
-            style: const TextStyle(
-                fontSize: 11,
-                color: Color(0xFFB8A99A),
-                fontWeight: FontWeight.w500),
-          ),
+          width: 70,
+          child: Text(label,
+              style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF8D6E63),
+                  fontWeight: FontWeight.w500)),
         ),
         Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(
-                fontSize: 11, color: Color(0xFF6B5B4F)),
-          ),
+          child: Text(value,
+              style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF5D4037),
+                  fontWeight: FontWeight.bold)),
         ),
       ],
     );
