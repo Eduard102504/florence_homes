@@ -40,7 +40,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
   StreamSubscription<QuerySnapshot>? _entriesSub;
   StreamSubscription<QuerySnapshot>? _residentsSub;
 
-  // ==================== PDF BRAND COLORS ====================
+  // PDF Brand Colors
   static final PdfColor _brandBrown = PdfColor.fromHex('#5D4037');
   static final PdfColor _brandCream = PdfColor.fromHex('#D4C4A8');
   static final PdfColor _brandTan = PdfColor.fromHex('#C4A882');
@@ -49,10 +49,8 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
   static final PdfColor _brandBorder = PdfColor.fromHex('#E0D5C1');
   static final PdfColor _pdfWhite = PdfColor.fromHex('#FFFFFF');
 
-  // ==================== TIMESTAMP ====================
   DateTime _parseTimestamp(dynamic timestamp) {
     if (timestamp == null) return DateTime.now();
-
     DateTime utcTime;
     if (timestamp is Timestamp) {
       utcTime = timestamp.toDate();
@@ -78,7 +76,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     return DateTime.now();
   }
 
-  // ==================== PAGINATION ====================
   int get _totalPages {
     if (_pageSize == 0) return 1;
     if (_entries.isEmpty) return 1;
@@ -99,14 +96,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     setState(() => _currentPage = page);
   }
 
-  void _changePageSize(int newSize) {
-    setState(() {
-      _pageSize = newSize;
-      _currentPage = 1;
-    });
-  }
-
-  // ==================== LIFECYCLE ====================
   @override
   void initState() {
     super.initState();
@@ -121,7 +110,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     super.dispose();
   }
 
-  // ==================== LIVE RESIDENTS ====================
   void _startResidentsStream() {
     _residentsSub = _firestore
         .collection('users')
@@ -139,13 +127,10 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
           print('🔴 residents parse error: $e');
         }
       },
-      onError: (e) {
-        print('🔴 residents stream error: $e');
-      },
+      onError: (e) => print('🔴 residents stream error: $e'),
     );
   }
 
-  // ==================== LIVE ENTRIES ====================
   void _startEntriesStream() {
     _entriesSub = _firestore
         .collection('gate_entries')
@@ -161,8 +146,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
 
           list.sort((a, b) =>
               _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a)));
-
-          print('🔍 gate_entries stream docs: ${list.length}');
 
           if (!mounted) return;
 
@@ -192,7 +175,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     );
   }
 
-  // ==================== FILTERS ====================
   void _applyFiltersInternal() {
     try {
       List<Map<String, dynamic>> filtered = List.from(_allEntries);
@@ -202,13 +184,11 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
             .where((e) => e['residentId'] == _selectedResident)
             .toList();
       }
-
       if (_selectedEntryType != 'all') {
         filtered = filtered
             .where((e) => e['entryType'] == _selectedEntryType)
             .toList();
       }
-
       if (_dateRange != null) {
         filtered = filtered.where((entry) {
           final t = _getEntryTimestamp(entry);
@@ -219,7 +199,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
 
       filtered.sort((a, b) =>
           _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a)));
-
       _entries = filtered;
     } catch (e) {
       print('🔴 _applyFiltersInternal error: $e');
@@ -234,7 +213,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     });
   }
 
-  // ==================== DISPLAY HELPERS ====================
   String _getEntryTypeDisplay(String? type) {
     switch (type) {
       case 'uhf_rfid':
@@ -263,9 +241,12 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
               child: Column(
                 children: [
                   _buildWebHeader(),
+                  // ✅ Safe Column -> Expanded -> Content
                   Expanded(
-                    // ✅ SAFE BUILD WRAPPER
-                    child: _buildWebBodySafely(),
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: _buildWebContent(),
+                    ),
                   ),
                 ],
               ),
@@ -282,7 +263,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
         child: Column(
           children: [
             _buildMobileHeader(),
-            Expanded(child: _buildMobileBodySafely()),
+            Expanded(child: _buildMobileContent()),
           ],
         ),
       ),
@@ -290,500 +271,9 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
   }
 
   // ============================================================
-  // 🖥️ WEB SAFE BODY
+  // 🖥️ WEB COMPONENTS
   // ============================================================
-  Widget _buildWebBodySafely() {
-    try {
-      // 1. Loading
-      if (_allEntries.isEmpty && _entries.isEmpty && _errorMessage == null) {
-        return const Center(
-            child: CircularProgressIndicator(color: Color(0xFF8D6E63)));
-      }
 
-      // 2. Error
-      if (_errorMessage != null) {
-        return Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline,
-                  size: 48, color: Color(0xFFD32F2F)),
-              const SizedBox(height: 12),
-              Text(_errorMessage!,
-                  style: const TextStyle(color: Color(0xFFD32F2F))),
-            ],
-          ),
-        );
-      }
-
-      // 3. Empty
-      if (_entries.isEmpty) {
-        return const Center(
-            child: Text('No gate entries found.',
-                style: TextStyle(fontSize: 18, color: Color(0xFF8D6E63))));
-      }
-
-      // 4. Data
-      final paginated = _paginatedEntries;
-      final total = _totalPages;
-
-      return SingleChildScrollView(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Stats
-            Wrap(
-              spacing: 20,
-              runSpacing: 20,
-              children: [
-                _buildWebStatCard('Total Entries', _entries.length.toString(),
-                    Icons.door_front_door, const Color(0xFF8D6E63)),
-                _buildWebStatCard(
-                    'RFID Scans',
-                    _entries
-                        .where((e) =>
-                    e['entryType'] == 'rfid' ||
-                        e['entryType'] == 'uhf_rfid')
-                        .length
-                        .toString(),
-                    Icons.nfc,
-                    const Color(0xFFC4A882)),
-                _buildWebStatCard(
-                    'QR Visitors',
-                    _entries
-                        .where((e) => e['entryType'] == 'qr_visitor')
-                        .length
-                        .toString(),
-                    Icons.qr_code,
-                    const Color(0xFFA89070)),
-                _buildWebStatCard(
-                    'Manual',
-                    _entries
-                        .where((e) => e['entryType'] == 'manual')
-                        .length
-                        .toString(),
-                    Icons.person,
-                    const Color(0xFFFF9800)),
-              ],
-            ),
-            const SizedBox(height: 24),
-
-            // Chips
-            if (_dateRange != null ||
-                _selectedResident != 'all' ||
-                _selectedEntryType != 'all')
-              Container(
-                margin: const EdgeInsets.only(bottom: 16),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFFE0D5C1))),
-                child: Row(
-                  children: [
-                    const Icon(Icons.filter_alt,
-                        size: 16, color: Color(0xFF8D6E63)),
-                    const SizedBox(width: 8),
-                    if (_dateRange != null)
-                      _buildWebFilterChip(
-                          '📅 ${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}',
-                              () {
-                            setState(() => _dateRange = null);
-                            _applyFilters();
-                          }),
-                    if (_selectedResident != 'all')
-                      _buildWebFilterChip(
-                          '👤 ${_residentNames[_selectedResident] ?? 'Unknown'}',
-                              () {
-                            setState(() => _selectedResident = 'all');
-                            _applyFilters();
-                          }),
-                    if (_selectedEntryType != 'all')
-                      _buildWebFilterChip(
-                          '🔖 ${_selectedEntryType.toUpperCase()}', () {
-                        setState(() => _selectedEntryType = 'all');
-                        _applyFilters();
-                      }),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: () {
-                        setState(() {
-                          _dateRange = null;
-                          _selectedResident = 'all';
-                          _selectedEntryType = 'all';
-                        });
-                        _applyFilters();
-                      },
-                      child: const Text('Clear All',
-                          style: TextStyle(
-                              color: Color(0xFFD32F2F), fontSize: 12)),
-                    ),
-                  ],
-                ),
-              ),
-
-            // ✅ LIST: Not wrapped in Expanded, perfectly fine inside SingleChildScrollView
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: paginated.length,
-              itemBuilder: (context, index) {
-                final entry = paginated[index];
-                final timestamp = _getEntryTimestamp(entry);
-                final entryType = entry['entryType'] ?? 'unknown';
-                final residentName = entry['residentName'] ?? 'Unknown';
-                final visitorName = entry['visitorName'];
-                final status = entry['status'] ?? 'entry';
-                final openedBy = entry['openedBy'] ?? entry['closedBy'];
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: const Color(0xFFE0D5C1)),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withOpacity(0.02),
-                            blurRadius: 4,
-                            offset: const Offset(0, 2))
-                      ]),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                            color: _getTypeColor(entryType).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(10)),
-                        child: Icon(_getTypeIcon(entryType),
-                            color: _getTypeColor(entryType), size: 24),
-                      ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        flex: 2,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(residentName,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 15,
-                                    color: Color(0xFF5D4037))),
-                            if (visitorName != null)
-                              Text('Visitor: $visitorName',
-                                  style: const TextStyle(
-                                      fontSize: 12, color: Color(0xFF8D6E63))),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                          flex: 1,
-                          child: Text(_getEntryTypeDisplay(entryType),
-                              style: const TextStyle(
-                                  fontSize: 13, color: Color(0xFF8D6E63)))),
-                      Expanded(
-                          flex: 1,
-                          child: Text(
-                              DateFormat('MMM dd, yyyy • hh:mm a')
-                                  .format(timestamp),
-                              style: const TextStyle(
-                                  fontSize: 13, color: Color(0xFF8D6E63)))),
-                      Expanded(
-                          flex: 1,
-                          child: Text(
-                              openedBy != null ? 'By: $openedBy' : '—',
-                              style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Color(0xFF8D6E63),
-                                  fontWeight: FontWeight.bold))),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                            color: status == 'entry'
-                                ? const Color(0xFF4CAF50).withOpacity(0.1)
-                                : const Color(0xFFD32F2F).withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20)),
-                        child: Text(status == 'entry' ? '🟢 IN' : '🔴 OUT',
-                            style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: status == 'entry'
-                                    ? const Color(0xFF4CAF50)
-                                    : const Color(0xFFD32F2F))),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-
-            // Pagination
-            if (_pageSize != 0 && total > 1)
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                        onPressed: _currentPage > 1
-                            ? () => _goToPage(_currentPage - 1)
-                            : null,
-                        icon: const Icon(Icons.chevron_left)),
-                    Text('Page $_currentPage of $total',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF5D4037))),
-                    IconButton(
-                        onPressed: _currentPage < total
-                            ? () => _goToPage(_currentPage + 1)
-                            : null,
-                        icon: const Icon(Icons.chevron_right)),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      );
-    } catch (e, stack) {
-      // ✅ CATCH RENDERING CRASHES
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.warning_amber_rounded,
-                size: 60, color: Color(0xFFD32F2F)),
-            const SizedBox(height: 16),
-            const Text('Data Render Error (Admin Web)',
-                style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: Color(0xFFD32F2F))),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.all(24),
-              child: Text('$e\n\n$stack',
-                  style: const TextStyle(color: Colors.black54, fontSize: 12),
-                  textAlign: TextAlign.center),
-            ),
-          ],
-        ),
-      );
-    }
-  }
-
-  // ============================================================
-  // 📱 MOBILE SAFE BODY
-  // ============================================================
-  Widget _buildMobileBodySafely() {
-    try {
-      if (_allEntries.isEmpty && _entries.isEmpty && _errorMessage == null) {
-        return const Center(
-            child: CircularProgressIndicator(color: Color(0xFFD4C4A8)));
-      }
-      if (_errorMessage != null && _allEntries.isEmpty) {
-        return const Center(
-            child: Text('Error loading data',
-                style: TextStyle(color: Color(0xFFD32F2F))));
-      }
-      if (_entries.isEmpty) {
-        return const Center(
-            child: Text('No entries found',
-                style: TextStyle(fontSize: 16, color: Color(0xFF8D6E63))));
-      }
-
-      final paginated = _paginatedEntries;
-      final total = _totalPages;
-
-      return SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                _buildMobileStatCard('Total', _entries.length.toString(),
-                    Icons.door_front_door, const Color(0xFF5D4037)),
-                const SizedBox(width: 8),
-                _buildMobileStatCard(
-                    'RFID',
-                    _entries
-                        .where((e) =>
-                    e['entryType'] == 'rfid' ||
-                        e['entryType'] == 'uhf_rfid')
-                        .length
-                        .toString(),
-                    Icons.nfc,
-                    const Color(0xFF8D6E63)),
-                const SizedBox(width: 8),
-                _buildMobileStatCard(
-                    'Manual',
-                    _entries
-                        .where((e) => e['entryType'] == 'manual')
-                        .length
-                        .toString(),
-                    Icons.person,
-                    const Color(0xFFFF9800)),
-              ],
-            ),
-            const SizedBox(height: 20),
-
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: paginated.length,
-              itemBuilder: (context, index) {
-                final entry = paginated[index];
-                final timestamp = _getEntryTimestamp(entry);
-                final entryType = entry['entryType'] ?? 'unknown';
-                final residentName = entry['residentName'] ?? 'Unknown';
-                final visitorName = entry['visitorName'];
-                final status = entry['status'] ?? 'entry';
-                final openedBy = entry['openedBy'] ?? entry['closedBy'];
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border:
-                      Border.all(color: const Color(0xFFE0D5C1), width: 1),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withOpacity(0.03),
-                            blurRadius: 6,
-                            offset: const Offset(0, 2))
-                      ]),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                  color:
-                                  _getTypeColor(entryType).withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(10)),
-                              child: Icon(_getTypeIcon(entryType),
-                                  size: 20, color: _getTypeColor(entryType)),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(residentName,
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 15,
-                                          color: Color(0xFF5D4037))),
-                                  if (visitorName != null)
-                                    Text('👤 $visitorName',
-                                        style: const TextStyle(
-                                            fontSize: 12,
-                                            color: Color(0xFF8D6E63))),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                              decoration: BoxDecoration(
-                                  color: status == 'entry'
-                                      ? const Color(0xFF4CAF50)
-                                      .withOpacity(0.1)
-                                      : const Color(0xFFD32F2F).withOpacity(0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                      color: status == 'entry'
-                                          ? const Color(0xFF4CAF50)
-                                          .withOpacity(0.3)
-                                          : const Color(0xFFD32F2F)
-                                          .withOpacity(0.3))),
-                              child: Text(status == 'entry' ? '🟢 IN' : '🔴 OUT',
-                                  style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: status == 'entry'
-                                          ? const Color(0xFF4CAF50)
-                                          : const Color(0xFFD32F2F))),
-                            ),
-                          ],
-                        ),
-                        const Divider(color: Color(0xFFE0D5C1), height: 24),
-                        _mobileInfoRow(Icons.access_time, 'Time',
-                            DateFormat('MMM dd, yyyy • hh:mm a')
-                                .format(timestamp)),
-                        const SizedBox(height: 6),
-                        _mobileInfoRow(Icons.category, 'Type',
-                            _getEntryTypeDisplay(entryType)),
-                        if (openedBy != null) ...[
-                          const SizedBox(height: 6),
-                          _mobileInfoRow(
-                              Icons.badge, 'Processed By', openedBy),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-
-            if (_pageSize != 0 && total > 1)
-              Padding(
-                padding: const EdgeInsets.only(top: 16),
-                child: Container(
-                  padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: const Color(0xFFE0D5C1))),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      IconButton(
-                          onPressed: _currentPage > 1
-                              ? () => _goToPage(_currentPage - 1)
-                              : null,
-                          icon: const Icon(Icons.chevron_left,
-                              color: Color(0xFF8D6E63))),
-                      Text('Page $_currentPage of $total',
-                          style: const TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.bold,
-                              color: Color(0xFF5D4037))),
-                      IconButton(
-                          onPressed: _currentPage < total
-                              ? () => _goToPage(_currentPage + 1)
-                              : null,
-                          icon: const Icon(Icons.chevron_right,
-                              color: Color(0xFF8D6E63))),
-                    ],
-                  ),
-                ),
-              ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      );
-    } catch (e, stack) {
-      return Center(
-        child: Text('Render Error: $e',
-            style: const TextStyle(color: Color(0xFFD32F2F))),
-      );
-    }
-  }
-
-  // ============================================================
-  // 🖥️ HEADER / SIDEBAR (UNCHANGED)
-  // ============================================================
   Widget _buildWebSidebar() {
     return Container(
       width: 260,
@@ -902,6 +392,260 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     );
   }
 
+  Widget _buildWebContent() {
+    if (_allEntries.isEmpty && _entries.isEmpty && _errorMessage == null) {
+      return const Center(
+          child: CircularProgressIndicator(color: Color(0xFF8D6E63)));
+    }
+
+    if (_errorMessage != null && _allEntries.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline,
+                size: 48, color: Color(0xFFD32F2F)),
+            const SizedBox(height: 12),
+            Text(_errorMessage!,
+                style: const TextStyle(color: Color(0xFFD32F2F))),
+          ],
+        ),
+      );
+    }
+
+    if (_entries.isEmpty) {
+      return const Center(
+          child: Text('No gate entries found.',
+              style: TextStyle(fontSize: 18, color: Color(0xFF8D6E63))));
+    }
+
+    final paginated = _paginatedEntries;
+    final total = _totalPages;
+
+    // ✅ Correctly structured Column -> Fixed Header -> Expanded(ListView)
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Stats
+        Wrap(
+          spacing: 20,
+          runSpacing: 20,
+          children: [
+            _buildWebStatCard('Total Entries', _entries.length.toString(),
+                Icons.door_front_door, const Color(0xFF8D6E63)),
+            _buildWebStatCard(
+                'RFID Scans',
+                _entries
+                    .where((e) =>
+                e['entryType'] == 'rfid' ||
+                    e['entryType'] == 'uhf_rfid')
+                    .length
+                    .toString(),
+                Icons.nfc,
+                const Color(0xFFC4A882)),
+            _buildWebStatCard(
+                'QR Visitors',
+                _entries
+                    .where((e) => e['entryType'] == 'qr_visitor')
+                    .length
+                    .toString(),
+                Icons.qr_code,
+                const Color(0xFFA89070)),
+            _buildWebStatCard(
+                'Manual',
+                _entries
+                    .where((e) => e['entryType'] == 'manual')
+                    .length
+                    .toString(),
+                Icons.person,
+                const Color(0xFFFF9800)),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // Chips
+        if (_dateRange != null ||
+            _selectedResident != 'all' ||
+            _selectedEntryType != 'all')
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE0D5C1))),
+            child: Row(
+              children: [
+                const Icon(Icons.filter_alt,
+                    size: 16, color: Color(0xFF8D6E63)),
+                const SizedBox(width: 8),
+                if (_dateRange != null)
+                  _buildWebFilterChip(
+                      '📅 ${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}',
+                          () {
+                        setState(() => _dateRange = null);
+                        _applyFilters();
+                      }),
+                if (_selectedResident != 'all')
+                  _buildWebFilterChip(
+                      '👤 ${_residentNames[_selectedResident] ?? 'Unknown'}',
+                          () {
+                        setState(() => _selectedResident = 'all');
+                        _applyFilters();
+                      }),
+                if (_selectedEntryType != 'all')
+                  _buildWebFilterChip(
+                      '🔖 ${_selectedEntryType.toUpperCase()}', () {
+                    setState(() => _selectedEntryType = 'all');
+                    _applyFilters();
+                  }),
+                const Spacer(),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _dateRange = null;
+                      _selectedResident = 'all';
+                      _selectedEntryType = 'all';
+                    });
+                    _applyFilters();
+                  },
+                  child: const Text('Clear All',
+                      style:
+                      TextStyle(color: Color(0xFFD32F2F), fontSize: 12)),
+                ),
+              ],
+            ),
+          ),
+
+        // List
+        Expanded(
+          child: ListView.builder(
+            itemCount: paginated.length,
+            itemBuilder: (context, index) {
+              final entry = paginated[index];
+              final timestamp = _getEntryTimestamp(entry);
+              final entryType = entry['entryType'] ?? 'unknown';
+              final residentName = entry['residentName'] ?? 'Unknown';
+              final visitorName = entry['visitorName'];
+              final status = entry['status'] ?? 'entry';
+              final openedBy = entry['openedBy'] ?? entry['closedBy'];
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFFE0D5C1)),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withOpacity(0.02),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2))
+                    ]),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                          color: _getTypeColor(entryType).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(10)),
+                      child: Icon(_getTypeIcon(entryType),
+                          color: _getTypeColor(entryType), size: 24),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      flex: 2,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(residentName,
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                  color: Color(0xFF5D4037))),
+                          if (visitorName != null)
+                            Text('Visitor: $visitorName',
+                                style: const TextStyle(
+                                    fontSize: 12, color: Color(0xFF8D6E63))),
+                        ],
+                      ),
+                    ),
+                    Expanded(
+                        flex: 1,
+                        child: Text(_getEntryTypeDisplay(entryType),
+                            style: const TextStyle(
+                                fontSize: 13, color: Color(0xFF8D6E63)))),
+                    Expanded(
+                        flex: 1,
+                        child: Text(
+                            DateFormat('MMM dd, yyyy • hh:mm a')
+                                .format(timestamp),
+                            style: const TextStyle(
+                                fontSize: 13, color: Color(0xFF8D6E63)))),
+                    Expanded(
+                        flex: 1,
+                        child: Text(
+                            openedBy != null ? 'By: $openedBy' : '—',
+                            style: const TextStyle(
+                                fontSize: 13,
+                                color: Color(0xFF8D6E63),
+                                fontWeight: FontWeight.bold))),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                          color: status == 'entry'
+                              ? const Color(0xFF4CAF50).withOpacity(0.1)
+                              : const Color(0xFFD32F2F).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20)),
+                      child: Text(status == 'entry' ? '🟢 IN' : '🔴 OUT',
+                          style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: status == 'entry'
+                                  ? const Color(0xFF4CAF50)
+                                  : const Color(0xFFD32F2F))),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+
+        // Pagination
+        if (_pageSize != 0 && total > 1)
+          Padding(
+            padding: const EdgeInsets.only(top: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                    onPressed: _currentPage > 1
+                        ? () => _goToPage(_currentPage - 1)
+                        : null,
+                    icon: const Icon(Icons.chevron_left)),
+                Text('Page $_currentPage of $total',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF5D4037))),
+                IconButton(
+                    onPressed: _currentPage < total
+                        ? () => _goToPage(_currentPage + 1)
+                        : null,
+                    icon: const Icon(Icons.chevron_right)),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // 📱 MOBILE COMPONENTS
+  // ============================================================
+
   Widget _buildMobileHeader() {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
@@ -1015,9 +759,205 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     );
   }
 
-  // ============================================================
-  // SHARED WIDGETS
-  // ============================================================
+  Widget _buildMobileContent() {
+    if (_allEntries.isEmpty && _entries.isEmpty && _errorMessage == null) {
+      return const Center(
+          child: CircularProgressIndicator(color: Color(0xFFD4C4A8)));
+    }
+    if (_errorMessage != null && _allEntries.isEmpty) {
+      return const Center(
+          child: Text('Error loading data',
+              style: TextStyle(color: Color(0xFFD32F2F))));
+    }
+    if (_entries.isEmpty) {
+      return const Center(
+          child: Text('No entries found',
+              style: TextStyle(fontSize: 16, color: Color(0xFF8D6E63))));
+    }
+
+    final paginated = _paginatedEntries;
+    final total = _totalPages;
+
+    // ✅ Safe Column -> Expanded -> Content
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: Column(
+            children: [
+              Row(
+                children: [
+                  _buildMobileStatCard('Total', _entries.length.toString(),
+                      Icons.door_front_door, const Color(0xFF5D4037)),
+                  const SizedBox(width: 8),
+                  _buildMobileStatCard(
+                      'RFID',
+                      _entries
+                          .where((e) =>
+                      e['entryType'] == 'rfid' ||
+                          e['entryType'] == 'uhf_rfid')
+                          .length
+                          .toString(),
+                      Icons.nfc,
+                      const Color(0xFF8D6E63)),
+                  const SizedBox(width: 8),
+                  _buildMobileStatCard(
+                      'Manual',
+                      _entries
+                          .where((e) => e['entryType'] == 'manual')
+                          .length
+                          .toString(),
+                      Icons.person,
+                      const Color(0xFFFF9800)),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: paginated.length,
+            itemBuilder: (context, index) {
+              final entry = paginated[index];
+              final timestamp = _getEntryTimestamp(entry);
+              final entryType = entry['entryType'] ?? 'unknown';
+              final residentName = entry['residentName'] ?? 'Unknown';
+              final visitorName = entry['visitorName'];
+              final status = entry['status'] ?? 'entry';
+              final openedBy = entry['openedBy'] ?? entry['closedBy'];
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE0D5C1), width: 1),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2))
+                    ]),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                                color: _getTypeColor(entryType).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(10)),
+                            child: Icon(_getTypeIcon(entryType),
+                                size: 20, color: _getTypeColor(entryType)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(residentName,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                        color: Color(0xFF5D4037))),
+                                if (visitorName != null)
+                                  Text('👤 $visitorName',
+                                      style: const TextStyle(
+                                          fontSize: 12,
+                                          color: Color(0xFF8D6E63))),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                                color: status == 'entry'
+                                    ? const Color(0xFF4CAF50)
+                                    .withOpacity(0.1)
+                                    : const Color(0xFFD32F2F).withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                    color: status == 'entry'
+                                        ? const Color(0xFF4CAF50)
+                                        .withOpacity(0.3)
+                                        : const Color(0xFFD32F2F)
+                                        .withOpacity(0.3))),
+                            child: Text(status == 'entry' ? '🟢 IN' : '🔴 OUT',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    color: status == 'entry'
+                                        ? const Color(0xFF4CAF50)
+                                        : const Color(0xFFD32F2F))),
+                          ),
+                        ],
+                      ),
+                      const Divider(color: Color(0xFFE0D5C1), height: 24),
+                      _mobileInfoRow(Icons.access_time, 'Time',
+                          DateFormat('MMM dd, yyyy • hh:mm a')
+                              .format(timestamp)),
+                      const SizedBox(height: 6),
+                      _mobileInfoRow(Icons.category, 'Type',
+                          _getEntryTypeDisplay(entryType)),
+                      if (openedBy != null) ...[
+                        const SizedBox(height: 6),
+                        _mobileInfoRow(Icons.badge, 'Processed By', openedBy),
+                      ],
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+
+        if (_pageSize != 0 && total > 1)
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE0D5C1))),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  IconButton(
+                      onPressed: _currentPage > 1
+                          ? () => _goToPage(_currentPage - 1)
+                          : null,
+                      icon: const Icon(Icons.chevron_left,
+                          color: Color(0xFF8D6E63))),
+                  Text('Page $_currentPage of $total',
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF5D4037))),
+                  IconButton(
+                      onPressed: _currentPage < total
+                          ? () => _goToPage(_currentPage + 1)
+                          : null,
+                      icon: const Icon(Icons.chevron_right,
+                          color: Color(0xFF8D6E63))),
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  // ==================== SHARED WIDGETS & HELPERS ====================
+
   Widget _buildWebStatCard(
       String title, String value, IconData icon, Color color) {
     return Container(
@@ -1213,7 +1153,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     }
   }
 
-  // ==================== PDF EXPORT ====================
+  // ==================== PDF & DIALOG LOGIC (UNCHANGED) ====================
   Future<void> _exportToPDF() async {
     if (_entries.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1566,7 +1506,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     }
   }
 
-  // ==================== PDF HELPERS ====================
   pw.Widget _pdfHeader(pw.MemoryImage? logo) {
     return pw.Container(
       padding: pw.EdgeInsets.only(bottom: 10),
@@ -1690,7 +1629,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     );
   }
 
-  // ==================== FILTER DIALOG ====================
   void _showFilterDialog() {
     String searchText = '';
     final searchController = TextEditingController();

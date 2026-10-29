@@ -287,6 +287,7 @@ class _ManageGuardsState extends State<ManageGuards> {
   // ==================== BUILD ====================
   @override
   Widget build(BuildContext context) {
+    // 🖥️ WEB LAYOUT
     if (kIsWeb) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F0E8),
@@ -297,8 +298,9 @@ class _ManageGuardsState extends State<ManageGuards> {
               child: Column(
                 children: [
                   _buildWebHeader(),
+                  // ✅ Content correctly wrapped in Expanded
                   Expanded(
-                    child: SingleChildScrollView(
+                    child: Padding(
                       padding: const EdgeInsets.all(32),
                       child: _buildWebContent(),
                     ),
@@ -311,12 +313,14 @@ class _ManageGuardsState extends State<ManageGuards> {
       );
     }
 
+    // 📱 MOBILE LAYOUT
     return Scaffold(
       backgroundColor: const Color(0xFFF5F0E8),
       body: SafeArea(
         child: Column(
           children: [
             _buildMobileHeader(),
+            // ✅ Content correctly wrapped in Expanded
             Expanded(
               child: _buildMobileContent(),
             ),
@@ -550,18 +554,17 @@ class _ManageGuardsState extends State<ManageGuards> {
         const SizedBox(height: 24),
 
         // List
-        if (_filteredGuards.isEmpty)
-          const Center(
+        Expanded(
+          child: _filteredGuards.isEmpty
+              ? const Center(
               child: Text('No guards found',
                   style: TextStyle(color: Color(0xFF8D6E63), fontSize: 16)))
-        else
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
+              : ListView.builder(
             itemCount: _filteredGuards.length,
             itemBuilder: (context, index) =>
                 _buildWebGuardRow(_filteredGuards[index]),
           ),
+        ),
       ],
     );
   }
@@ -730,93 +733,96 @@ class _ManageGuardsState extends State<ManageGuards> {
               style: const TextStyle(color: Color(0xFFD32F2F))));
     }
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Stat card
-          Container(
-            margin: const EdgeInsets.only(bottom: 20),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE0D5C1)),
-                boxShadow: [
-                  BoxShadow(
-                      color: Colors.black.withOpacity(0.03),
-                      blurRadius: 6,
-                      offset: const Offset(0, 2))
-                ]),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                          colors: [Color(0xFF5D4037), Color(0xFF8D6E63)]),
-                      borderRadius: BorderRadius.circular(12)),
-                  child: const Icon(Icons.security,
-                      size: 26, color: Color(0xFFFFF8F0)),
-                ),
-                const SizedBox(width: 16),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Stat card & Search wrapper
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: Column(
+            children: [
+              // Stat card
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE0D5C1)),
+                    boxShadow: [
+                      BoxShadow(
+                          color: Colors.black.withOpacity(0.03),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2))
+                    ]),
+                child: Row(
                   children: [
-                    const Text('Total Guards',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: Color(0xFF8D6E63),
-                            fontWeight: FontWeight.w500)),
-                    const SizedBox(height: 4),
-                    Text('${_guards.length}',
-                        style: const TextStyle(
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF5D4037))),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                              colors: [Color(0xFF5D4037), Color(0xFF8D6E63)]),
+                          borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.security,
+                          size: 26, color: Color(0xFFFFF8F0)),
+                    ),
+                    const SizedBox(width: 16),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text('Total Guards',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: Color(0xFF8D6E63),
+                                fontWeight: FontWeight.w500)),
+                        const SizedBox(height: 4),
+                        Text('${_guards.length}',
+                            style: const TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF5D4037))),
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
-          ),
+              ),
 
-          // Search
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE0D5C1))),
-            child: TextField(
-              controller: _searchController,
-              onChanged: _onSearchChanged,
-              decoration: const InputDecoration(
-                  hintText: 'Search guards...',
-                  hintStyle: TextStyle(fontSize: 13, color: Color(0xFFB8A99A)),
-                  border: InputBorder.none,
-                  isDense: true),
-            ),
+              // Search
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFE0D5C1))),
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
+                  decoration: const InputDecoration(
+                      hintText: 'Search guards...',
+                      hintStyle: TextStyle(fontSize: 13, color: Color(0xFFB8A99A)),
+                      border: InputBorder.none,
+                      isDense: true),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 16),
+        ),
+        const SizedBox(height: 16),
 
-          // List
-          if (_filteredGuards.isEmpty)
-            const Center(
-                child: Text('No guards found',
-                    style: TextStyle(color: Color(0xFF8D6E63), fontSize: 14)))
-          else
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _filteredGuards.length,
-              itemBuilder: (context, index) =>
-                  _buildMobileGuardCard(_filteredGuards[index]),
-            ),
-          const SizedBox(height: 20),
-        ],
-      ),
+        // List
+        Expanded(
+          child: _filteredGuards.isEmpty
+              ? const Center(
+              child: Text('No guards found',
+                  style: TextStyle(color: Color(0xFF8D6E63), fontSize: 14)))
+              : ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: _filteredGuards.length,
+            itemBuilder: (context, index) =>
+                _buildMobileGuardCard(_filteredGuards[index]),
+          ),
+        ),
+      ],
     );
   }
 

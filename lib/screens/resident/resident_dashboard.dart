@@ -11,13 +11,13 @@ import 'my_profile_screen.dart';
 class ResidentDashboard extends StatelessWidget {
   const ResidentDashboard({super.key});
 
-  // ==================== BUILD ====================
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final user = authProvider.currentUser;
     final hasRFID = user?.rfidTag != null && user!.rfidTag!.isNotEmpty;
 
+    // 🖥️ WEB LAYOUT
     if (kIsWeb) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F0E8),
@@ -42,6 +42,7 @@ class ResidentDashboard extends StatelessWidget {
       );
     }
 
+    // 📱 MOBILE LAYOUT
     return Scaffold(
       backgroundColor: const Color(0xFFF5F0E8),
       body: SafeArea(

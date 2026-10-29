@@ -39,7 +39,6 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     super.dispose();
   }
 
-  // ==================== LOAD ====================
   Future<void> _loadPendingVisits() async {
     setState(() {
       _isLoading = true;
@@ -82,7 +81,6 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     }
   }
 
-  // ==================== FILTERS + PAGINATION ====================
   void _applyFiltersInternal() {
     if (_searchQuery.isEmpty) {
       _filteredVisits = List.from(_visits);
@@ -140,13 +138,6 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
   void _goToPage(int page) {
     if (page < 1 || page > _totalPages) return;
     setState(() => _currentPage = page);
-  }
-
-  void _changePageSize(int newSize) {
-    setState(() {
-      _pageSize = newSize;
-      _currentPage = 1;
-    });
   }
 
   // ==================== MARK EXIT ====================
@@ -301,6 +292,7 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
   // ==================== BUILD ====================
   @override
   Widget build(BuildContext context) {
+    // 🖥️ WEB LAYOUT
     if (kIsWeb) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F0E8),
@@ -312,7 +304,7 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
                 children: [
                   _buildWebHeader(),
                   Expanded(
-                    child: SingleChildScrollView(
+                    child: Padding(
                       padding: const EdgeInsets.all(32),
                       child: _buildWebContent(),
                     ),
@@ -325,6 +317,7 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
       );
     }
 
+    // 📱 MOBILE LAYOUT
     return Scaffold(
       backgroundColor: const Color(0xFFF5F0E8),
       body: SafeArea(
@@ -357,17 +350,15 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
                   fontWeight: FontWeight.bold,
                   color: Color(0xFFFFF8F0),
                   letterSpacing: 1)),
-          const Text('Admin Portal',
+          const Text('Guard Portal',
               style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
           const SizedBox(height: 40),
-          _buildWebSidebarItem(Icons.dashboard, 'Dashboard',
+          _buildWebSidebarItem(Icons.edit_document, 'Manual Entry',
               onTap: () => Navigator.pop(context)),
-          _buildWebSidebarItem(Icons.people, 'Residents',
+          _buildWebSidebarItem(Icons.qr_code_scanner, 'QR Scanner',
               onTap: () => Navigator.pop(context)),
-          _buildWebSidebarItem(Icons.security, 'Guards',
-              onTap: () => Navigator.pop(context)),
-          _buildWebSidebarItem(Icons.pending_actions, 'Pending Approvals',
-              onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.exit_to_app, 'Pending Visits',
+              isActive: true, onTap: () {}),
           _buildWebSidebarItem(Icons.history, 'Gate History',
               onTap: () => Navigator.pop(context)),
           const Spacer(),
@@ -432,11 +423,12 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     );
   }
 
-  Widget _headerIconButton(
-      {required IconData icon,
-        required String tooltip,
-        required VoidCallback onTap,
-        Color color = const Color(0xFF5D4037)}) {
+  Widget _headerIconButton({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+    Color color = const Color(0xFF5D4037),
+  }) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -514,8 +506,10 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
         ),
         const SizedBox(height: 24),
 
-        if (paginated.isEmpty)
-          Container(
+        // List
+        Expanded(
+          child: paginated.isEmpty
+              ? Container(
             padding: const EdgeInsets.all(40),
             decoration: BoxDecoration(
                 color: Colors.white,
@@ -523,9 +517,12 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
                 border: Border.all(color: const Color(0xFFE0D5C1))),
             child: Center(
               child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Icon(
-                      _visits.isEmpty ? Icons.check_circle : Icons.search_off,
+                      _visits.isEmpty
+                          ? Icons.check_circle
+                          : Icons.search_off,
                       size: 56,
                       color: const Color(0xFFD4C4A8)),
                   const SizedBox(height: 12),
@@ -550,15 +547,13 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
               ),
             ),
           )
-        else
-          ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
+              : ListView.builder(
             itemCount: paginated.length,
             itemBuilder: (context, index) {
               return _buildWebVisitRow(paginated[index]);
             },
           ),
+        ),
 
         if (_pageSize != 0 && total > 1)
           Padding(
@@ -567,8 +562,9 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 IconButton(
-                    onPressed:
-                    _currentPage > 1 ? () => _goToPage(_currentPage - 1) : null,
+                    onPressed: _currentPage > 1
+                        ? () => _goToPage(_currentPage - 1)
+                        : null,
                     icon: const Icon(Icons.chevron_left)),
                 Text('Page $_currentPage of $total',
                     style: const TextStyle(
@@ -729,8 +725,7 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
       decoration: const BoxDecoration(
         color: Color(0xFF5D4037),
         borderRadius: BorderRadius.only(
-            bottomLeft: Radius.circular(30),
-            bottomRight: Radius.circular(30)),
+            bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
       ),
       child: Stack(
         clipBehavior: Clip.none,
@@ -828,14 +823,12 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
     final paginated = _paginatedVisits;
     final total = _totalPages;
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.all(20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Search
-          Container(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+          child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
             decoration: BoxDecoration(
                 color: Colors.white,
@@ -852,92 +845,91 @@ class _PendingVisitsScreenState extends State<PendingVisitsScreen> {
                   isDense: true),
             ),
           ),
-          const SizedBox(height: 16),
+        ),
+        const SizedBox(height: 16),
 
-          if (paginated.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(32),
+        Expanded(
+          child: paginated.isEmpty
+              ? Container(
+            margin: const EdgeInsets.symmetric(horizontal: 20),
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFE0D5C1))),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                    _visits.isEmpty
+                        ? Icons.check_circle
+                        : Icons.search_off,
+                    size: 56,
+                    color: const Color(0xFFD4C4A8)),
+                const SizedBox(height: 12),
+                Text(
+                  _visits.isEmpty
+                      ? 'No visitors inside'
+                      : 'No matches found',
+                  style: const TextStyle(
+                      fontSize: 14,
+                      color: Color(0xFF6B5B4F),
+                      fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _visits.isEmpty
+                      ? 'All guests have checked out'
+                      : 'Try a different search term',
+                  style: const TextStyle(
+                      fontSize: 12, color: Color(0xFFB8A99A)),
+                ),
+              ],
+            ),
+          )
+              : ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            itemCount: paginated.length,
+            itemBuilder: (context, index) {
+              return _buildMobileVisitCard(paginated[index], index + 1);
+            },
+          ),
+        ),
+
+        if (_pageSize != 0 && total > 1)
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: const Color(0xFFE0D5C1))),
-              child: Column(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Icon(
-                      _visits.isEmpty ? Icons.check_circle : Icons.search_off,
-                      size: 56,
-                      color: const Color(0xFFD4C4A8)),
-                  const SizedBox(height: 12),
-                  Text(
-                    _visits.isEmpty
-                        ? 'No visitors inside'
-                        : 'No matches found',
-                    style: const TextStyle(
-                        fontSize: 14,
-                        color: Color(0xFF6B5B4F),
-                        fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _visits.isEmpty
-                        ? 'All guests have checked out'
-                        : 'Try a different search term',
-                    style: const TextStyle(
-                        fontSize: 12, color: Color(0xFFB8A99A)),
-                  ),
+                  IconButton(
+                      onPressed: _currentPage > 1
+                          ? () => _goToPage(_currentPage - 1)
+                          : null,
+                      icon: const Icon(Icons.chevron_left,
+                          color: Color(0xFF8D6E63))),
+                  Text('Page $_currentPage of $total',
+                      style: const TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF5D4037))),
+                  IconButton(
+                      onPressed: _currentPage < total
+                          ? () => _goToPage(_currentPage + 1)
+                          : null,
+                      icon: const Icon(Icons.chevron_right,
+                          color: Color(0xFF8D6E63))),
                 ],
               ),
-            )
-          else
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: paginated.length,
-              itemBuilder: (context, index) {
-                final globalIndex = _pageSize == 0
-                    ? index + 1
-                    : ((_currentPage - 1) * _pageSize) + index + 1;
-                return _buildMobileVisitCard(paginated[index], globalIndex);
-              },
             ),
-
-          if (_pageSize != 0 && total > 1)
-            Padding(
-              padding: const EdgeInsets.only(top: 16),
-              child: Container(
-                padding:
-                const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFE0D5C1))),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    IconButton(
-                        onPressed: _currentPage > 1
-                            ? () => _goToPage(_currentPage - 1)
-                            : null,
-                        icon: const Icon(Icons.chevron_left,
-                            color: Color(0xFF8D6E63))),
-                    Text('Page $_currentPage of $total',
-                        style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF5D4037))),
-                    IconButton(
-                        onPressed: _currentPage < total
-                            ? () => _goToPage(_currentPage + 1)
-                            : null,
-                        icon: const Icon(Icons.chevron_right,
-                            color: Color(0xFF8D6E63))),
-                  ],
-                ),
-              ),
-            ),
-          const SizedBox(height: 20),
-        ],
-      ),
+          ),
+      ],
     );
   }
 

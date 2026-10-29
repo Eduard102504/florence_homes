@@ -1,3 +1,4 @@
+// lib/screens/guard/guard_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -15,7 +16,7 @@ class GuardDashboard extends StatelessWidget {
     final authProvider = Provider.of<AuthProvider>(context);
     final user = authProvider.currentUser;
 
-    // 🖥️ WEB LAYOUT (UNTOUCHED)
+    // 🖥️ WEB LAYOUT
     if (kIsWeb) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F0E8),
@@ -40,100 +41,17 @@ class GuardDashboard extends StatelessWidget {
       );
     }
 
-    // 📱 MOBILE LAYOUT (UPDATED HEADER)
+    // 📱 MOBILE LAYOUT
     return Scaffold(
       backgroundColor: const Color(0xFFF5F0E8),
       body: SafeArea(
         child: Column(
           children: [
-            // Mobile Header (Designed)
-            Container(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-              decoration: const BoxDecoration(
-                color: Color(0xFF5D4037),
-                borderRadius: BorderRadius.only(
-                  bottomLeft: Radius.circular(30),
-                  bottomRight: Radius.circular(30),
-                ),
-              ),
-              child: Stack(
-                clipBehavior: Clip.none,
-                children: [
-                  // Background watermark icon
-                  Positioned(
-                    right: -20,
-                    top: -20,
-                    child: Icon(Icons.shield, size: 120, color: Colors.white.withOpacity(0.05)),
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: Colors.white.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: const Icon(Icons.security, color: Color(0xFFFFF8F0), size: 24),
-                              ),
-                              const SizedBox(width: 12),
-                              const Text(
-                                'Guard Portal',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFFFFF8F0), letterSpacing: 1),
-                              ),
-                            ],
-                          ),
-                          GestureDetector(
-                            onTap: () => _showLogoutConfirmation(context, authProvider),
-                            child: Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-                              child: const Icon(Icons.logout, color: Color(0xFFFFF8F0), size: 20),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'Welcome,',
-                        style: TextStyle(fontSize: 14, color: Color(0xFFD4C4A8)),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        user?.fullName ?? 'Security Guard',
-                        style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFFFFF8F0)),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            // Mobile Content
+            _buildMobileHeader(context, authProvider, user),
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Quick Actions',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF5D4037)),
-                    ),
-                    const SizedBox(height: 16),
-                    _buildMobileActionTile(context, title: 'Manual Entry', subtitle: 'Record deliveries and guests', icon: Icons.edit_document, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
-                    _buildMobileActionTile(context, title: 'QR Scanner', subtitle: 'Scan visitor QR codes', icon: Icons.qr_code_scanner, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
-                    _buildMobileActionTile(context, title: 'Pending Visits', subtitle: 'Mark guests as OUT', icon: Icons.exit_to_app, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
-                    _buildMobileActionTile(context, title: 'Gate History', subtitle: 'View all IN and OUT logs', icon: Icons.history, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GateEntriesHistory()))),
-                    const SizedBox(height: 20),
-                  ],
-                ),
+                child: _buildMobileContent(context),
               ),
             ),
           ],
@@ -143,7 +61,7 @@ class GuardDashboard extends StatelessWidget {
   }
 
   // ============================================================
-  // 🖥️ WEB COMPONENTS (UNTOUCHED)
+  // 🖥️ WEB COMPONENTS
   // ============================================================
 
   Widget _buildWebSidebar(BuildContext context, AuthProvider auth, dynamic user) {
@@ -261,6 +179,62 @@ class GuardDashboard extends StatelessWidget {
   // 📱 MOBILE COMPONENTS
   // ============================================================
 
+  Widget _buildMobileHeader(BuildContext context, AuthProvider authProvider, dynamic user) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+      decoration: const BoxDecoration(
+        color: Color(0xFF5D4037),
+        borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
+      ),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(right: -20, top: -20, child: Icon(Icons.shield, size: 120, color: Colors.white.withOpacity(0.05))),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.security, color: Color(0xFFFFF8F0), size: 24)),
+                      const SizedBox(width: 12),
+                      const Text('Guard Portal', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFFFFF8F0), letterSpacing: 1)),
+                    ],
+                  ),
+                  GestureDetector(
+                    onTap: () => _showLogoutConfirmation(context, authProvider),
+                    child: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.logout, color: Color(0xFFFFF8F0), size: 20)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              const Text('Welcome,', style: TextStyle(fontSize: 14, color: Color(0xFFD4C4A8))),
+              const SizedBox(height: 4),
+              Text(user?.fullName ?? 'Security Guard', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFFFFF8F0)), overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMobileContent(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
+        const SizedBox(height: 16),
+        _buildMobileActionTile(context, title: 'Manual Entry', subtitle: 'Record deliveries and guests', icon: Icons.edit_document, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
+        _buildMobileActionTile(context, title: 'QR Scanner', subtitle: 'Scan visitor QR codes', icon: Icons.qr_code_scanner, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
+        _buildMobileActionTile(context, title: 'Pending Visits', subtitle: 'Mark guests as OUT', icon: Icons.exit_to_app, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
+        _buildMobileActionTile(context, title: 'Gate History', subtitle: 'View all IN and OUT logs', icon: Icons.history, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GateEntriesHistory()))),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
   Widget _buildMobileActionTile(BuildContext context, {required String title, required String subtitle, required IconData icon, required VoidCallback onTap}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -281,10 +255,7 @@ class GuardDashboard extends StatelessWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF5D4037).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: BoxDecoration(color: const Color(0xFF5D4037).withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
                   child: Icon(icon, size: 24, color: const Color(0xFF5D4037)),
                 ),
                 const SizedBox(width: 16),

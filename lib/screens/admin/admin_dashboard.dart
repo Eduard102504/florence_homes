@@ -1,3 +1,4 @@
+// lib/screens/admin/admin_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -45,7 +46,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    // 🖥️ WEB LAYOUT (UNTOUCHED)
+    // 🖥️ WEB LAYOUT
     if (kIsWeb) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F0E8),
@@ -70,7 +71,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       );
     }
 
-    // 📱 MOBILE LAYOUT (UPDATED)
+    // 📱 MOBILE LAYOUT
     return Scaffold(
       backgroundColor: const Color(0xFFF5F0E8),
       body: SafeArea(
@@ -90,7 +91,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   // ============================================================
-  // 🖥️ WEB COMPONENTS (UNTOUCHED)
+  // 🖥️ WEB COMPONENTS
   // ============================================================
 
   Widget _buildWebSidebar() {
@@ -256,7 +257,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   // ============================================================
-  // 📱 MOBILE COMPONENTS (NEW DESIGN)
+  // 📱 MOBILE COMPONENTS
   // ============================================================
 
   Widget _buildMobileHeader() {
@@ -264,21 +265,13 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
       decoration: const BoxDecoration(
-        color: Color(0xFF5D4037), // Deep professional brown
-        borderRadius: BorderRadius.only(
-          bottomLeft: Radius.circular(30),
-          bottomRight: Radius.circular(30),
-        ),
+        color: Color(0xFF5D4037),
+        borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
       ),
       child: Stack(
         clipBehavior: Clip.none,
         children: [
-          // Background watermark icon for design
-          Positioned(
-            right: -20,
-            top: -20,
-            child: Icon(Icons.home_work, size: 120, color: Colors.white.withOpacity(0.05)),
-          ),
+          Positioned(right: -20, top: -20, child: Icon(Icons.home_work, size: 120, color: Colors.white.withOpacity(0.05))),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -289,17 +282,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     children: [
                       Container(
                         padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
+                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
                         child: const Icon(Icons.admin_panel_settings, color: Color(0xFFFFF8F0), size: 24),
                       ),
                       const SizedBox(width: 12),
-                      const Text(
-                        'Admin Portal',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFFFFF8F0), letterSpacing: 1),
-                      ),
+                      const Text('Admin Portal', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFFFFF8F0), letterSpacing: 1)),
                     ],
                   ),
                   GestureDetector(
@@ -313,10 +300,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 ],
               ),
               const SizedBox(height: 24),
-              const Text(
-                'Welcome back,',
-                style: TextStyle(fontSize: 14, color: Color(0xFFD4C4A8)),
-              ),
+              const Text('Welcome back,', style: TextStyle(fontSize: 14, color: Color(0xFFD4C4A8))),
               const SizedBox(height: 4),
               Text(
                 authProvider.currentUser?.fullName ?? 'System Administrator',
@@ -334,7 +318,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Stats Row (One Line)
         StreamBuilder<QuerySnapshot>(
           stream: FirebaseFirestore.instance.collection('users').where('userType', isEqualTo: 'resident').snapshots(),
           builder: (context, snapshot) {
@@ -355,16 +338,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
             );
           },
         ),
-
         const SizedBox(height: 28),
-
-        const Text(
-          'Quick Actions',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF5D4037)),
-        ),
+        const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
         const SizedBox(height: 12),
-
-        // Quick Actions List
         _mobileActionTile(context, title: 'Manage Residents', subtitle: 'Add, edit, and archive residents', icon: Icons.people, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ManageResidents()))),
         _mobileActionTile(context, title: 'Manage Guards', subtitle: 'Add and manage security personnel', icon: Icons.security, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const ManageGuards()))),
         _mobileActionTile(context, title: 'Gate History', subtitle: 'View all IN and OUT logs', icon: Icons.history, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const GateEntriesHistory()))),
@@ -386,11 +362,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ),
         child: Column(
           children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
-              child: Icon(icon, color: color, size: 20),
-            ),
+            Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle), child: Icon(icon, color: color, size: 20)),
             const SizedBox(height: 8),
             Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
             const SizedBox(height: 2),
@@ -419,14 +391,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF5D4037).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Icon(icon, size: 24, color: const Color(0xFF5D4037)),
-                ),
+                Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFF5D4037).withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: Icon(icon, size: 24, color: const Color(0xFF5D4037))),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -447,9 +412,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  // ============================================================
-  // 🔥 SHARED LOGOUT CONFIRMATION
-  // ============================================================
   void _showLogoutConfirmation(BuildContext context, AuthProvider authProvider) {
     showDialog(
       context: context,
