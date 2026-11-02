@@ -6,6 +6,10 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../services/qr_service.dart';
 import '../../providers/auth_provider.dart';
 import 'qr_display_screen.dart';
+import 'resident_dashboard.dart';
+import 'my_qr_codes.dart';
+import 'gate_history.dart';
+import 'my_profile_screen.dart';
 
 class GenerateVisitorQR extends StatefulWidget {
   const GenerateVisitorQR({super.key});
@@ -91,41 +95,76 @@ class _GenerateVisitorQRState extends State<GenerateVisitorQR> {
   }
 
   Future<void> _generateQR() async {
-    if (_formKey.currentState!.validate()) {
-      if (!_isDateValid()) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a valid future date'), backgroundColor: Color(0xFFD32F2F)));
-        return;
-      }
-      if (!_isTimeValid()) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a valid future time'), backgroundColor: Color(0xFFD32F2F)));
-        return;
-      }
+    print('🔵 1. Generate Button Clicked');
 
-      setState(() => _isGenerating = true);
+    // ✅ FIX: Removed FocusScope.unfocus() to prevent Web crash
 
+    // ✅ FIX: Show error manually if name is empty instead of relying on FormKey
+    if (_visitorNameController.text.trim().isEmpty) {
+      print('🔴 2. Name is empty');
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please enter a visitor name'), backgroundColor: Color(0xFFD32F2F)));
+      return;
+    }
+
+    if (!_isDateValid() || !_isTimeValid()) {
+      print('🔴 3. Date/Time validation failed');
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a valid future date and time'), backgroundColor: Color(0xFFD32F2F)));
+      return;
+    }
+
+    print('🟢 4. All validations passed. Starting generation...');
+    setState(() => _isGenerating = true);
+
+    try {
       DateTime visitDateTime = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, _selectedTime.hour, _selectedTime.minute);
+
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
       final residentId = authProvider.currentUser?.id ?? '';
       final residentName = authProvider.currentUser?.fullName ?? 'Resident';
 
-      String qrData = await _qrService.generateVisitorQR(residentId: residentId, residentName: residentName, visitorName: _visitorNameController.text, visitDate: visitDateTime, validityHours: _validityHours);
+      print('🟢 5. Calling QRService for resident: $residentId');
 
-      setState(() => _isGenerating = false);
+      String qrData = await _qrService.generateVisitorQR(
+          residentId: residentId,
+          residentName: residentName,
+          visitorName: _visitorNameController.text.trim(),
+          visitDate: visitDateTime,
+          validityHours: _validityHours
+      );
+
+      print('🟢 6. QRService returned data: $qrData');
 
       if (mounted) {
-        Navigator.push(context, MaterialPageRoute(builder: (context) => QRDisplayScreen(qrData: qrData, visitorName: _visitorNameController.text)));
+        setState(() => _isGenerating = false);
+        print('🟢 7. Navigating to Display Screen...');
+        Navigator.push(context, MaterialPageRoute(builder: (context) => QRDisplayScreen(qrData: qrData, visitorName: _visitorNameController.text.trim())));
+      }
+    } catch (e, stacktrace) {
+      print('🔴 8. FATAL ERROR: $e');
+      print('🔴 Stacktrace: $stacktrace');
+
+      if (mounted) {
+        setState(() => _isGenerating = false);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: const Color(0xFFD32F2F),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 10)
+        ));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb) {
+    final isDesktopWeb = kIsWeb && MediaQuery.of(context).size.width >= 800;
+
+    if (isDesktopWeb) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F0E8),
         body: Row(
           children: [
-            _buildWebSidebar(),
+            _buildWebSidebar(context),
             Expanded(
               child: Column(
                 children: [
@@ -152,7 +191,7 @@ class _GenerateVisitorQRState extends State<GenerateVisitorQR> {
     );
   }
 
-  Widget _buildWebSidebar() {
+  Widget _buildWebSidebar(BuildContext context) {
     return Container(
       width: 260,
       color: const Color(0xFF5D4037),
@@ -164,15 +203,16 @@ class _GenerateVisitorQRState extends State<GenerateVisitorQR> {
           const Text('Florence Homes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFFF8F0), letterSpacing: 1)),
           const Text('Resident Portal', style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
           const SizedBox(height: 40),
-          _buildWebSidebarItem(Icons.dashboard, 'Dashboard', onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.dashboard, 'Dashboard', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ResidentDashboard()))),
           _buildWebSidebarItem(Icons.qr_code, 'Generate QR', isActive: true, onTap: () {}),
-          _buildWebSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pop(context)),
-          _buildWebSidebarItem(Icons.person, 'Profile', onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.qr_code_scanner, 'My QR Codes', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MyQRCodes()))),
+          _buildWebSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GateHistory()))),
+          _buildWebSidebarItem(Icons.person, 'Profile', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MyProfileScreen()))),
           const Spacer(),
           ListTile(
             leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)),
             title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)),
-            onTap: () => Navigator.pop(context),
+            onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ResidentDashboard())),
           ),
           const SizedBox(height: 20),
         ],
@@ -367,7 +407,7 @@ class _GenerateVisitorQRState extends State<GenerateVisitorQR> {
         ),
         const SizedBox(height: 24),
         ElevatedButton(
-          onPressed: (_isGenerating || _dateError != null || _timeError != null) ? null : _generateQR,
+          onPressed: _isGenerating ? null : _generateQR,
           style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 52), backgroundColor: const Color(0xFF5D4037), foregroundColor: const Color(0xFFFFF8F0), elevation: 3, shadowColor: const Color(0xFF5D4037).withOpacity(0.5), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1)),
           child: _isGenerating
               ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFF8F0))))

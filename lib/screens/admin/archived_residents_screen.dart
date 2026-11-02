@@ -6,6 +6,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/archived_resident_model.dart';
 import '../../services/archive_service.dart';
 import '../../services/auth_service.dart';
+import 'admin_dashboard.dart';
+import 'manage_residents.dart';
+import 'manage_guards.dart';
+import 'pending_approvals.dart';
+import 'gate_entries_history.dart';
 
 class ArchivedResidentsScreen extends StatefulWidget {
   const ArchivedResidentsScreen({super.key});
@@ -50,12 +55,14 @@ class _ArchivedResidentsScreenState extends State<ArchivedResidentsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb) {
+    final isDesktopWeb = kIsWeb && MediaQuery.of(context).size.width >= 800;
+
+    if (isDesktopWeb) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F0E8),
         body: Row(
           children: [
-            _buildWebSidebar(),
+            _buildWebSidebar(context),
             Expanded(
               child: Column(
                 children: [
@@ -98,7 +105,7 @@ class _ArchivedResidentsScreenState extends State<ArchivedResidentsScreen> {
     );
   }
 
-  Widget _buildWebSidebar() {
+  Widget _buildWebSidebar(BuildContext context) {
     return Container(
       width: 260,
       color: const Color(0xFF5D4037),
@@ -110,13 +117,13 @@ class _ArchivedResidentsScreenState extends State<ArchivedResidentsScreen> {
           const Text('Florence Homes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFFF8F0), letterSpacing: 1)),
           const Text('Admin Portal', style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
           const SizedBox(height: 40),
-          _buildWebSidebarItem(Icons.dashboard, 'Dashboard', onTap: () => Navigator.pop(context)),
-          _buildWebSidebarItem(Icons.people, 'Residents', isActive: true, onTap: () => Navigator.pop(context)),
-          _buildWebSidebarItem(Icons.security, 'Guards', onTap: () => Navigator.pop(context)),
-          _buildWebSidebarItem(Icons.pending_actions, 'Pending Approvals', onTap: () => Navigator.pop(context)),
-          _buildWebSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.dashboard, 'Dashboard', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AdminDashboard()))),
+          _buildWebSidebarItem(Icons.people, 'Residents', isActive: true, onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManageResidents()))),
+          _buildWebSidebarItem(Icons.security, 'Guards', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManageGuards()))),
+          _buildWebSidebarItem(Icons.pending_actions, 'Pending Approvals', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingApprovals()))),
+          _buildWebSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GateEntriesHistory()))),
           const Spacer(),
-          ListTile(leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)), title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)), onTap: () => Navigator.pop(context)),
+          ListTile(leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)), title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)), onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AdminDashboard()))),
           const SizedBox(height: 20),
         ],
       ),

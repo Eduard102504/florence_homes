@@ -6,6 +6,10 @@ import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../providers/auth_provider.dart';
 import 'qr_display_screen.dart';
+import 'resident_dashboard.dart';
+import 'generate_visitor_qr.dart';
+import 'gate_history.dart';
+import 'my_profile_screen.dart';
 
 class MyQRCodes extends StatefulWidget {
   const MyQRCodes({super.key});
@@ -100,28 +104,25 @@ class _MyQRCodesState extends State<MyQRCodes> {
 
   Color _getStatusColor(String status) {
     switch (status) {
-      case 'Active':
-        return const Color(0xFF4CAF50);
-      case 'Expiring soon':
-        return const Color(0xFFFF9800);
-      case 'Expired':
-        return const Color(0xFFD32F2F);
-      case 'Used':
-        return const Color(0xFF9E9E9E);
-      default:
-        return const Color(0xFF9E9E9E);
+      case 'Active': return const Color(0xFF4CAF50);
+      case 'Expiring soon': return const Color(0xFFFF9800);
+      case 'Expired': return const Color(0xFFD32F2F);
+      case 'Used': return const Color(0xFF9E9E9E);
+      default: return const Color(0xFF9E9E9E);
     }
   }
 
   // ==================== BUILD ====================
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb) {
+    final isDesktopWeb = kIsWeb && MediaQuery.of(context).size.width >= 800;
+
+    if (isDesktopWeb) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F0E8),
         body: Row(
           children: [
-            _buildWebSidebar(),
+            _buildWebSidebar(context),
             Expanded(
               child: Column(
                 children: [
@@ -148,11 +149,7 @@ class _MyQRCodesState extends State<MyQRCodes> {
     );
   }
 
-  // ============================================================
-  // 🖥️ WEB COMPONENTS
-  // ============================================================
-
-  Widget _buildWebSidebar() {
+  Widget _buildWebSidebar(BuildContext context) {
     return Container(
       width: 260,
       color: const Color(0xFF5D4037),
@@ -164,12 +161,13 @@ class _MyQRCodesState extends State<MyQRCodes> {
           const Text('Florence Homes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFFF8F0), letterSpacing: 1)),
           const Text('Resident Portal', style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
           const SizedBox(height: 40),
-          _buildWebSidebarItem(Icons.dashboard, 'Dashboard', onTap: () => Navigator.pop(context)),
-          _buildWebSidebarItem(Icons.qr_code, 'My QR Codes', isActive: true, onTap: () {}),
-          _buildWebSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pop(context)),
-          _buildWebSidebarItem(Icons.person, 'Profile', onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.dashboard, 'Dashboard', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ResidentDashboard()))),
+          _buildWebSidebarItem(Icons.qr_code, 'Generate QR', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GenerateVisitorQR()))),
+          _buildWebSidebarItem(Icons.qr_code_scanner, 'My QR Codes', isActive: true, onTap: () {}),
+          _buildWebSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GateHistory()))),
+          _buildWebSidebarItem(Icons.person, 'Profile', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MyProfileScreen()))),
           const Spacer(),
-          ListTile(leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)), title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)), onTap: () => Navigator.pop(context)),
+          ListTile(leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)), title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)), onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ResidentDashboard()))),
           const SizedBox(height: 20),
         ],
       ),
@@ -179,13 +177,7 @@ class _MyQRCodesState extends State<MyQRCodes> {
   Widget _buildWebSidebarItem(IconData icon, String title, {bool isActive = false, required VoidCallback onTap}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: ListTile(
-        onTap: onTap,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        tileColor: isActive ? const Color(0xFFD4C4A8).withOpacity(0.15) : Colors.transparent,
-        leading: Icon(icon, color: isActive ? const Color(0xFFFFF8F0) : const Color(0xFFD4C4A8)),
-        title: Text(title, style: TextStyle(color: isActive ? const Color(0xFFFFF8F0) : const Color(0xFFD4C4A8), fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
-      ),
+      child: ListTile(onTap: onTap, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), tileColor: isActive ? const Color(0xFFD4C4A8).withOpacity(0.15) : Colors.transparent, leading: Icon(icon, color: isActive ? const Color(0xFFFFF8F0) : const Color(0xFFD4C4A8)), title: Text(title, style: TextStyle(color: isActive ? const Color(0xFFFFF8F0) : const Color(0xFFD4C4A8), fontWeight: isActive ? FontWeight.bold : FontWeight.normal))),
     );
   }
 
@@ -210,11 +202,7 @@ class _MyQRCodesState extends State<MyQRCodes> {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
-        child: Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.3))),
-          child: Tooltip(message: tooltip, child: Icon(icon, color: color, size: 20)),
-        ),
+        child: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.3))), child: Tooltip(message: tooltip, child: Icon(icon, color: color, size: 20))),
       ),
     );
   }
@@ -298,10 +286,6 @@ class _MyQRCodesState extends State<MyQRCodes> {
       ),
     );
   }
-
-  // ============================================================
-  // 📱 MOBILE COMPONENTS
-  // ============================================================
 
   Widget _buildMobileHeader() {
     return Container(

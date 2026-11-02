@@ -15,9 +15,9 @@ class GuardDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider>(context);
     final user = authProvider.currentUser;
+    final isDesktopWeb = kIsWeb && MediaQuery.of(context).size.width >= 800;
 
-    // 🖥️ WEB LAYOUT
-    if (kIsWeb) {
+    if (isDesktopWeb) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F0E8),
         body: Row(
@@ -41,7 +41,6 @@ class GuardDashboard extends StatelessWidget {
       );
     }
 
-    // 📱 MOBILE LAYOUT
     return Scaffold(
       backgroundColor: const Color(0xFFF5F0E8),
       body: SafeArea(
@@ -60,10 +59,6 @@ class GuardDashboard extends StatelessWidget {
     );
   }
 
-  // ============================================================
-  // 🖥️ WEB COMPONENTS
-  // ============================================================
-
   Widget _buildWebSidebar(BuildContext context, AuthProvider auth, dynamic user) {
     return Container(
       width: 260,
@@ -76,10 +71,11 @@ class GuardDashboard extends StatelessWidget {
           const Text('Guard Portal', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFFF8F0), letterSpacing: 1)),
           const Text('Florence Homes', style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
           const SizedBox(height: 40),
-          _buildSidebarItem(Icons.edit_document, 'Manual Entry', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
-          _buildSidebarItem(Icons.qr_code_scanner, 'QR Scanner', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
-          _buildSidebarItem(Icons.exit_to_app, 'Pending Visits', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
-          _buildSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GateEntriesHistory()))),
+          _buildSidebarItem(Icons.dashboard, 'Dashboard', isActive: true, onTap: () {}),
+          _buildSidebarItem(Icons.edit_document, 'Manual Entry', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
+          _buildSidebarItem(Icons.qr_code_scanner, 'QR Scanner', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
+          _buildSidebarItem(Icons.exit_to_app, 'Pending Visits', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
+          _buildSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GateEntriesHistory()))),
           const Spacer(),
           ListTile(
             leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)),
@@ -92,14 +88,15 @@ class GuardDashboard extends StatelessWidget {
     );
   }
 
-  Widget _buildSidebarItem(IconData icon, String title, {required VoidCallback onTap}) {
+  Widget _buildSidebarItem(IconData icon, String title, {bool isActive = false, required VoidCallback onTap}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: ListTile(
         onTap: onTap,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        leading: Icon(icon, color: const Color(0xFFD4C4A8)),
-        title: Text(title, style: const TextStyle(color: Color(0xFFD4C4A8), fontWeight: FontWeight.normal)),
+        tileColor: isActive ? const Color(0xFFD4C4A8).withOpacity(0.15) : Colors.transparent,
+        leading: Icon(icon, color: isActive ? const Color(0xFFFFF8F0) : const Color(0xFFD4C4A8)),
+        title: Text(title, style: TextStyle(color: isActive ? const Color(0xFFFFF8F0) : const Color(0xFFD4C4A8), fontWeight: isActive ? FontWeight.bold : FontWeight.normal)),
       ),
     );
   }
@@ -143,10 +140,10 @@ class GuardDashboard extends StatelessWidget {
           spacing: 20,
           runSpacing: 20,
           children: [
-            _buildWebActionCard('Manual Entry', 'Record deliveries and guests', Icons.edit_document, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
-            _buildWebActionCard('QR Scanner', 'Scan visitor QR codes', Icons.qr_code_scanner, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
-            _buildWebActionCard('Pending Visits', 'Mark guests as OUT', Icons.exit_to_app, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
-            _buildWebActionCard('Gate History', 'View all IN and OUT logs', Icons.history, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GateEntriesHistory()))),
+            _buildWebActionCard('Manual Entry', 'Record deliveries and guests', Icons.edit_document, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
+            _buildWebActionCard('QR Scanner', 'Scan visitor QR codes', Icons.qr_code_scanner, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
+            _buildWebActionCard('Pending Visits', 'Mark guests as OUT', Icons.exit_to_app, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
+            _buildWebActionCard('Gate History', 'View all IN and OUT logs', Icons.history, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GateEntriesHistory()))),
           ],
         ),
       ],
@@ -174,10 +171,6 @@ class GuardDashboard extends StatelessWidget {
       ),
     );
   }
-
-  // ============================================================
-  // 📱 MOBILE COMPONENTS
-  // ============================================================
 
   Widget _buildMobileHeader(BuildContext context, AuthProvider authProvider, dynamic user) {
     return Container(
@@ -253,11 +246,7 @@ class GuardDashboard extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: const Color(0xFF5D4037).withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                  child: Icon(icon, size: 24, color: const Color(0xFF5D4037)),
-                ),
+                Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFF5D4037).withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: Icon(icon, size: 24, color: const Color(0xFF5D4037))),
                 const SizedBox(width: 16),
                 Expanded(
                   child: Column(
@@ -278,9 +267,6 @@ class GuardDashboard extends StatelessWidget {
     );
   }
 
-  // ============================================================
-  // 🔥 SHARED LOGOUT CONFIRMATION
-  // ============================================================
   void _showLogoutConfirmation(BuildContext context, AuthProvider authProvider) {
     showDialog(
       context: context,

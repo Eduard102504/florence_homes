@@ -6,6 +6,10 @@ import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../providers/auth_provider.dart';
 import 'dart:async';
+import 'resident_dashboard.dart';
+import 'generate_visitor_qr.dart';
+import 'my_qr_codes.dart';
+import 'my_profile_screen.dart';
 
 class GateHistory extends StatefulWidget {
   const GateHistory({super.key});
@@ -75,12 +79,14 @@ class _GateHistoryState extends State<GateHistory> {
 
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb) {
+    final isDesktopWeb = kIsWeb && MediaQuery.of(context).size.width >= 800;
+
+    if (isDesktopWeb) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F0E8),
         body: Row(
           children: [
-            _buildWebSidebar(),
+            _buildWebSidebar(context),
             Expanded(
               child: Column(
                 children: [
@@ -99,7 +105,7 @@ class _GateHistoryState extends State<GateHistory> {
       body: SafeArea(
         child: Column(
           children: [
-            _buildMobileHeader(),
+            _buildMobileHeader(context),
             Expanded(child: _buildMobileContent()),
           ],
         ),
@@ -107,7 +113,7 @@ class _GateHistoryState extends State<GateHistory> {
     );
   }
 
-  Widget _buildWebSidebar() {
+  Widget _buildWebSidebar(BuildContext context) {
     return Container(
       width: 260,
       color: const Color(0xFF5D4037),
@@ -119,12 +125,13 @@ class _GateHistoryState extends State<GateHistory> {
           const Text('Florence Homes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFFF8F0), letterSpacing: 1)),
           const Text('Resident Portal', style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
           const SizedBox(height: 40),
-          _buildWebSidebarItem(Icons.dashboard, 'Dashboard', onTap: () => Navigator.pop(context)),
-          _buildWebSidebarItem(Icons.qr_code, 'My QR Codes', onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.dashboard, 'Dashboard', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ResidentDashboard()))),
+          _buildWebSidebarItem(Icons.qr_code, 'Generate QR', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GenerateVisitorQR()))),
+          _buildWebSidebarItem(Icons.qr_code_scanner, 'My QR Codes', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MyQRCodes()))),
           _buildWebSidebarItem(Icons.history, 'Gate History', isActive: true, onTap: () {}),
-          _buildWebSidebarItem(Icons.person, 'Profile', onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.person, 'Profile', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const MyProfileScreen()))),
           const Spacer(),
-          ListTile(leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)), title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)), onTap: () => Navigator.pop(context)),
+          ListTile(leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)), title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)), onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ResidentDashboard()))),
           const SizedBox(height: 20),
         ],
       ),
@@ -198,7 +205,7 @@ class _GateHistoryState extends State<GateHistory> {
     );
   }
 
-  Widget _buildMobileHeader() {
+  Widget _buildMobileHeader(BuildContext context) {
     return Container(
       padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
       decoration: const BoxDecoration(color: Color(0xFF5D4037), borderRadius: BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30))),

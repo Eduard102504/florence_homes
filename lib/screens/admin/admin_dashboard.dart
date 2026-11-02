@@ -19,7 +19,6 @@ class AdminDashboard extends StatefulWidget {
 
 class _AdminDashboardState extends State<AdminDashboard> {
   final ArchiveService _archiveService = ArchiveService();
-  int _selectedIndex = 0;
 
   @override
   void initState() {
@@ -46,13 +45,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   @override
   Widget build(BuildContext context) {
-    // 🖥️ WEB LAYOUT
-    if (kIsWeb) {
+    final isDesktopWeb = kIsWeb && MediaQuery.of(context).size.width >= 800;
+
+    if (isDesktopWeb) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F0E8),
         body: Row(
           children: [
-            _buildWebSidebar(),
+            _buildWebSidebar(context),
             Expanded(
               child: Column(
                 children: [
@@ -60,7 +60,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   Expanded(
                     child: SingleChildScrollView(
                       padding: const EdgeInsets.all(32),
-                      child: _buildWebContent(),
+                      child: _buildWebContent(context),
                     ),
                   ),
                 ],
@@ -71,7 +71,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
       );
     }
 
-    // 📱 MOBILE LAYOUT
     return Scaffold(
       backgroundColor: const Color(0xFFF5F0E8),
       body: SafeArea(
@@ -81,7 +80,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(20),
-                child: _buildMobileContent(),
+                child: _buildMobileContent(context),
               ),
             ),
           ],
@@ -94,7 +93,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   // 🖥️ WEB COMPONENTS
   // ============================================================
 
-  Widget _buildWebSidebar() {
+  Widget _buildWebSidebar(BuildContext context) {
     return Container(
       width: 260,
       color: const Color(0xFF5D4037),
@@ -106,11 +105,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
           const Text('Florence Homes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFFF8F0), letterSpacing: 1)),
           const Text('Admin Portal', style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
           const SizedBox(height: 40),
-          _buildSidebarItem(0, Icons.dashboard, 'Dashboard'),
-          _buildSidebarItem(1, Icons.people, 'Residents', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageResidents()))),
-          _buildSidebarItem(2, Icons.security, 'Guards', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageGuards()))),
-          _buildSidebarItem(3, Icons.pending_actions, 'Pending Approvals', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PendingApprovals()))),
-          _buildSidebarItem(4, Icons.history, 'Gate History', onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GateEntriesHistory()))),
+          _buildWebSidebarItem(Icons.dashboard, 'Dashboard', isActive: true, onTap: () {}),
+          _buildWebSidebarItem(Icons.people, 'Residents', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManageResidents()))),
+          _buildWebSidebarItem(Icons.security, 'Guards', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManageGuards()))),
+          _buildWebSidebarItem(Icons.pending_actions, 'Pending Approvals', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingApprovals()))),
+          _buildWebSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GateEntriesHistory()))),
           const Spacer(),
           ListTile(
             leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)),
@@ -126,12 +125,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Widget _buildSidebarItem(int index, IconData icon, String title, {VoidCallback? onTap}) {
-    bool isActive = _selectedIndex == index;
+  Widget _buildWebSidebarItem(IconData icon, String title, {bool isActive = false, required VoidCallback onTap}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: ListTile(
-        onTap: onTap ?? () => setState(() => _selectedIndex = index),
+        onTap: onTap,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         tileColor: isActive ? const Color(0xFFD4C4A8).withOpacity(0.15) : Colors.transparent,
         leading: Icon(icon, color: isActive ? const Color(0xFFFFF8F0) : const Color(0xFFD4C4A8)),
@@ -170,7 +168,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Widget _buildWebContent() {
+  Widget _buildWebContent(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -201,10 +199,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           spacing: 20,
           runSpacing: 20,
           children: [
-            _buildWebActionCard('Manage Residents', 'Add, edit, and archive residents', Icons.people, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageResidents()))),
-            _buildWebActionCard('Manage Guards', 'Add and manage security personnel', Icons.security, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManageGuards()))),
-            _buildWebActionCard('Gate History', 'View all IN and OUT logs', Icons.history, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GateEntriesHistory()))),
-            _buildWebActionCard('Pending Approvals', 'Review new resident signups', Icons.pending_actions, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PendingApprovals()))),
+            _buildWebActionCard('Manage Residents', 'Add, edit, and archive residents', Icons.people, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManageResidents()))),
+            _buildWebActionCard('Manage Guards', 'Add and manage security personnel', Icons.security, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManageGuards()))),
+            _buildWebActionCard('Gate History', 'View all IN and OUT logs', Icons.history, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GateEntriesHistory()))),
+            _buildWebActionCard('Pending Approvals', 'Review new resident signups', Icons.pending_actions, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingApprovals()))),
           ],
         ),
       ],
@@ -314,7 +312,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     );
   }
 
-  Widget _buildMobileContent() {
+  Widget _buildMobileContent(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

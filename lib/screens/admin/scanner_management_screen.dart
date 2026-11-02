@@ -8,6 +8,12 @@ import 'package:intl/intl.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
+// ✅ CORRECTED IMPORTS
+import '../guard/guard_dashboard.dart';
+import 'manual_entry_screen.dart';
+import 'pending_visits_screen.dart';
+import 'guard_gate_history.dart';
+
 class ScannerManagementScreen extends StatefulWidget {
   const ScannerManagementScreen({super.key});
 
@@ -51,80 +57,45 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen>
 
   Future<void> _connectToScanner() async {
     try {
-      final response = await http
-          .get(Uri.parse('http://$_scannerIp:$_scannerPort/status'))
-          .timeout(const Duration(seconds: 3));
-
-      setState(() {
-        _isScannerConnected = response.statusCode == 200;
-      });
-      print('Scanner connection: ${response.statusCode}');
+      final response = await http.get(Uri.parse('http://$_scannerIp:$_scannerPort/status')).timeout(const Duration(seconds: 3));
+      setState(() => _isScannerConnected = response.statusCode == 200);
     } catch (e) {
-      print('Scanner connection failed: $e');
-      setState(() {
-        _isScannerConnected = false;
-      });
+      setState(() => _isScannerConnected = false);
     }
   }
 
   // ==================== GATE OPEN ====================
   Future<void> _openGate() async {
     if (_isOpeningGate) return;
-
-    setState(() {
-      _isOpeningGate = true;
-    });
+    setState(() => _isOpeningGate = true);
 
     try {
-      print('🚪 Opening gate via HTTP to $_scannerIp:$_scannerPort/open');
-      final response = await http
-          .post(
+      final response = await http.post(
         Uri.parse('http://$_scannerIp:$_scannerPort/open'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'command': 'open'}),
-      )
-          .timeout(const Duration(seconds: 5));
-
-      print('✅ Gate open response: ${response.statusCode} - ${response.body}');
+      ).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Gate opened successfully'), backgroundColor: Colors.green),
-        );
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gate opened successfully'), backgroundColor: Colors.green));
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Gate response: ${response.statusCode}'), backgroundColor: Colors.orange),
-        );
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gate response: ${response.statusCode}'), backgroundColor: Colors.orange));
       }
     } catch (e) {
-      print('❌ Error opening gate: $e');
       try {
-        final response = await http
-            .get(Uri.parse('http://$_scannerIp:$_scannerPort/open'))
-            .timeout(const Duration(seconds: 3));
-        print('✅ Gate open via GET: ${response.statusCode}');
+        await http.get(Uri.parse('http://$_scannerIp:$_scannerPort/open')).timeout(const Duration(seconds: 3));
       } catch (e2) {
-        print('❌ Both gate opening methods failed: $e2');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to open gate. Check connection.'), backgroundColor: Colors.red),
-        );
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to open gate. Check connection.'), backgroundColor: Colors.red));
       }
     } finally {
-      setState(() {
-        _isOpeningGate = false;
-      });
+      if (mounted) setState(() => _isOpeningGate = false);
     }
   }
 
   // ==================== QR PROCESSING ====================
   Future<void> _processQRCode(String qrData) async {
     if (_isQrScanning) return;
-
-    print('🔍 QR Code detected: $qrData');
-
-    setState(() {
-      _isQrScanning = true;
-    });
+    setState(() => _isQrScanning = true);
 
     try {
       Map<String, dynamic> qrInfo;
@@ -136,7 +107,6 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen>
       }
 
       String qrId = qrInfo['id'];
-
       DocumentSnapshot qrDoc = await _firestore.collection('visitor_qrs').doc(qrId).get();
 
       if (!qrDoc.exists) {
@@ -160,10 +130,7 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen>
         return;
       }
 
-      await _firestore.collection('visitor_qrs').doc(qrId).update({
-        'isUsed': true,
-        'usedAt': DateTime.now(),
-      });
+      await _firestore.collection('visitor_qrs').doc(qrId).update({'isUsed': true, 'usedAt': DateTime.now()});
 
       await _firestore.collection('gate_entries').add({
         'residentId': qrDataMap['residentId'],
@@ -180,7 +147,6 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen>
       });
 
       await _openGate();
-
       _showResultDialog(true, 'Access Granted for ${qrDataMap['visitorName']}');
 
       setState(() {
@@ -194,7 +160,6 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen>
         _isQrScanning = false;
       });
     } catch (e) {
-      print('❌ QR processing error: $e');
       _showResultDialog(false, 'Error: $e');
       setState(() => _isQrScanning = false);
     }
@@ -208,13 +173,7 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen>
         content: Text(message, style: const TextStyle(color: Color(0xFF6B5B4F))),
         backgroundColor: const Color(0xFFFFF8F0),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: const BorderSide(color: Color(0xFFE0D5C1), width: 1.5)),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            style: TextButton.styleFrom(foregroundColor: const Color(0xFFD4C4A8), backgroundColor: const Color(0xFFF5F0E8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-            child: const Text('OK'),
-          ),
-        ],
+        actions: [TextButton(onPressed: () => Navigator.pop(context), style: TextButton.styleFrom(foregroundColor: const Color(0xFFD4C4A8), backgroundColor: const Color(0xFFF5F0E8), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('OK'))],
       ),
     );
   }
@@ -229,22 +188,19 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen>
   // ==================== BUILD ====================
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb) {
+    final isDesktopWeb = kIsWeb && MediaQuery.of(context).size.width >= 800;
+
+    if (isDesktopWeb) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F0E8),
         body: Row(
           children: [
-            _buildWebSidebar(),
+            _buildWebSidebar(context),
             Expanded(
               child: Column(
                 children: [
                   _buildWebHeader(),
-                  Expanded(
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(32),
-                      child: _buildWebContent(),
-                    ),
-                  ),
+                  Expanded(child: SingleChildScrollView(padding: const EdgeInsets.all(32), child: _buildWebContent())),
                 ],
               ),
             ),
@@ -267,28 +223,17 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen>
                 indicatorWeight: 3,
                 labelColor: const Color(0xFFFFF8F0),
                 unselectedLabelColor: const Color(0xFFD4C4A8),
-                tabs: const [
-                  Tab(icon: Icon(Icons.qr_code), text: 'SCANNER'),
-                  Tab(icon: Icon(Icons.history), text: 'HISTORY'),
-                ],
+                tabs: const [Tab(icon: Icon(Icons.qr_code), text: 'SCANNER'), Tab(icon: Icon(Icons.history), text: 'HISTORY')],
               ),
             ),
-            Expanded(
-              child: TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildScannerTab(),
-                  _buildHistoryTab(),
-                ],
-              ),
-            ),
+            Expanded(child: TabBarView(controller: _tabController, children: [_buildScannerTab(), _buildHistoryTab()])),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildWebSidebar() {
+  Widget _buildWebSidebar(BuildContext context) {
     return Container(
       width: 260,
       color: const Color(0xFF5D4037),
@@ -300,12 +245,13 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen>
           const Text('Florence Homes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFFF8F0), letterSpacing: 1)),
           const Text('Guard Portal', style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
           const SizedBox(height: 40),
-          _buildWebSidebarItem(Icons.edit_document, 'Manual Entry', onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.dashboard, 'Dashboard', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardDashboard()))),
+          _buildWebSidebarItem(Icons.edit_document, 'Manual Entry', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
           _buildWebSidebarItem(Icons.qr_code_scanner, 'QR Scanner', isActive: true, onTap: () {}),
-          _buildWebSidebarItem(Icons.exit_to_app, 'Pending Visits', onTap: () => Navigator.pop(context)),
-          _buildWebSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.exit_to_app, 'Pending Visits', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
+          _buildWebSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardGateHistory()))),
           const Spacer(),
-          ListTile(leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)), title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)), onTap: () => Navigator.pop(context)),
+          ListTile(leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)), title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)), onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardDashboard()))),
           const SizedBox(height: 20),
         ],
       ),
@@ -336,11 +282,7 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen>
           const Text('QR Scanner', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: _isScannerConnected ? const Color(0xFF4CAF50).withOpacity(0.1) : const Color(0xFFD32F2F).withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: _isScannerConnected ? const Color(0xFF4CAF50).withOpacity(0.3) : const Color(0xFFD32F2F).withOpacity(0.3))),
-                child: Row(children: [Icon(Icons.circle, size: 10, color: _isScannerConnected ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F)), const SizedBox(width: 6), Text(_isScannerConnected ? 'CONNECTED' : 'DISCONNECTED', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _isScannerConnected ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F)))]),
-              ),
+              Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: _isScannerConnected ? const Color(0xFF4CAF50).withOpacity(0.1) : const Color(0xFFD32F2F).withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: _isScannerConnected ? const Color(0xFF4CAF50).withOpacity(0.3) : const Color(0xFFD32F2F).withOpacity(0.3))), child: Row(children: [Icon(Icons.circle, size: 10, color: _isScannerConnected ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F)), const SizedBox(width: 6), Text(_isScannerConnected ? 'CONNECTED' : 'DISCONNECTED', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _isScannerConnected ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F)))])),
               const SizedBox(width: 12),
               _headerIconButton(icon: Icons.refresh, tooltip: 'Refresh connection', onTap: _connectToScanner, color: const Color(0xFF8D6E63)),
             ],
@@ -377,8 +319,7 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen>
                   child: MobileScanner(
                     controller: _cameraController,
                     onDetect: (capture) {
-                      final List<Barcode> barcodes = capture.barcodes;
-                      for (final barcode in barcodes) {
+                      for (final barcode in capture.barcodes) {
                         if (barcode.rawValue != null && !_isQrScanning) {
                           _processQRCode(barcode.rawValue!);
                           break;
@@ -397,12 +338,7 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen>
                     Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFD4C4A8), Color(0xFFC4A882)]), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.qr_code_scanner, size: 32, color: Color(0xFFFFF8F0))),
                     const SizedBox(width: 16),
                     const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Scan Visitor QR Code', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))), SizedBox(height: 4), Text('Position the QR code within the frame', style: TextStyle(fontSize: 12, color: Color(0xFF8D6E63)))])),
-                    OutlinedButton.icon(
-                      onPressed: _isOpeningGate ? null : _openGate,
-                      icon: _isOpeningGate ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.door_front_door, size: 16),
-                      label: Text(_isOpeningGate ? 'Opening...' : 'Test Open Gate'),
-                      style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF8D6E63), side: const BorderSide(color: Color(0xFFD4C4A8)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                    ),
+                    OutlinedButton.icon(onPressed: _isOpeningGate ? null : _openGate, icon: _isOpeningGate ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.door_front_door, size: 16), label: Text(_isOpeningGate ? 'Opening...' : 'Test Open Gate'), style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF8D6E63), side: const BorderSide(color: Color(0xFFD4C4A8)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)))),
                   ],
                 ),
               ),
@@ -421,11 +357,7 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen>
                 const Row(children: [Icon(Icons.history, size: 20, color: Color(0xFF8D6E63)), SizedBox(width: 8), Text('Recent Scans', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF5D4037)))]),
                 const SizedBox(height: 16),
                 if (_recentScans.isEmpty)
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(color: const Color(0xFFF5F0E8), borderRadius: BorderRadius.circular(12)),
-                    child: const Column(children: [Icon(Icons.history, size: 40, color: Color(0xFFD4C4A8)), SizedBox(height: 8), Text('No recent scans', style: TextStyle(fontSize: 12, color: Color(0xFF8D6E63)))]),
-                  )
+                  Container(padding: const EdgeInsets.all(24), decoration: BoxDecoration(color: const Color(0xFFF5F0E8), borderRadius: BorderRadius.circular(12)), child: const Column(children: [Icon(Icons.history, size: 40, color: Color(0xFFD4C4A8)), SizedBox(height: 8), Text('No recent scans', style: TextStyle(fontSize: 12, color: Color(0xFF8D6E63)))]))
                 else
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxHeight: 460),
@@ -497,8 +429,7 @@ class _ScannerManagementScreenState extends State<ScannerManagementScreen>
               child: MobileScanner(
                 controller: _cameraController,
                 onDetect: (capture) {
-                  final List<Barcode> barcodes = capture.barcodes;
-                  for (final barcode in barcodes) {
+                  for (final barcode in capture.barcodes) {
                     if (barcode.rawValue != null && !_isQrScanning) {
                       _processQRCode(barcode.rawValue!);
                       break;

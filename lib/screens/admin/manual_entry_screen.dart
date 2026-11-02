@@ -7,6 +7,12 @@ import '../../services/gate_service.dart';
 import '../../services/tcp_service.dart';
 import '../../providers/auth_provider.dart';
 
+// ✅ CORRECTED IMPORTS
+import '../guard/guard_dashboard.dart';
+import 'scanner_management_screen.dart';
+import 'pending_visits_screen.dart';
+import 'guard_gate_history.dart';
+
 class ManualEntryScreen extends StatefulWidget {
   const ManualEntryScreen({super.key});
 
@@ -244,12 +250,14 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb) {
+    final isDesktopWeb = kIsWeb && MediaQuery.of(context).size.width >= 800;
+
+    if (isDesktopWeb) {
       return Scaffold(
         backgroundColor: const Color(0xFFF5F0E8),
         body: Row(
           children: [
-            _buildWebSidebar(),
+            _buildWebSidebar(context),
             Expanded(
               child: Column(
                 children: [
@@ -280,7 +288,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     );
   }
 
-  Widget _buildWebSidebar() {
+  Widget _buildWebSidebar(BuildContext context) {
     return Container(
       width: 260,
       color: const Color(0xFF5D4037),
@@ -292,12 +300,13 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
           const Text('Florence Homes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFFF8F0), letterSpacing: 1)),
           const Text('Guard Portal', style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
           const SizedBox(height: 40),
+          _buildWebSidebarItem(Icons.dashboard, 'Dashboard', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardDashboard()))),
           _buildWebSidebarItem(Icons.edit_document, 'Manual Entry', isActive: true, onTap: () {}),
-          _buildWebSidebarItem(Icons.qr_code_scanner, 'QR Scanner', onTap: () => Navigator.pop(context)),
-          _buildWebSidebarItem(Icons.exit_to_app, 'Pending Visits', onTap: () => Navigator.pop(context)),
-          _buildWebSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pop(context)),
+          _buildWebSidebarItem(Icons.qr_code_scanner, 'QR Scanner', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
+          _buildWebSidebarItem(Icons.exit_to_app, 'Pending Visits', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
+          _buildWebSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardGateHistory()))),
           const Spacer(),
-          ListTile(leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)), title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)), onTap: () => Navigator.pop(context)),
+          ListTile(leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)), title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)), onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardDashboard()))),
           const SizedBox(height: 20),
         ],
       ),
