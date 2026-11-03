@@ -7,7 +7,6 @@ import '../../services/gate_service.dart';
 import '../../services/tcp_service.dart';
 import '../../providers/auth_provider.dart';
 
-// ✅ CORRECTED IMPORTS
 import '../guard/guard_dashboard.dart';
 import 'scanner_management_screen.dart';
 import 'pending_visits_screen.dart';
@@ -45,6 +44,30 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     _tcpService.connect();
   }
 
+  // ✅ Log manual UP/DOWN actions to Gate History
+  Future<void> _logManualGateAction(String action) async {
+    try {
+      final authProvider = Provider.of<AuthProvider>(context, listen: false);
+      final guardName = authProvider.currentUser?.fullName ?? 'Staff';
+      final guardId = authProvider.currentUser?.id;
+
+      await _firestore.collection('gate_entries').add({
+        'residentId': 'manual_gate',
+        'residentName': '🎮 Manual $action by $guardName',
+        'entryType': 'manual_gate',
+        'timestamp': DateTime.now().toIso8601String(),
+        'status': action == 'UP' ? 'entry' : 'exit',
+        'direction': action,
+        'openedBy': guardName,
+        'openedById': guardId,
+        'note': 'Manual gate control',
+      });
+      print('📝 Logged manual gate $action to Firestore');
+    } catch (e) {
+      print('Failed to log manual gate: $e');
+    }
+  }
+
   Future<void> _manualUp() async {
     if (_isGateBusy || _isGateUp) return;
     setState(() => _isGateBusy = true);
@@ -55,17 +78,28 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
 
       if (success) {
         setState(() => _isGateUp = true);
+        await _logManualGateAction('UP');
+
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gate is UP — scanning paused.'), backgroundColor: Color(0xFF8D6E63), behavior: SnackBarBehavior.floating));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Gate is UP — scanning paused.'),
+              backgroundColor: Color(0xFF8D6E63),
+              behavior: SnackBarBehavior.floating));
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to raise gate. Check connection.'), backgroundColor: Color(0xFFD32F2F), behavior: SnackBarBehavior.floating));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Failed to raise gate. Check connection.'),
+              backgroundColor: Color(0xFFD32F2F),
+              behavior: SnackBarBehavior.floating));
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFD32F2F), behavior: SnackBarBehavior.floating));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: const Color(0xFFD32F2F),
+            behavior: SnackBarBehavior.floating));
       }
     } finally {
       if (mounted) setState(() => _isGateBusy = false);
@@ -82,17 +116,28 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
 
       if (success) {
         setState(() => _isGateUp = false);
+        await _logManualGateAction('DOWN');
+
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gate is DOWN — scanning resumed.'), backgroundColor: Color(0xFF8D6E63), behavior: SnackBarBehavior.floating));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Gate is DOWN — scanning resumed.'),
+              backgroundColor: Color(0xFF8D6E63),
+              behavior: SnackBarBehavior.floating));
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to lower gate. Check connection.'), backgroundColor: Color(0xFFD32F2F), behavior: SnackBarBehavior.floating));
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Failed to lower gate. Check connection.'),
+              backgroundColor: Color(0xFFD32F2F),
+              behavior: SnackBarBehavior.floating));
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFD32F2F), behavior: SnackBarBehavior.floating));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: const Color(0xFFD32F2F),
+            behavior: SnackBarBehavior.floating));
       }
     } finally {
       if (mounted) setState(() => _isGateBusy = false);
@@ -188,12 +233,14 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
 
     final authProvider = Provider.of<AuthProvider>(context, listen: false);
     final adminId = authProvider.currentUser?.id;
+    final guardName = authProvider.currentUser?.fullName ?? 'Guard';
 
     String residentName;
     String residentId;
     String visitorName = _nameController.text.trim();
+    final isDelivery = _selectedEntryType == 'delivery';
 
-    if (_selectedEntryType == 'delivery') {
+    if (isDelivery) {
       residentName = '📦 Delivery: $visitorName';
       residentId = 'manual_${DateTime.now().millisecondsSinceEpoch}';
     } else {
@@ -202,30 +249,39 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     }
 
     try {
-      await _firestore.collection('gate_entries').add({
+      // ✅ Build the entry with common fields + delivery/guest specific fields
+      final Map<String, dynamic> entryData = {
         'residentId': residentId,
         'residentName': residentName,
         'entryType': 'manual',
         'timestamp': DateTime.now().toIso8601String(),
         'visitorName': visitorName,
         'status': 'entry',
-        if (_selectedEntryType == 'guest') ...{
-          'visitingResidentId': _selectedResidentId,
-          'visitingResidentName': _selectedResidentName,
-          'visitingResidentHouse': _selectedResidentHouse,
-          'note': _reasonController.text.trim(),
-          'isGuest': true,
-          'visitStatus': 'inside',
-          'checkInTime': DateTime.now().toIso8601String(),
-        },
-      });
+        'openedBy': guardName,
+        'openedById': adminId,
+        // ✅ BOTH delivery and guest now go to Pending Visits
+        'isGuest': true,
+        'visitStatus': 'inside',
+        'checkInTime': DateTime.now().toIso8601String(),
+        'isDelivery': isDelivery,   // ✅ NEW — distinguishes delivery in pending visits
+      };
+
+      // Add guest-specific fields only for guests
+      if (!isDelivery) {
+        entryData['visitingResidentId'] = _selectedResidentId;
+        entryData['visitingResidentName'] = _selectedResidentName;
+        entryData['visitingResidentHouse'] = _selectedResidentHouse;
+        entryData['note'] = _reasonController.text.trim();
+      }
+
+      await _firestore.collection('gate_entries').add(entryData);
 
       await _firestore.collection('manual_openings').add({
         'adminId': adminId,
         'entryType': _selectedEntryType,
         'personName': visitorName,
-        'reason': _selectedEntryType == 'guest' ? _reasonController.text.trim() : null,
-        'visitedResident': _selectedEntryType == 'guest' ? _selectedResidentName : null,
+        'reason': !isDelivery ? _reasonController.text.trim() : null,
+        'visitedResident': !isDelivery ? _selectedResidentName : null,
         'timestamp': DateTime.now(),
         'status': 'completed',
       });
@@ -233,7 +289,16 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       bool gateOpened = await _tcpService.openGate();
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(gateOpened ? '✅ Entry recorded and gate opened' : '⚠️ Entry recorded but gate failed to open'), backgroundColor: gateOpened ? const Color(0xFF8D6E63) : const Color(0xFFFF9800), behavior: SnackBarBehavior.floating));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(gateOpened
+              ? (isDelivery
+              ? '✅ Delivery recorded — will show in Pending Visits'
+              : '✅ Guest recorded — will show in Pending Visits')
+              : '⚠️ Entry recorded but gate failed to open'),
+          backgroundColor: gateOpened ? const Color(0xFF8D6E63) : const Color(0xFFFF9800),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
+        ));
       }
 
       _nameController.clear();

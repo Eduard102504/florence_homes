@@ -298,20 +298,52 @@ class _ResidentRecordsScreenState extends State<ResidentRecordsScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  GestureDetector(onTap: () => Navigator.pop(context), child: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.arrow_back, color: Color(0xFFFFF8F0), size: 20))),
-                  const SizedBox(width: 12),
-                  const Text('Resident Records', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFFFFF8F0), letterSpacing: 1)),
-                ],
+              // Back Button
+              GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                  child: const Icon(Icons.arrow_back, color: Color(0xFFFFF8F0), size: 20),
+                ),
               ),
+              const SizedBox(width: 12),
+
+              // ✅ FIXED: Wrapped Title in Expanded to prevent overflow
+              const Expanded(
+                child: Text(
+                  'Resident Records',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFFFFF8F0), letterSpacing: 1),
+                  overflow: TextOverflow.ellipsis,
+                  maxLines: 1,
+                ),
+              ),
+              const SizedBox(width: 8),
+
+              // Action Buttons
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  GestureDetector(onTap: _pickDateRange, child: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.filter_alt_outlined, color: Color(0xFFFFF8F0), size: 20))),
+                  GestureDetector(
+                    onTap: _pickDateRange,
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                      child: const Icon(Icons.filter_alt_outlined, color: Color(0xFFFFF8F0), size: 20),
+                    ),
+                  ),
                   const SizedBox(width: 8),
-                  GestureDetector(onTap: _isExporting ? null : _exportPDF, child: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: _isExporting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFF8F0)))) : const Icon(Icons.picture_as_pdf, color: Color(0xFFFFF8F0), size: 20))),
+                  GestureDetector(
+                    onTap: _isExporting ? null : _exportPDF,
+                    child: Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
+                      child: _isExporting
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFF8F0))))
+                          : const Icon(Icons.picture_as_pdf, color: Color(0xFFFFF8F0), size: 20),
+                    ),
+                  ),
                 ],
               ),
             ],

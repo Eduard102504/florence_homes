@@ -25,9 +25,8 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
   String? _errorMessage;
   bool _isLoading = true;
 
-  // ✅ PAGINATION STATE
   int _currentPage = 1;
-  int _pageSize = 20; // Default page size
+  int _pageSize = 20;
 
   StreamSubscription<QuerySnapshot>? _entriesSub;
 
@@ -47,7 +46,7 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
     _entriesSub = _firestore
         .collection('gate_entries')
         .orderBy('timestamp', descending: true)
-        .limit(200) // Increased limit so we have data to paginate
+        .limit(200)
         .snapshots()
         .listen(
           (snapshot) {
@@ -83,7 +82,6 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
     );
   }
 
-  // ✅ PAGINATION GETTERS
   int get _totalPages {
     if (_pageSize == 0) return 1;
     if (_filteredEntries.isEmpty) return 1;
@@ -110,7 +108,6 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
     });
   }
 
-  // ✅ PAGE SIZE CHIPS
   Widget _buildPageSizeOptions() {
     const options = <Map<String, dynamic>>[
       {'label': '10', 'value': 10},
@@ -191,10 +188,6 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
       ),
     );
   }
-
-  // ============================================================
-  // 🖥️ WEB COMPONENTS
-  // ============================================================
 
   Widget _buildWebSidebar(BuildContext context) {
     return Container(
@@ -298,7 +291,6 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
                   ],
                 ),
               ),
-              // ✅ PAGE SIZE CONTROLS ON WEB HEADER
               Row(
                 children: [
                   const Text('Per page:', style: TextStyle(fontSize: 11, color: Color(0xFFB8A99A), fontWeight: FontWeight.w500)),
@@ -320,6 +312,8 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
               final residentName = entry['residentName'] ?? 'Unknown';
               final status = entry['status'] ?? 'entry';
               final visitorName = entry['visitorName'];
+              final isManualGate = entryType == 'manual_gate';
+              final isDelivery = entry['isDelivery'] == true;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -327,52 +321,59 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE0D5C1)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))]),
                 child: Row(
                   children: [
-                    Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: _getTypeColor(entryType).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Icon(_getTypeIcon(entryType), color: _getTypeColor(entryType), size: 24)),
+                    Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: _getTypeColor(entryType).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Icon(isDelivery ? Icons.local_shipping : _getTypeIcon(entryType), color: isDelivery ? const Color(0xFFFF9800) : _getTypeColor(entryType), size: 24)),
                     const SizedBox(width: 16),
                     Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(residentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF5D4037))), if (visitorName != null) Text('Visitor: $visitorName', style: const TextStyle(fontSize: 12, color: Color(0xFF8D6E63)))])),
                     Expanded(flex: 1, child: Text(_getEntryTypeDisplay(entryType), style: const TextStyle(fontSize: 13, color: Color(0xFF8D6E63)))),
                     Expanded(flex: 1, child: Text(DateFormat('MMM dd, yyyy • hh:mm a').format(ts), style: const TextStyle(fontSize: 13, color: Color(0xFF8D6E63)))),
-                    Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.1) : const Color(0xFFD32F2F).withOpacity(0.1), borderRadius: BorderRadius.circular(20)), child: Text(status == 'entry' ? '🟢 IN' : '🔴 OUT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: status == 'entry' ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F)))),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isManualGate
+                            ? const Color(0xFF6B5B4F).withOpacity(0.1)
+                            : (status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.1) : const Color(0xFFD32F2F).withOpacity(0.1)),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        isManualGate
+                            ? (entry['direction'] == 'UP' ? '⬆️ UP' : '⬇️ DOWN')
+                            : (status == 'entry' ? '🟢 IN' : '🔴 OUT'),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: isManualGate
+                              ? const Color(0xFF6B5B4F)
+                              : (status == 'entry' ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F)),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               );
             },
           ),
         ),
-        // ✅ WEB PAGINATION CONTROLS AT BOTTOM
         if (_pageSize != 0 && total > 1)
           Padding(
             padding: const EdgeInsets.only(top: 16),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                IconButton(
-                    onPressed: _currentPage > 1 ? () => _goToPage(1) : null,
-                    icon: const Icon(Icons.first_page, size: 20)),
-                IconButton(
-                    onPressed: _currentPage > 1 ? () => _goToPage(_currentPage - 1) : null,
-                    icon: const Icon(Icons.chevron_left, size: 20)),
+                IconButton(onPressed: _currentPage > 1 ? () => _goToPage(1) : null, icon: const Icon(Icons.first_page, size: 20)),
+                IconButton(onPressed: _currentPage > 1 ? () => _goToPage(_currentPage - 1) : null, icon: const Icon(Icons.chevron_left, size: 20)),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(color: const Color(0xFFD4C4A8).withOpacity(0.15), borderRadius: BorderRadius.circular(20)),
                   child: Text('Page $_currentPage of $total', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
                 ),
-                IconButton(
-                    onPressed: _currentPage < total ? () => _goToPage(_currentPage + 1) : null,
-                    icon: const Icon(Icons.chevron_right, size: 20)),
-                IconButton(
-                    onPressed: _currentPage < total ? () => _goToPage(total) : null,
-                    icon: const Icon(Icons.last_page, size: 20)),
+                IconButton(onPressed: _currentPage < total ? () => _goToPage(_currentPage + 1) : null, icon: const Icon(Icons.chevron_right, size: 20)),
+                IconButton(onPressed: _currentPage < total ? () => _goToPage(total) : null, icon: const Icon(Icons.last_page, size: 20)),
               ],
             ),
           ),
       ],
     );
   }
-
-  // ============================================================
-  // 📱 MOBILE COMPONENTS
-  // ============================================================
 
   Widget _buildMobileHeader() {
     return Container(
@@ -442,6 +443,8 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
               final residentName = entry['residentName'] ?? 'Unknown';
               final visitorName = entry['visitorName'];
               final status = entry['status'] ?? 'entry';
+              final isManualGate = entryType == 'manual_gate';
+              final isDelivery = entry['isDelivery'] == true;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -453,10 +456,35 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
                     children: [
                       Row(
                         children: [
-                          Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: _getTypeColor(entryType).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Icon(_getTypeIcon(entryType), size: 20, color: _getTypeColor(entryType))),
+                          Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: _getTypeColor(entryType).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Icon(isDelivery ? Icons.local_shipping : _getTypeIcon(entryType), size: 20, color: isDelivery ? const Color(0xFFFF9800) : _getTypeColor(entryType))),
                           const SizedBox(width: 12),
                           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(residentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF5D4037))), if (visitorName != null) Text('👤 $visitorName', style: const TextStyle(fontSize: 12, color: Color(0xFF8D6E63)))])),
-                          Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.1) : const Color(0xFFD32F2F).withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.3) : const Color(0xFFD32F2F).withOpacity(0.3))), child: Text(status == 'entry' ? '🟢 IN' : '🔴 OUT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: status == 'entry' ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F)))),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isManualGate
+                                  ? const Color(0xFF6B5B4F).withOpacity(0.1)
+                                  : (status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.1) : const Color(0xFFD32F2F).withOpacity(0.1)),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isManualGate
+                                    ? const Color(0xFF6B5B4F).withOpacity(0.3)
+                                    : (status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.3) : const Color(0xFFD32F2F).withOpacity(0.3)),
+                              ),
+                            ),
+                            child: Text(
+                              isManualGate
+                                  ? (entry['direction'] == 'UP' ? '⬆️ UP' : '⬇️ DOWN')
+                                  : (status == 'entry' ? '🟢 IN' : '🔴 OUT'),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: isManualGate
+                                    ? const Color(0xFF6B5B4F)
+                                    : (status == 'entry' ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F)),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                       const Divider(color: Color(0xFFE0D5C1), height: 24),
@@ -500,15 +528,16 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
       case 'uhf_rfid': case 'rfid': return 'RFID';
       case 'qr_visitor': return 'QR Visitor';
       case 'manual': return 'Manual Entry';
+      case 'manual_gate': return 'Manual Gate';
       default: return type?.toUpperCase() ?? 'UNKNOWN';
     }
   }
 
   IconData _getTypeIcon(String type) {
-    switch (type) { case 'rfid': case 'uhf_rfid': return Icons.nfc; case 'qr_visitor': return Icons.qr_code; case 'manual': return Icons.person; default: return Icons.door_front_door; }
+    switch (type) { case 'rfid': case 'uhf_rfid': return Icons.nfc; case 'qr_visitor': return Icons.qr_code; case 'manual': return Icons.person; case 'manual_gate': return Icons.swap_vert; default: return Icons.door_front_door; }
   }
 
   Color _getTypeColor(String type) {
-    switch (type) { case 'rfid': case 'uhf_rfid': return const Color(0xFFD4C4A8); case 'qr_visitor': return const Color(0xFFC4A882); case 'manual': return const Color(0xFFB8A99A); default: return const Color(0xFF8D6E63); }
+    switch (type) { case 'rfid': case 'uhf_rfid': return const Color(0xFFD4C4A8); case 'qr_visitor': return const Color(0xFFC4A882); case 'manual': return const Color(0xFFB8A99A); case 'manual_gate': return const Color(0xFF6B5B4F); default: return const Color(0xFF8D6E63); }
   }
 }

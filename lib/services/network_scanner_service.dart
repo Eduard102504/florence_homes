@@ -1,3 +1,4 @@
+// lib/services/network_scanner_service.dart
 import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
@@ -12,40 +13,58 @@ class NetworkScannerService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   WebSocketChannel? _channel;
   Timer? _heartbeatTimer;
-  String? _scannerIp;
-  int _scannerPort = 8080;
+
+  // ✅ FALLBACK SETTINGS
+  String _activeIp = '';
+  static const String _ethernetIp = '192.168.1.9';
+  static const String _wifiIp = '192.168.1.15';
+  int _wsPort = 8082;
+  int _httpPort = 8081;
+
   bool _isConnected = false;
 
-  // Scanner settings from Firebase
-  Future<void> loadScannerSettings() async {
-    final doc = await _firestore.collection('settings').doc('scanner').get();
-    if (doc.exists) {
-      _scannerIp = doc.get('ip');
-      _scannerPort = doc.get('port') ?? 8080;
-      _isConnected = doc.get('isConnected') ?? false;
+  // ==================== PING HELPER ====================
+  /// Pings the Pi's HTTP server on a specific IP to see if it's alive.
+  Future<bool> _pingPi(String ip) async {
+    try {
+      final response = await http
+          .get(Uri.parse('http://$ip:$_httpPort/status'))
+          .timeout(const Duration(seconds: 2));
+      return response.statusCode == 200;
+    } catch (e) {
+      return false;
     }
   }
 
-  // Save scanner settings to Firebase
-  Future<void> saveScannerSettings(String ip, int port) async {
-    _scannerIp = ip;
-    _scannerPort = port;
-    await _firestore.collection('settings').doc('scanner').set({
-      'ip': ip,
-      'port': port,
-      'updatedAt': DateTime.now(),
-    });
-  }
-
-  // Connect to Raspberry Pi scanner
+  // ==================== CONNECT ====================
   Future<bool> connect({String? ip, int? port}) async {
-    if (ip != null) _scannerIp = ip;
-    if (port != null) _scannerPort = port;
+    if (port != null) _wsPort = port;
 
+    // 1. Determine which IP is alive (Ethernet first, then WiFi)
+    if (ip != null) {
+      _activeIp = ip;
+    } else {
+      print('🔌 Pinging Ethernet ($_ethernetIp)...');
+      if (await _pingPi(_ethernetIp)) {
+        _activeIp = _ethernetIp;
+        print('✅ Pi found on Ethernet');
+      } else {
+        print('❌ Ethernet unreachable. Pinging WiFi ($_wifiIp)...');
+        if (await _pingPi(_wifiIp)) {
+          _activeIp = _wifiIp;
+          print('✅ Pi found on WiFi');
+        } else {
+          print('❌ Pi unreachable on both networks');
+          _isConnected = false;
+          return false;
+        }
+      }
+    }
+
+    // 2. Connect WebSocket using the active IP
     try {
-      // First try WebSocket connection
       _channel = WebSocketChannel.connect(
-        Uri.parse('ws://$_scannerIp:$_scannerPort'),
+        Uri.parse('ws://$_activeIp:$_wsPort'),
       );
 
       _channel!.stream.listen(
@@ -55,15 +74,16 @@ class NetworkScannerService {
         onError: (error) {
           print('WebSocket error: $error');
           _isConnected = false;
+          _activeIp = ''; // Force re-ping next time
         },
         onDone: () {
           print('WebSocket disconnected');
           _isConnected = false;
+          _activeIp = '';
           _reconnect();
         },
       );
 
-      // Send handshake
       _channel!.sink.add(json.encode({
         'type': 'handshake',
         'device': 'flutter_app',
@@ -73,16 +93,17 @@ class NetworkScannerService {
       _startHeartbeat();
       _isConnected = true;
 
-      // Update Firebase
-      await _firestore.collection('settings').doc('scanner').update({
+      await _firestore.collection('settings').doc('scanner').set({
         'isConnected': true,
+        'activeIp': _activeIp,
         'lastSeen': DateTime.now(),
-      });
+      }, SetOptions(merge: true));
 
       return true;
     } catch (e) {
-      print('Connection failed: $e');
+      print('WebSocket connection failed: $e');
       _isConnected = false;
+      _activeIp = '';
       return false;
     }
   }
@@ -109,8 +130,9 @@ class NetworkScannerService {
       }
 
       if (data['type'] == 'rfid_scan') {
-        String rfidData = data['rfid'];
-        _processRFIDScan(rfidData);
+        final direction = data['direction'] ?? 'IN';
+        final residentName = data['residentName'] ?? 'Resident';
+        _notifyScanResult(true, '$direction: $residentName', direction: direction);
       } else if (data['type'] == 'gate_status') {
         _onGateStatus?.call(data['isOpen']);
       }
@@ -119,119 +141,27 @@ class NetworkScannerService {
     }
   }
 
-  Future<void> _processRFIDScan(String rfidData) async {
-    try {
-      // Check if RFID is registered
-      DocumentSnapshot rfidDoc = await _firestore
-          .collection('rfid_tags')
-          .doc(rfidData)
-          .get();
-
-      if (!rfidDoc.exists) {
-        _sendToRaspberryPi({
-          'type': 'access_denied',
-          'rfid': rfidData,
-          'reason': 'Unknown RFID',
-          'timestamp': DateTime.now().toIso8601String(),
-        });
-        _notifyScanResult(false, 'Unknown RFID tag');
-        return;
-      }
-
-      String residentId = rfidDoc.get('residentId');
-      DocumentSnapshot residentDoc = await _firestore
-          .collection('users')
-          .doc(residentId)
-          .get();
-
-      if (!residentDoc.exists) {
-        _sendToRaspberryPi({
-          'type': 'access_denied',
-          'rfid': rfidData,
-          'reason': 'Resident not found',
-          'timestamp': DateTime.now().toIso8601String(),
-        });
-        _notifyScanResult(false, 'Resident not found');
-        return;
-      }
-
-      bool isApproved = residentDoc.get('isApproved');
-      if (!isApproved) {
-        _sendToRaspberryPi({
-          'type': 'access_denied',
-          'rfid': rfidData,
-          'reason': 'Account pending approval',
-          'timestamp': DateTime.now().toIso8601String(),
-        });
-        _notifyScanResult(false, 'Account pending approval');
-        return;
-      }
-
-      // Check if auto gate open is enabled
-      final settings = await _firestore.collection('settings').doc('gate').get();
-      bool autoGate = settings.get('autoGate') ?? true;
-
-      if (autoGate) {
-        // Send open gate command to Raspberry Pi
-        _sendToRaspberryPi({
-          'type': 'open_gate',
-          'rfid': rfidData,
-          'residentId': residentId,
-          'residentName': residentDoc.get('fullName'),
-          'timestamp': DateTime.now().toIso8601String(),
-        });
-      }
-
-      // Record gate entry
-      await _firestore.collection('gate_entries').add({
-        'residentId': residentId,
-        'residentName': residentDoc.get('fullName'),
-        'entryType': 'uhf_rfid',
-        'timestamp': DateTime.now(),
-        'status': 'entry',
-        'rfidTag': rfidData,
-      });
-
-      await _firestore.collection('users').doc(residentId).update({
-        'lastAccess': DateTime.now(),
-      });
-
-      _notifyScanResult(true, 'Access granted for ${residentDoc.get('fullName')}');
-
-    } catch (e) {
-      print('Error processing RFID: $e');
-      _sendToRaspberryPi({
-        'type': 'access_denied',
-        'rfid': rfidData,
-        'reason': 'System error',
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-      _notifyScanResult(false, 'System error');
-    }
-  }
-
-  void _sendToRaspberryPi(Map<String, dynamic> data) {
-    if (_channel != null && _isConnected) {
-      _channel!.sink.add(json.encode(data));
-    }
-  }
-
-  // Manual gate control
+  // ==================== MANUAL GATE CONTROL ====================
   Future<bool> openGateManually({String? reason, String? operatorName}) async {
     try {
-      // Send command to Raspberry Pi
+      if (_activeIp.isEmpty) {
+        // Try to find it if we don't have it
+        if (!await connect()) return false;
+      }
+
+      // 1. Send via WebSocket
       if (_channel != null && _isConnected) {
-        _sendToRaspberryPi({
+        _channel!.sink.add(json.encode({
           'type': 'open_gate_manual',
           'reason': reason ?? 'Manual override',
           'operator': operatorName ?? 'Admin',
           'timestamp': DateTime.now().toIso8601String(),
-        });
+        }));
       }
 
-      // Also send HTTP request as backup
+      // 2. Send via HTTP as backup
       final response = await http.post(
-        Uri.parse('http://$_scannerIp:$_scannerPort/open'),
+        Uri.parse('http://$_activeIp:$_httpPort/open'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
           'type': 'open_gate_manual',
@@ -241,12 +171,12 @@ class NetworkScannerService {
         }),
       ).timeout(const Duration(seconds: 5));
 
-      // Log manual gate opening
       await _firestore.collection('manual_gate_openings').add({
         'reason': reason,
         'operator': operatorName,
         'timestamp': DateTime.now(),
         'source': 'admin_dashboard',
+        'ip_used': _activeIp,
       });
 
       return response.statusCode == 200;
@@ -258,35 +188,37 @@ class NetworkScannerService {
 
   Future<bool> closeGateManually() async {
     try {
+      if (_activeIp.isEmpty && !await connect()) return false;
+
       if (_channel != null && _isConnected) {
-        _sendToRaspberryPi({
+        _channel!.sink.add(json.encode({
           'type': 'close_gate',
           'timestamp': DateTime.now().toIso8601String(),
-        });
+        }));
       }
 
       final response = await http.post(
-        Uri.parse('http://$_scannerIp:$_scannerPort/close'),
+        Uri.parse('http://$_activeIp:$_httpPort/manual_down'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({'type': 'close_gate'}),
       ).timeout(const Duration(seconds: 5));
 
       return response.statusCode == 200;
     } catch (e) {
-      print('Error closing gate: $e');
       return false;
     }
   }
 
   Future<bool> getGateStatus() async {
     try {
+      if (_activeIp.isEmpty && !await connect()) return false;
+
       final response = await http.get(
-        Uri.parse('http://$_scannerIp:$_scannerPort/status'),
+        Uri.parse('http://$_activeIp:$_httpPort/status'),
       ).timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return data['isOpen'] ?? false;
+        return !response.body.contains('OK');
       }
       return false;
     } catch (e) {
@@ -296,9 +228,7 @@ class NetworkScannerService {
 
   void _reconnect() {
     Future.delayed(const Duration(seconds: 5), () {
-      if (!_isConnected) {
-        connect();
-      }
+      if (!_isConnected) connect();
     });
   }
 
@@ -306,18 +236,21 @@ class NetworkScannerService {
     _heartbeatTimer?.cancel();
     _channel?.sink.close();
     _isConnected = false;
+    _activeIp = '';
   }
 
+  // ==================== STREAMS ====================
   StreamController<RFIDScanEvent>? _scanResultController;
   Stream<RFIDScanEvent> get scanResults {
     _scanResultController ??= StreamController<RFIDScanEvent>.broadcast();
     return _scanResultController!.stream;
   }
 
-  void _notifyScanResult(bool success, String message) {
+  void _notifyScanResult(bool success, String message, {String direction = 'IN'}) {
     _scanResultController?.add(RFIDScanEvent(
       success: success,
       message: message,
+      direction: direction,
       timestamp: DateTime.now(),
     ));
   }
@@ -336,11 +269,13 @@ class NetworkScannerService {
 class RFIDScanEvent {
   final bool success;
   final String message;
+  final String direction;
   final DateTime timestamp;
 
   RFIDScanEvent({
     required this.success,
     required this.message,
+    this.direction = 'IN',
     required this.timestamp,
   });
 }

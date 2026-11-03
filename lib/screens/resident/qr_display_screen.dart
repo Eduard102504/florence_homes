@@ -4,10 +4,11 @@ import 'package:flutter/rendering.dart';
 import 'dart:ui' as ui;
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:io';
 import 'dart:typed_data';
+
+// ✅ REMOVED: import 'package:path_provider/path_provider.dart';
+// ✅ REMOVED: import 'dart:io';
 
 class QRDisplayScreen extends StatefulWidget {
   final String qrData;
@@ -297,7 +298,6 @@ class _QRDisplayScreenState extends State<QRDisplayScreen> {
       children: [
         RepaintBoundary(
           key: _repaintKey,
-          // ✅ FIX: Added explicit sizing and constraints for Web rendering
           child: Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -323,7 +323,7 @@ class _QRDisplayScreenState extends State<QRDisplayScreen> {
                 dataModuleStyle: const QrDataModuleStyle(
                     color: Color(0xFF5D4037),
                     dataModuleShape: QrDataModuleShape.square),
-                backgroundColor: Colors.white, // ✅ Ensure background is white
+                backgroundColor: Colors.white,
               ),
             ),
           ),
@@ -480,19 +480,22 @@ class _QRDisplayScreenState extends State<QRDisplayScreen> {
     setState(() => _isSharing = true);
     try {
       final pngBytes = await _captureQR();
+
+      final String shareText = '🎫 Visitor QR Code for ${widget.visitorName}\n\n🏠 Florence Homes Gate System\nValid for 24 hours only.';
+
       if (pngBytes != null) {
-        final tempDir = await getTemporaryDirectory();
-        final filePath =
-            '${tempDir.path}/qr_${DateTime.now().millisecondsSinceEpoch}.png';
-        final file = File(filePath);
-        await file.writeAsBytes(pngBytes);
-        await Share.shareXFiles([XFile(filePath)],
-            text:
-            '🎫 Visitor QR Code for ${widget.visitorName}\n\n🏠 Florence Homes Gate System\nValid for 24 hours only.');
+        // ✅ FIX: Use XFile.fromData to work on both Web and Mobile without needing path_provider
+        final xFile = XFile.fromData(
+          pngBytes,
+          mimeType: 'image/png',
+          name: 'qr_code_${widget.visitorName.replaceAll(' ', '_')}.png',
+        );
+
+        await Share.shareXFiles([xFile], text: shareText);
       } else {
-        await Share.share(
-            '🎫 Visitor QR Code for ${widget.visitorName}\n\n🏠 Florence Homes Gate System\nValid for 24 hours only.');
+        await Share.share(shareText);
       }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text('QR code shared successfully'),

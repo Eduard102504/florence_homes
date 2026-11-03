@@ -57,7 +57,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
   // ==================== TIMESTAMP ====================
   DateTime _parseTimestamp(dynamic timestamp) {
     if (timestamp == null) return DateTime.now();
-
     DateTime utcTime;
     if (timestamp is Timestamp) {
       utcTime = timestamp.toDate();
@@ -132,18 +131,15 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
         .collection('users')
         .where('userType', isEqualTo: 'resident')
         .snapshots()
-        .listen(
-          (snapshot) {
-        try {
-          final names = <String, String>{};
-          for (var doc in snapshot.docs) {
-            names[doc.id] = (doc.get('fullName') as String?) ?? 'Unknown';
-          }
-          if (mounted) setState(() => _residentNames = names);
-        } catch (e) {}
-      },
-      onError: (e) {},
-    );
+        .listen((snapshot) {
+      try {
+        final names = <String, String>{};
+        for (var doc in snapshot.docs) {
+          names[doc.id] = (doc.get('fullName') as String?) ?? 'Unknown';
+        }
+        if (mounted) setState(() => _residentNames = names);
+      } catch (e) {}
+    }, onError: (e) {});
   }
 
   // ==================== LIVE ENTRIES ====================
@@ -151,42 +147,38 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     _entriesSub = _firestore
         .collection('gate_entries')
         .snapshots()
-        .listen(
-          (snapshot) {
-        try {
-          final list = snapshot.docs.map((doc) {
-            final data = doc.data() as Map<String, dynamic>;
-            data['id'] = doc.id;
-            return data;
-          }).toList();
+        .listen((snapshot) {
+      try {
+        final list = snapshot.docs.map((doc) {
+          final data = doc.data() as Map<String, dynamic>;
+          data['id'] = doc.id;
+          return data;
+        }).toList();
 
-          list.sort((a, b) =>
-              _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a)));
+        list.sort((a, b) => _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a)));
 
-          if (!mounted) return;
+        if (!mounted) return;
 
-          _allEntries = list;
-          _applyFiltersInternal();
+        _allEntries = list;
+        _applyFiltersInternal();
 
+        setState(() {
+          if (_currentPage > _totalPages) _currentPage = _totalPages;
+          if (_currentPage < 1) _currentPage = 1;
+          _errorMessage = null;
+        });
+      } catch (e, st) {
+        if (mounted) {
           setState(() {
-            if (_currentPage > _totalPages) _currentPage = _totalPages;
-            if (_currentPage < 1) _currentPage = 1;
-            _errorMessage = null;
+            _allEntries = [];
+            _entries = [];
+            _errorMessage = 'Error: $e';
           });
-        } catch (e, st) {
-          if (mounted) {
-            setState(() {
-              _allEntries = [];
-              _entries = [];
-              _errorMessage = 'Error: $e';
-            });
-          }
         }
-      },
-      onError: (e) {
-        if (mounted) setState(() => _errorMessage = 'Error: $e');
-      },
-    );
+      }
+    }, onError: (e) {
+      if (mounted) setState(() => _errorMessage = 'Error: $e');
+    });
   }
 
   // ==================== FILTERS ====================
@@ -195,27 +187,21 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
       List<Map<String, dynamic>> filtered = List.from(_allEntries);
 
       if (_selectedResident != 'all') {
-        filtered = filtered
-            .where((e) => e['residentId'] == _selectedResident)
-            .toList();
+        filtered = filtered.where((e) => e['residentId'] == _selectedResident).toList();
       }
 
       if (_selectedEntryType != 'all') {
-        filtered = filtered
-            .where((e) => e['entryType'] == _selectedEntryType)
-            .toList();
+        filtered = filtered.where((e) => e['entryType'] == _selectedEntryType).toList();
       }
 
       if (_dateRange != null) {
         filtered = filtered.where((entry) {
           final t = _getEntryTimestamp(entry);
-          return t.isAfter(_dateRange!.start) &&
-              t.isBefore(_dateRange!.end.add(const Duration(days: 1)));
+          return t.isAfter(_dateRange!.start) && t.isBefore(_dateRange!.end.add(const Duration(days: 1)));
         }).toList();
       }
 
-      filtered.sort((a, b) =>
-          _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a)));
+      filtered.sort((a, b) => _getEntryTimestamp(b).compareTo(_getEntryTimestamp(a)));
 
       _entries = filtered;
     } catch (e) {
@@ -240,8 +226,42 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
         return 'QR Visitor';
       case 'manual':
         return 'Manual Entry';
+      case 'manual_gate':   // ✅ NEW
+        return 'Manual Gate';
       default:
         return type?.toUpperCase() ?? 'UNKNOWN';
+    }
+  }
+
+  IconData _getTypeIcon(String type) {
+    switch (type) {
+      case 'rfid':
+      case 'uhf_rfid':
+        return Icons.nfc;
+      case 'qr_visitor':
+        return Icons.qr_code;
+      case 'manual':
+        return Icons.person;
+      case 'manual_gate':   // ✅ NEW
+        return Icons.swap_vert;
+      default:
+        return Icons.door_front_door;
+    }
+  }
+
+  Color _getTypeColor(String type) {
+    switch (type) {
+      case 'rfid':
+      case 'uhf_rfid':
+        return const Color(0xFFD4C4A8);
+      case 'qr_visitor':
+        return const Color(0xFFC4A882);
+      case 'manual':
+        return const Color(0xFFB8A99A);
+      case 'manual_gate':   // ✅ NEW
+        return const Color(0xFF6B5B4F);
+      default:
+        return const Color(0xFF8D6E63);
     }
   }
 
@@ -287,10 +307,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     );
   }
 
-  // ============================================================
-  // 🖥️ WEB COMPONENTS
-  // ============================================================
-
   Widget _buildWebSidebar(BuildContext context) {
     return Container(
       width: 260,
@@ -309,11 +325,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
           _buildWebSidebarItem(Icons.pending_actions, 'Pending Approvals', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingApprovals()))),
           _buildWebSidebarItem(Icons.history, 'Gate History', isActive: true, onTap: () {}),
           const Spacer(),
-          ListTile(
-            leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)),
-            title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)),
-            onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AdminDashboard())),
-          ),
+          ListTile(leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)), title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)), onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const AdminDashboard()))),
           const SizedBox(height: 20),
         ],
       ),
@@ -374,6 +386,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
             _buildWebStatCard('RFID Scans', _entries.where((e) => e['entryType'] == 'rfid' || e['entryType'] == 'uhf_rfid').length.toString(), Icons.nfc, const Color(0xFFC4A882)),
             _buildWebStatCard('QR Visitors', _entries.where((e) => e['entryType'] == 'qr_visitor').length.toString(), Icons.qr_code, const Color(0xFFA89070)),
             _buildWebStatCard('Manual', _entries.where((e) => e['entryType'] == 'manual').length.toString(), Icons.person, const Color(0xFFFF9800)),
+            _buildWebStatCard('Manual Gate', _entries.where((e) => e['entryType'] == 'manual_gate').length.toString(), Icons.swap_vert, const Color(0xFF6B5B4F)), // ✅ NEW
           ],
         ),
         const SizedBox(height: 24),
@@ -388,7 +401,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                 const SizedBox(width: 8),
                 if (_dateRange != null) _buildWebFilterChip('📅 ${DateFormat('MMM dd').format(_dateRange!.start)} - ${DateFormat('MMM dd').format(_dateRange!.end)}', () { setState(() => _dateRange = null); _applyFilters(); }),
                 if (_selectedResident != 'all') _buildWebFilterChip('👤 ${_residentNames[_selectedResident] ?? 'Unknown'}', () { setState(() => _selectedResident = 'all'); _applyFilters(); }),
-                if (_selectedEntryType != 'all') _buildWebFilterChip('🔖 ${_selectedEntryType.toUpperCase()}', () { setState(() => _selectedEntryType = 'all'); _applyFilters(); }),
+                if (_selectedEntryType != 'all') _buildWebFilterChip('🔖 ${_getEntryTypeDisplay(_selectedEntryType)}', () { setState(() => _selectedEntryType = 'all'); _applyFilters(); }),
                 const Spacer(),
                 TextButton(onPressed: () { setState(() { _dateRange = null; _selectedResident = 'all'; _selectedEntryType = 'all'; }); _applyFilters(); }, child: const Text('Clear All', style: TextStyle(color: Color(0xFFD32F2F), fontSize: 12))),
               ],
@@ -405,6 +418,8 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
               final visitorName = entry['visitorName'];
               final status = entry['status'] ?? 'entry';
               final openedBy = entry['openedBy'] ?? entry['closedBy'];
+              final isManualGate = entryType == 'manual_gate';
+              final isDelivery = entry['isDelivery'] == true;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -412,13 +427,33 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE0D5C1)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))]),
                 child: Row(
                   children: [
-                    Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: _getTypeColor(entryType).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Icon(_getTypeIcon(entryType), color: _getTypeColor(entryType), size: 24)),
+                    Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: _getTypeColor(entryType).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Icon(isDelivery ? Icons.local_shipping : _getTypeIcon(entryType), color: isDelivery ? const Color(0xFFFF9800) : _getTypeColor(entryType), size: 24)),
                     const SizedBox(width: 16),
                     Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(residentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF5D4037))), if (visitorName != null) Text('Visitor: $visitorName', style: const TextStyle(fontSize: 12, color: Color(0xFF8D6E63)))])),
                     Expanded(flex: 1, child: Text(_getEntryTypeDisplay(entryType), style: const TextStyle(fontSize: 13, color: Color(0xFF8D6E63)))),
                     Expanded(flex: 1, child: Text(DateFormat('MMM dd, yyyy • hh:mm a').format(timestamp), style: const TextStyle(fontSize: 13, color: Color(0xFF8D6E63)))),
                     Expanded(flex: 1, child: Text(openedBy != null ? 'By: $openedBy' : '—', style: const TextStyle(fontSize: 13, color: Color(0xFF8D6E63), fontWeight: FontWeight.bold))),
-                    Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.1) : const Color(0xFFD32F2F).withOpacity(0.1), borderRadius: BorderRadius.circular(20)), child: Text(status == 'entry' ? '🟢 IN' : '🔴 OUT', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: status == 'entry' ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F)))),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: isManualGate
+                            ? const Color(0xFF6B5B4F).withOpacity(0.1)
+                            : (status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.1) : const Color(0xFFD32F2F).withOpacity(0.1)),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        isManualGate
+                            ? (entry['direction'] == 'UP' ? '⬆️ UP' : '⬇️ DOWN')
+                            : (status == 'entry' ? '🟢 IN' : '🔴 OUT'),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: isManualGate
+                              ? const Color(0xFF6B5B4F)
+                              : (status == 'entry' ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F)),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               );
@@ -440,10 +475,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
       ],
     );
   }
-
-  // ============================================================
-  // 📱 MOBILE COMPONENTS
-  // ============================================================
 
   Widget _buildMobileHeader() {
     return Container(
@@ -508,6 +539,8 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
               final visitorName = entry['visitorName'];
               final status = entry['status'] ?? 'entry';
               final openedBy = entry['openedBy'] ?? entry['closedBy'];
+              final isManualGate = entryType == 'manual_gate';
+              final isDelivery = entry['isDelivery'] == true;
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -519,10 +552,35 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                     children: [
                       Row(
                         children: [
-                          Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: _getTypeColor(entryType).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Icon(_getTypeIcon(entryType), size: 20, color: _getTypeColor(entryType))),
+                          Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: _getTypeColor(entryType).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Icon(isDelivery ? Icons.local_shipping : _getTypeIcon(entryType), size: 20, color: isDelivery ? const Color(0xFFFF9800) : _getTypeColor(entryType))),
                           const SizedBox(width: 12),
                           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(residentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF5D4037))), if (visitorName != null) Text('👤 $visitorName', style: const TextStyle(fontSize: 12, color: Color(0xFF8D6E63)))])),
-                          Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.1) : const Color(0xFFD32F2F).withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.3) : const Color(0xFFD32F2F).withOpacity(0.3))), child: Text(status == 'entry' ? '🟢 IN' : '🔴 OUT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: status == 'entry' ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F)))),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isManualGate
+                                  ? const Color(0xFF6B5B4F).withOpacity(0.1)
+                                  : (status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.1) : const Color(0xFFD32F2F).withOpacity(0.1)),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: isManualGate
+                                    ? const Color(0xFF6B5B4F).withOpacity(0.3)
+                                    : (status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.3) : const Color(0xFFD32F2F).withOpacity(0.3)),
+                              ),
+                            ),
+                            child: Text(
+                              isManualGate
+                                  ? (entry['direction'] == 'UP' ? '⬆️ UP' : '⬇️ DOWN')
+                                  : (status == 'entry' ? '🟢 IN' : '🔴 OUT'),
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: isManualGate
+                                    ? const Color(0xFF6B5B4F)
+                                    : (status == 'entry' ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F)),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                       const Divider(color: Color(0xFFE0D5C1), height: 24),
@@ -554,12 +612,12 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
 
   Widget _buildWebStatCard(String title, String value, IconData icon, Color color) {
     return Container(
-      width: 200, padding: const EdgeInsets.all(20),
+      width: 180, padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE0D5C1)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 4))]),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, size: 20, color: color)), Text(value, style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: color))]),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)), child: Icon(icon, size: 20, color: color)), Text(value, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color))]),
           const SizedBox(height: 12),
           Text(title, style: const TextStyle(fontSize: 13, color: Color(0xFF8D6E63), fontWeight: FontWeight.w500)),
         ],
@@ -612,14 +670,6 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
     );
   }
 
-  IconData _getTypeIcon(String type) {
-    switch (type) { case 'rfid': case 'uhf_rfid': return Icons.nfc; case 'qr_visitor': return Icons.qr_code; case 'manual': return Icons.person; default: return Icons.door_front_door; }
-  }
-
-  Color _getTypeColor(String type) {
-    switch (type) { case 'rfid': case 'uhf_rfid': return const Color(0xFFD4C4A8); case 'qr_visitor': return const Color(0xFFC4A882); case 'manual': return const Color(0xFFB8A99A); default: return const Color(0xFF8D6E63); }
-  }
-
   // ==================== PDF EXPORT ====================
   Future<void> _exportToPDF() async {
     if (_entries.isEmpty) {
@@ -644,7 +694,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
 
       final String dateRangeLabel = _dateRange != null ? '${DateFormat('MMM dd, yyyy').format(_dateRange!.start)} — ${DateFormat('MMM dd, yyyy').format(_dateRange!.end)}' : 'All Time';
       final String residentLabel = _selectedResident != 'all' ? _residentNames[_selectedResident] ?? 'Unknown Resident' : 'All Residents';
-      final String entryTypeLabel = _selectedEntryType != 'all' ? _selectedEntryType.toUpperCase().replaceFirst('UHF_RFID', 'RFID').replaceFirst('QR_VISITOR', 'QR Visitor').replaceFirst('MANUAL', 'Manual') : 'All Types';
+      final String entryTypeLabel = _selectedEntryType != 'all' ? _selectedEntryType.toUpperCase().replaceFirst('UHF_RFID', 'RFID').replaceFirst('QR_VISITOR', 'QR Visitor').replaceFirst('MANUAL_GATE', 'Manual Gate').replaceFirst('MANUAL', 'Manual') : 'All Types';
 
       // COVER
       pdf.addPage(
@@ -792,6 +842,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                   final index = pair.key + 1;
                   final entry = pair.value;
                   final ts = _getEntryTimestamp(entry);
+                  final isManualGate = entry['entryType'] == 'manual_gate';
                   return [
                     index.toString(),
                     DateFormat('yyyy-MM-dd').format(ts),
@@ -799,7 +850,9 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                     entry['residentName'] ?? 'Unknown',
                     _getEntryTypeDisplay(entry['entryType']),
                     entry['visitorName'] ?? '—',
-                    entry['status'] == 'entry' ? 'IN' : 'OUT',
+                    isManualGate
+                        ? (entry['direction'] == 'UP' ? 'UP' : 'DOWN')
+                        : (entry['status'] == 'entry' ? 'IN' : 'OUT'),
                     entry['openedBy'] ?? entry['closedBy'] ?? '—',
                   ];
                 }).toList(),
@@ -1044,6 +1097,7 @@ class _GateEntriesHistoryState extends State<GateEntriesHistory> {
                           DropdownMenuItem(value: 'uhf_rfid', child: Text('RFID 📡', style: TextStyle(fontSize: 12))),
                           DropdownMenuItem(value: 'qr_visitor', child: Text('QR Visitor 📱', style: TextStyle(fontSize: 12))),
                           DropdownMenuItem(value: 'manual', child: Text('Manual Entry ✏️', style: TextStyle(fontSize: 12))),
+                          DropdownMenuItem(value: 'manual_gate', child: Text('Manual Gate 🎮', style: TextStyle(fontSize: 12))), // ✅ NEW
                         ],
                         onChanged: (value) => setDialogState(() => _selectedEntryType = value!),
                       ),
