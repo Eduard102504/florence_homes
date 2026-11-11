@@ -20,10 +20,12 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
   final _emailController = TextEditingController();
   final _phoneController = TextEditingController();
   final _houseNumberController = TextEditingController();
-  final _passwordController = TextEditingController();
 
   final AuthService _authService = AuthService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+
+  // ✅ Default password - admin never types this
+  static const String _defaultPassword = '123456';
 
   bool _isLoading = false;
   bool _isEditing = false;
@@ -61,9 +63,10 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
           Navigator.pop(context, true);
         }
       } else {
+        // ✅ Always use default password 123456
         final result = await _authService.registerResidentManually(
           fullName: _nameController.text.trim(),
-          password: _passwordController.text.trim(),
+          password: _defaultPassword,
           houseNumber: _houseNumberController.text.trim(),
           email: _emailController.text.trim().isNotEmpty ? _emailController.text.trim() : null,
           phoneNumber: _phoneController.text.trim().isNotEmpty ? _phoneController.text.trim() : null,
@@ -73,7 +76,7 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
           if (mounted) {
             await _showCredentialsDialog(
               residentId: result['residentId'] as String,
-              password: result['password'] as String,
+              password: _defaultPassword,
               fullName: _nameController.text.trim(),
             );
             if (mounted) Navigator.pop(context, true);
@@ -127,7 +130,7 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text('⚠️ Save these credentials. They will be emailed to the resident upon approval (if an email was provided).', style: TextStyle(color: Color(0xFF8D6E63), fontSize: 11, height: 1.4)),
+              const Text('⚠️ Save these credentials. The default password is 123456 — resident can change it after first login.', style: TextStyle(color: Color(0xFF8D6E63), fontSize: 11, height: 1.4)),
             ],
           ),
         ),
@@ -322,7 +325,7 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
               children: const [
                 Icon(Icons.info_outline, color: Color(0xFF8D6E63), size: 20),
                 SizedBox(width: 10),
-                Expanded(child: Text('A Resident ID (FHM-###) will be auto-generated after saving.', style: TextStyle(color: Color(0xFF5D4037), fontSize: 12, height: 1.3))),
+                Expanded(child: Text('A Resident ID (FHM-###) will be auto-generated.\nDefault password: 123456', style: TextStyle(color: Color(0xFF5D4037), fontSize: 12, height: 1.4))),
               ],
             ),
           ),
@@ -351,21 +354,6 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
                 return null;
               },
             ),
-            if (!_isEditing) ...[
-              const SizedBox(height: 12),
-              _buildField(
-                controller: _passwordController,
-                label: 'Password *',
-                icon: Icons.lock_outline,
-                hint: 'Will be emailed upon approval',
-                obscure: true,
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Required';
-                  if (v.length < 6) return 'Min 6 characters';
-                  return null;
-                },
-              ),
-            ],
             const SizedBox(height: 12),
             _buildField(
               controller: _phoneController,
@@ -478,7 +466,6 @@ class _AddEditResidentScreenState extends State<AddEditResidentScreen> {
     _emailController.dispose();
     _phoneController.dispose();
     _houseNumberController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 }

@@ -6,6 +6,8 @@ import 'package:intl/intl.dart';
 import 'dart:async';
 
 import '../guard/guard_dashboard.dart';
+import '../guard/gate2_manual_entry_screen.dart';
+import '../guard/gate2_qr_scanner_screen.dart';
 import 'manual_entry_screen.dart';
 import 'scanner_management_screen.dart';
 import 'pending_visits_screen.dart';
@@ -25,6 +27,7 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
   String? _errorMessage;
   bool _isLoading = true;
 
+  String _selectedGate = 'all';
   int _currentPage = 1;
   int _pageSize = 20;
 
@@ -43,10 +46,9 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
   }
 
   void _startEntriesStream() {
+    // ✅ FIXED: Removed orderBy/limit so it updates live exactly like Admin
     _entriesSub = _firestore
         .collection('gate_entries')
-        .orderBy('timestamp', descending: true)
-        .limit(200)
         .snapshots()
         .listen(
           (snapshot) {
@@ -57,12 +59,18 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
             return data;
           }).toList();
 
+          // Sort in memory to ensure all timestamps are handled correctly
+          list.sort((a, b) {
+            final tA = _parseTimestamp(a['timestamp'] ?? a['checkInTime'] ?? a['createdAt']);
+            final tB = _parseTimestamp(b['timestamp'] ?? b['checkInTime'] ?? b['createdAt']);
+            return tB.compareTo(tA);
+          });
+
           if (mounted) {
             setState(() {
               _entries = list;
-              _filteredEntries = list;
+              _applyFiltersInternal();
               _isLoading = false;
-              if (_currentPage > _totalPages) _currentPage = _totalPages < 1 ? 1 : _totalPages;
             });
           }
         } catch (e) {
@@ -80,6 +88,45 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
         if (mounted) setState(() { _errorMessage = 'Error: $e'; _isLoading = false; });
       },
     );
+  }
+
+  DateTime _parseTimestamp(dynamic timestamp) {
+    if (timestamp == null) return DateTime.now();
+    DateTime utcTime;
+    if (timestamp is Timestamp) {
+      utcTime = timestamp.toDate();
+    } else if (timestamp is DateTime) {
+      utcTime = timestamp;
+    } else if (timestamp is String) {
+      try {
+        utcTime = DateTime.parse(timestamp);
+      } catch (_) {
+        return DateTime.now();
+      }
+    } else {
+      return DateTime.now();
+    }
+    return utcTime.toLocal();
+  }
+
+  void _applyFiltersInternal() {
+    List<Map<String, dynamic>> filtered = List.from(_entries);
+
+    if (_selectedGate != 'all') {
+      filtered = filtered.where((e) {
+        final gate = e['gate'] as String? ?? 'Gate 1';
+        return gate == _selectedGate;
+      }).toList();
+    }
+
+    _filteredEntries = filtered;
+    if (_currentPage > _totalPages) _currentPage = _totalPages < 1 ? 1 : _totalPages;
+  }
+
+  String _getEntryGate(Map<String, dynamic> entry) {
+    final gate = entry['gate'] as String?;
+    if (gate == null || gate.isEmpty) return 'Gate 1';
+    return gate;
   }
 
   int get _totalPages {
@@ -201,12 +248,21 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
           const Text('Florence Homes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFFF8F0), letterSpacing: 1)),
           const Text('Guard Portal', style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
           const SizedBox(height: 40),
-          _buildWebSidebarItem(Icons.dashboard, 'Dashboard', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardDashboard()))),
-          _buildWebSidebarItem(Icons.edit_document, 'Manual Entry', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
-          _buildWebSidebarItem(Icons.qr_code_scanner, 'QR Scanner', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
-          _buildWebSidebarItem(Icons.exit_to_app, 'Pending Visits', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
-          _buildWebSidebarItem(Icons.history, 'Gate History', isActive: true, onTap: () {}),
-          const Spacer(),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  _buildWebSidebarItem(Icons.dashboard, 'Dashboard', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardDashboard()))),
+                  _buildWebSidebarItem(Icons.edit_document, 'Manual Entry (G1)', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
+                  _buildWebSidebarItem(Icons.qr_code_scanner, 'QR Scanner (G1)', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
+                  _buildWebSidebarItem(Icons.drive_file_rename_outline, 'Manual Entry (G2)', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Gate2ManualEntryScreen()))),
+                  _buildWebSidebarItem(Icons.qr_code_2, 'QR Scanner (G2)', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Gate2QrScannerScreen()))),
+                  _buildWebSidebarItem(Icons.exit_to_app, 'Pending Visits', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
+                  _buildWebSidebarItem(Icons.history, 'Gate History', isActive: true, onTap: () {}),
+                ],
+              ),
+            ),
+          ),
           ListTile(leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)), title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)), onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardDashboard()))),
           const SizedBox(height: 20),
         ],
@@ -238,6 +294,28 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
           const Text('Gate History', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
           Row(
             children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE0D5C1))),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedGate,
+                    icon: const Icon(Icons.filter_list, color: Color(0xFF8D6E63), size: 18),
+                    style: const TextStyle(color: Color(0xFF5D4037), fontWeight: FontWeight.bold, fontSize: 13),
+                    onChanged: (String? newValue) {
+                      if (newValue != null) {
+                        setState(() { _selectedGate = newValue; _currentPage = 1; _applyFiltersInternal(); });
+                      }
+                    },
+                    items: const [
+                      DropdownMenuItem(value: 'all', child: Text('All Gates')),
+                      DropdownMenuItem(value: 'Gate 1', child: Text('Gate 1 (UHF)')),
+                      DropdownMenuItem(value: 'Gate 2', child: Text('Gate 2 (USB)')),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
               _headerIconButton(icon: Icons.refresh, tooltip: 'Refresh', onTap: () { setState(() => _isLoading = true); _startEntriesStream(); }, color: const Color(0xFF8D6E63)),
               const SizedBox(width: 24),
               Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6), decoration: BoxDecoration(color: const Color(0xFF4CAF50).withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFF4CAF50).withOpacity(0.3))), child: const Row(children: [Icon(Icons.circle, size: 10, color: Color(0xFF4CAF50)), SizedBox(width: 6), Text('LIVE', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF4CAF50)))])),
@@ -266,7 +344,6 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
   Widget _buildWebContent() {
     if (_isLoading) return const Center(child: CircularProgressIndicator(color: Color(0xFF8D6E63)));
     if (_errorMessage != null) return Center(child: Text(_errorMessage!, style: const TextStyle(color: Color(0xFFD32F2F))));
-    if (_entries.isEmpty) return const Center(child: Text('No gate entries found.', style: TextStyle(fontSize: 18, color: Color(0xFF8D6E63))));
 
     final paginated = _paginatedEntries;
     final total = _totalPages;
@@ -287,7 +364,7 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
                   children: [
                     const Text('Recent Entries', style: TextStyle(fontSize: 13, color: Color(0xFF8D6E63), fontWeight: FontWeight.w500)),
                     const SizedBox(height: 4),
-                    Text('${_entries.length}', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
+                    Text('${_filteredEntries.length}', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
                   ],
                 ),
               ),
@@ -303,17 +380,25 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
         ),
         const SizedBox(height: 24),
         Expanded(
-          child: ListView.builder(
+          child: paginated.isEmpty
+              ? const Center(child: Text('No entries found for this gate.', style: TextStyle(color: Color(0xFF8D6E63), fontSize: 16)))
+              : ListView.builder(
             itemCount: paginated.length,
             itemBuilder: (context, index) {
               final entry = paginated[index];
-              final ts = DateTime.tryParse((entry['timestamp'] ?? '').toString()) ?? DateTime.now();
+              final ts = _parseTimestamp(entry['timestamp'] ?? entry['checkInTime'] ?? entry['createdAt']);
               final entryType = entry['entryType'] ?? 'unknown';
               final residentName = entry['residentName'] ?? 'Unknown';
               final status = entry['status'] ?? 'entry';
               final visitorName = entry['visitorName'];
               final isManualGate = entryType == 'manual_gate';
               final isDelivery = entry['isDelivery'] == true;
+              final gate = _getEntryGate(entry);
+
+              // ✅ NEW: Show "GATE X IN" or "GATE X OUT"
+              final statusText = isManualGate
+                  ? (entry['direction'] == 'UP' ? '⬆️ UP' : '⬇️ DOWN')
+                  : (status == 'entry' ? '🟢 ${gate.toUpperCase()} IN' : '🔴 ${gate.toUpperCase()} OUT');
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -323,8 +408,25 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
                   children: [
                     Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: _getTypeColor(entryType).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Icon(isDelivery ? Icons.local_shipping : _getTypeIcon(entryType), color: isDelivery ? const Color(0xFFFF9800) : _getTypeColor(entryType), size: 24)),
                     const SizedBox(width: 16),
-                    Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(residentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF5D4037))), if (visitorName != null) Text('Visitor: $visitorName', style: const TextStyle(fontSize: 12, color: Color(0xFF8D6E63)))])),
+                    Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(residentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF5D4037))),
+                      if (visitorName != null) Text('Visitor: $visitorName', style: const TextStyle(fontSize: 12, color: Color(0xFF8D6E63)))
+                    ])),
                     Expanded(flex: 1, child: Text(_getEntryTypeDisplay(entryType), style: const TextStyle(fontSize: 13, color: Color(0xFF8D6E63)))),
+                    Expanded(
+                      flex: 1,
+                      child: Container(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: gate == 'Gate 2' ? const Color(0xFF5D4037).withOpacity(0.1) : const Color(0xFF8D6E63).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(gate, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: gate == 'Gate 2' ? const Color(0xFF5D4037) : const Color(0xFF8D6E63))),
+                        ),
+                      ),
+                    ),
                     Expanded(flex: 1, child: Text(DateFormat('MMM dd, yyyy • hh:mm a').format(ts), style: const TextStyle(fontSize: 13, color: Color(0xFF8D6E63)))),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
@@ -335,11 +437,9 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        isManualGate
-                            ? (entry['direction'] == 'UP' ? '⬆️ UP' : '⬇️ DOWN')
-                            : (status == 'entry' ? '🟢 IN' : '🔴 OUT'),
+                        statusText,
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 11,
                           fontWeight: FontWeight.bold,
                           color: isManualGate
                               ? const Color(0xFF6B5B4F)
@@ -405,7 +505,6 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
   Widget _buildMobileContent() {
     if (_isLoading) return const Center(child: CircularProgressIndicator(color: Color(0xFFD4C4A8)));
     if (_errorMessage != null) return Center(child: Text(_errorMessage!, style: const TextStyle(color: Color(0xFFD32F2F))));
-    if (_entries.isEmpty) return const Center(child: Text('No entries found', style: TextStyle(fontSize: 16, color: Color(0xFF8D6E63))));
 
     final paginated = _paginatedEntries;
     final total = _totalPages;
@@ -417,11 +516,24 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
           padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
           child: Column(
             children: [
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _buildMobileFilterChip('All Gates', 'all'),
+                    const SizedBox(width: 8),
+                    _buildMobileFilterChip('Gate 1', 'Gate 1'),
+                    const SizedBox(width: 8),
+                    _buildMobileFilterChip('Gate 2', 'Gate 2'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Entries:', style: TextStyle(fontSize: 11, color: Color(0xFFB8A99A), fontWeight: FontWeight.w500)),
-                  Text('${_entries.length}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
+                  Text('${_filteredEntries.length}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
                   const Spacer(),
                   const Text('Per page:', style: TextStyle(fontSize: 11, color: Color(0xFFB8A99A), fontWeight: FontWeight.w500)),
                   const SizedBox(width: 6),
@@ -433,18 +545,26 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
         ),
         const SizedBox(height: 16),
         Expanded(
-          child: ListView.builder(
+          child: paginated.isEmpty
+              ? const Center(child: Text('No entries found for this gate.', style: TextStyle(color: Color(0xFF8D6E63), fontSize: 14)))
+              : ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             itemCount: paginated.length,
             itemBuilder: (context, index) {
               final entry = paginated[index];
-              final ts = DateTime.tryParse((entry['timestamp'] ?? '').toString()) ?? DateTime.now();
+              final ts = _parseTimestamp(entry['timestamp'] ?? entry['checkInTime'] ?? entry['createdAt']);
               final entryType = entry['entryType'] ?? 'unknown';
               final residentName = entry['residentName'] ?? 'Unknown';
               final visitorName = entry['visitorName'];
               final status = entry['status'] ?? 'entry';
               final isManualGate = entryType == 'manual_gate';
               final isDelivery = entry['isDelivery'] == true;
+              final gate = _getEntryGate(entry);
+
+              // ✅ NEW: Show "GATE X IN" or "GATE X OUT"
+              final statusText = isManualGate
+                  ? (entry['direction'] == 'UP' ? '⬆️ UP' : '⬇️ DOWN')
+                  : (status == 'entry' ? '🟢 ${gate.toUpperCase()} IN' : '🔴 ${gate.toUpperCase()} OUT');
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 12),
@@ -458,33 +578,42 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
                         children: [
                           Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: _getTypeColor(entryType).withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Icon(isDelivery ? Icons.local_shipping : _getTypeIcon(entryType), size: 20, color: isDelivery ? const Color(0xFFFF9800) : _getTypeColor(entryType))),
                           const SizedBox(width: 12),
-                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(residentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF5D4037))), if (visitorName != null) Text('👤 $visitorName', style: const TextStyle(fontSize: 12, color: Color(0xFF8D6E63)))])),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: isManualGate
-                                  ? const Color(0xFF6B5B4F).withOpacity(0.1)
-                                  : (status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.1) : const Color(0xFFD32F2F).withOpacity(0.1)),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
+                          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                            Text(residentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF5D4037))),
+                            if (visitorName != null) Text('👤 $visitorName', style: const TextStyle(fontSize: 12, color: Color(0xFF8D6E63)))
+                          ])),
+                          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(color: gate == 'Gate 2' ? const Color(0xFF5D4037).withOpacity(0.1) : const Color(0xFF8D6E63).withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
+                              child: Text(gate, style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: gate == 'Gate 2' ? const Color(0xFF5D4037) : const Color(0xFF8D6E63))),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
                                 color: isManualGate
-                                    ? const Color(0xFF6B5B4F).withOpacity(0.3)
-                                    : (status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.3) : const Color(0xFFD32F2F).withOpacity(0.3)),
+                                    ? const Color(0xFF6B5B4F).withOpacity(0.1)
+                                    : (status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.1) : const Color(0xFFD32F2F).withOpacity(0.1)),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isManualGate
+                                      ? const Color(0xFF6B5B4F).withOpacity(0.3)
+                                      : (status == 'entry' ? const Color(0xFF4CAF50).withOpacity(0.3) : const Color(0xFFD32F2F).withOpacity(0.3)),
+                                ),
+                              ),
+                              child: Text(
+                                statusText,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: isManualGate
+                                      ? const Color(0xFF6B5B4F)
+                                      : (status == 'entry' ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F)),
+                                ),
                               ),
                             ),
-                            child: Text(
-                              isManualGate
-                                  ? (entry['direction'] == 'UP' ? '⬆️ UP' : '⬇️ DOWN')
-                                  : (status == 'entry' ? '🟢 IN' : '🔴 OUT'),
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: isManualGate
-                                    ? const Color(0xFF6B5B4F)
-                                    : (status == 'entry' ? const Color(0xFF4CAF50) : const Color(0xFFD32F2F)),
-                              ),
-                            ),
-                          ),
+                          ]),
                         ],
                       ),
                       const Divider(color: Color(0xFFE0D5C1), height: 24),
@@ -508,6 +637,35 @@ class _GuardGateHistoryState extends State<GuardGateHistory> {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildMobileFilterChip(String label, String value) {
+    final isSelected = _selectedGate == value;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedGate = value;
+          _currentPage = 1;
+          _applyFiltersInternal();
+        });
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF5D4037) : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: isSelected ? const Color(0xFF5D4037) : const Color(0xFFE0D5C1)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+            color: isSelected ? Colors.white : const Color(0xFF8D6E63),
+          ),
+        ),
+      ),
     );
   }
 

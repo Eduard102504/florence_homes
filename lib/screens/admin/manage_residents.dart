@@ -160,19 +160,21 @@ class _ManageResidentsState extends State<ManageResidents> {
     }
   }
 
-  // ==================== ✅ REGISTER NEW TAG ====================
-  Future<String?> _registerNewRfidTag(UserModel resident) async {
+  // ==================== ✅ REGISTER NEW TAG (GATE 1 OR GATE 2) ====================
+  Future<String?> _registerNewRfidTag(UserModel resident, {String gate = 'Gate 1'}) async {
     if (!_tcpService.isConnected) {
-      _showMessage('Not connected to RFID scanner', isError: true);
+      _showMessage('Not connected to scanner', isError: true);
       return null;
     }
+
+    final isGate1 = gate == 'Gate 1';
 
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text('Scan New RFID Tag',
-            style: TextStyle(color: Color(0xFF6B5B4F))),
+        title: Text(isGate1 ? 'Scan New UHF Tag' : 'Scan New NFC Tag',
+            style: const TextStyle(color: Color(0xFF6B5B4F))),
         backgroundColor: const Color(0xFFFFF8F0),
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
@@ -180,22 +182,21 @@ class _ManageResidentsState extends State<ManageResidents> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.nfc, size: 80, color: Color(0xFFD4C4A8)),
+            Icon(isGate1 ? Icons.sensors : Icons.nfc, size: 80, color: const Color(0xFFD4C4A8)),
             const SizedBox(height: 16),
-            const Text('Tap the new RFID tag near the scanner...',
+            Text(isGate1 ? 'Tap the new UHF tag near the Pi scanner...' : 'Tap the new NFC card on the USB scanner...',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Color(0xFF8D6E63))),
+                style: const TextStyle(color: Color(0xFF8D6E63))),
             const SizedBox(height: 24),
             const CircularProgressIndicator(
                 valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFD4C4A8))),
             const SizedBox(height: 16),
             TextButton(
               onPressed: () {
-                _tcpService.sendCommand("CANCEL_REGISTRATION");
+                _tcpService.sendCommand(isGate1 ? "CANCEL_REGISTRATION" : "CANCEL_REGISTRATION_G2");
                 Navigator.pop(context);
               },
-              child: const Text('Cancel',
-                  style: TextStyle(color: Color(0xFFD32F2F))),
+              child: const Text('Cancel', style: TextStyle(color: Color(0xFFD32F2F))),
             ),
           ],
         ),
@@ -209,10 +210,12 @@ class _ManageResidentsState extends State<ManageResidents> {
         .get();
     final beforeIds = before.docs.map((d) => d.id).toSet();
 
-    final response = await _tcpService
-        .sendCommand("REGISTER:${resident.id}:${resident.fullName}");
+    // Send the correct TCP command based on gate
+    final response = await _tcpService.sendCommand(
+        isGate1 ? "REGISTER:${resident.id}:${resident.fullName}" : "REGISTER_G2:${resident.id}:${resident.fullName}");
 
-    if (response != "WAITING_FOR_TAG") {
+    // Python responds with WAITING_FOR_TAG or WAITING_FOR_TAG_G2
+    if (!response.contains("WAITING_FOR_TAG")) {
       if (mounted) Navigator.pop(context);
       _showMessage('Registration failed: $response', isError: true);
       return null;
@@ -228,7 +231,7 @@ class _ManageResidentsState extends State<ManageResidents> {
       for (final doc in after.docs) {
         if (!beforeIds.contains(doc.id) && doc.get('isActive') == true) {
           if (mounted) Navigator.pop(context);
-          _showMessage('✅ New RFID tag registered: ${doc.id}', isSuccess: true);
+          _showMessage('✅ New $gate RFID tag registered: ${doc.id}', isSuccess: true);
           return doc.id;
         }
       }
@@ -260,7 +263,7 @@ class _ManageResidentsState extends State<ManageResidents> {
     TextEditingController(text: resident?.houseNumber ?? '');
     final phoneController =
     TextEditingController(text: resident?.phoneNumber ?? '');
-    final passwordController = TextEditingController();
+    // ❌ Removed passwordController entirely
     final formKey = GlobalKey<FormState>();
 
     if (isEditing) {
@@ -291,6 +294,23 @@ class _ManageResidentsState extends State<ManageResidents> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
+                      if (!isEditing) ...[
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                              color: const Color(0xFF8D6E63).withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: const Color(0xFF8D6E63).withOpacity(0.3))),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.info_outline, color: Color(0xFF8D6E63), size: 20),
+                              SizedBox(width: 10),
+                              Expanded(child: Text('Default password: 123456', style: TextStyle(color: Color(0xFF5D4037), fontSize: 12, fontWeight: FontWeight.bold))),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                      ],
                       TextFormField(
                         controller: nameController,
                         decoration: InputDecoration(
@@ -399,41 +419,7 @@ class _ManageResidentsState extends State<ManageResidents> {
                           fillColor: Colors.white,
                         ),
                       ),
-                      if (!isEditing) ...[
-                        const SizedBox(height: 12),
-                        TextFormField(
-                          controller: passwordController,
-                          obscureText: true,
-                          decoration: InputDecoration(
-                            labelText: '🔒 Password *',
-                            labelStyle:
-                            const TextStyle(color: Color(0xFFB8A99A)),
-                            helperText:
-                            'Shown after saving & emailed upon approval',
-                            helperStyle: const TextStyle(
-                                color: Color(0xFFB8A99A), fontSize: 11),
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFFE0D5C1))),
-                            enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFFE0D5C1))),
-                            focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(14),
-                                borderSide: const BorderSide(
-                                    color: Color(0xFFD4C4A8), width: 2)),
-                            filled: true,
-                            fillColor: Colors.white,
-                          ),
-                          validator: (v) {
-                            if (v == null || v.isEmpty) return 'Required';
-                            if (v.length < 6) return 'Min 6 characters';
-                            return null;
-                          },
-                        ),
-                      ],
+                      // ❌ Removed the password TextFormField entirely.
                       if (isEditing) ...[
                         const SizedBox(height: 16),
                         Container(
@@ -487,26 +473,48 @@ class _ManageResidentsState extends State<ManageResidents> {
                                 ),
                               ),
                               const SizedBox(height: 8),
-                              SizedBox(
-                                width: double.infinity,
-                                child: OutlinedButton.icon(
-                                  icon: const Icon(Icons.add, size: 16),
-                                  label: const Text('Register New RFID Tag'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: const Color(0xFF5D4037),
-                                    side: const BorderSide(
-                                        color: Color(0xFF5D4037)),
+
+                              // ✅ NEW: Two buttons for Gate 1 (UHF) and Gate 2 (NFC)
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      icon: const Icon(Icons.sensors, size: 16),
+                                      label: const Text('Gate 1 (UHF)'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(0xFF5D4037),
+                                        side: const BorderSide(color: Color(0xFF5D4037)),
+                                      ),
+                                      onPressed: () async {
+                                        final tagId = await _registerNewRfidTag(resident, gate: 'Gate 1');
+                                        if (tagId != null) {
+                                          setDialogState(() {
+                                            _currentResidentRfidTags.add(tagId);
+                                          });
+                                        }
+                                      },
+                                    ),
                                   ),
-                                  onPressed: () async {
-                                    final tagId =
-                                    await _registerNewRfidTag(resident);
-                                    if (tagId != null) {
-                                      setDialogState(() {
-                                        _currentResidentRfidTags.add(tagId);
-                                      });
-                                    }
-                                  },
-                                ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      icon: const Icon(Icons.nfc, size: 16),
+                                      label: const Text('Gate 2 (NFC)'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: const Color(0xFF8D6E63),
+                                        side: const BorderSide(color: Color(0xFF8D6E63)),
+                                      ),
+                                      onPressed: () async {
+                                        final tagId = await _registerNewRfidTag(resident, gate: 'Gate 2');
+                                        if (tagId != null) {
+                                          setDialogState(() {
+                                            _currentResidentRfidTags.add(tagId);
+                                          });
+                                        }
+                                      },
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
@@ -542,9 +550,10 @@ class _ManageResidentsState extends State<ManageResidents> {
                 _showMessage('Resident updated', isSuccess: true);
                 _loadResidents();
               } else {
+                // ✅ Hardcoded default password here
                 final result = await _authService.registerResidentManually(
                   fullName: nameController.text.trim(),
-                  password: passwordController.text.trim(),
+                  password: '123456', // Hardcoded default password
                   houseNumber: houseController.text.trim(),
                   email: emailController.text.trim().isNotEmpty
                       ? emailController.text.trim()
@@ -558,7 +567,7 @@ class _ManageResidentsState extends State<ManageResidents> {
                   if (mounted) {
                     await _showCredentialsDialog(
                       residentId: result['residentId'] as String,
-                      password: result['password'] as String,
+                      password: '123456', // Display 123456 in the popup
                       fullName: nameController.text.trim(),
                       emailProvided:
                       emailController.text.trim().isNotEmpty,

@@ -28,6 +28,9 @@ class _ManageGuardsState extends State<ManageGuards> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
+  // ✅ Default password for all new guards
+  static const String _defaultPassword = '123456';
+
   @override
   void initState() {
     super.initState();
@@ -107,11 +110,11 @@ class _ManageGuardsState extends State<ManageGuards> {
     );
   }
 
+  // ==================== ADD GUARD ====================
   Future<void> _addGuard() async {
     final nameCtrl = TextEditingController();
     final emailCtrl = TextEditingController();
     final phoneCtrl = TextEditingController();
-    final passCtrl = TextEditingController();
     final formKey = GlobalKey<FormState>();
 
     await showDialog(
@@ -126,7 +129,26 @@ class _ManageGuardsState extends State<ManageGuards> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextFormField(controller: nameCtrl, decoration: const InputDecoration(labelText: 'Full Name *'), validator: (v) => v!.isEmpty ? 'Required' : null),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                      color: const Color(0xFF8D6E63).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF8D6E63).withOpacity(0.3))),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Color(0xFF8D6E63), size: 20),
+                      SizedBox(width: 10),
+                      Expanded(child: Text('Default password: 123456', style: TextStyle(color: Color(0xFF5D4037), fontSize: 12, fontWeight: FontWeight.bold))),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Full Name *'),
+                    validator: (v) => v!.isEmpty ? 'Required' : null
+                ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: emailCtrl,
@@ -134,9 +156,11 @@ class _ManageGuardsState extends State<ManageGuards> {
                   validator: (v) { if (v != null && v.isNotEmpty && !v.contains('@')) return 'Invalid email format'; return null; },
                 ),
                 const SizedBox(height: 12),
-                TextFormField(controller: phoneCtrl, decoration: const InputDecoration(labelText: 'Phone Number')),
-                const SizedBox(height: 12),
-                TextFormField(controller: passCtrl, decoration: const InputDecoration(labelText: 'Password *'), obscureText: true, validator: (v) => v!.length < 6 ? 'Min 6 chars' : null),
+                TextFormField(
+                    controller: phoneCtrl,
+                    decoration: const InputDecoration(labelText: 'Phone Number')
+                ),
+                // ❌ Removed Password field entirely
               ],
             ),
           ),
@@ -148,9 +172,11 @@ class _ManageGuardsState extends State<ManageGuards> {
               if (formKey.currentState!.validate()) {
                 Navigator.pop(context);
                 setState(() => _isLoading = true);
+
+                // ✅ Hardcoded default password
                 final res = await _authService.registerGuard(
                   fullName: nameCtrl.text.trim(),
-                  password: passCtrl.text.trim(),
+                  password: _defaultPassword,
                   phoneNumber: phoneCtrl.text.trim(),
                   email: emailCtrl.text.trim().isNotEmpty ? emailCtrl.text.trim() : null,
                 );
@@ -173,7 +199,7 @@ class _ManageGuardsState extends State<ManageGuards> {
                               children: [
                                 Text('Guard ID: ${res['guardId']}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'monospace')),
                                 const SizedBox(height: 8),
-                                Text('Password: ${passCtrl.text.trim()}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                const Text('Password: 123456', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                               ],
                             ),
                           ),
@@ -199,6 +225,77 @@ class _ManageGuardsState extends State<ManageGuards> {
     );
   }
 
+  // ==================== EDIT GUARD ====================
+  Future<void> _editGuard(UserModel guard) async {
+    final nameCtrl = TextEditingController(text: guard.fullName);
+    final emailCtrl = TextEditingController(text: guard.email);
+    final phoneCtrl = TextEditingController(text: guard.phoneNumber ?? '');
+    final formKey = GlobalKey<FormState>();
+
+    await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('✏️ Edit Guard', style: TextStyle(color: Color(0xFF6B5B4F), fontWeight: FontWeight.bold)),
+        backgroundColor: const Color(0xFFFFF8F0),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24), side: const BorderSide(color: Color(0xFFE0D5C1), width: 1.5)),
+        content: Form(
+          key: formKey,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextFormField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(labelText: 'Full Name *'),
+                    validator: (v) => v!.isEmpty ? 'Required' : null
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: emailCtrl,
+                  decoration: const InputDecoration(labelText: 'Email (Optional)'),
+                  validator: (v) { if (v != null && v.isNotEmpty && !v.contains('@')) return 'Invalid email format'; return null; },
+                ),
+                const SizedBox(height: 12),
+                TextFormField(
+                    controller: phoneCtrl,
+                    decoration: const InputDecoration(labelText: 'Phone Number')
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () async {
+              if (formKey.currentState!.validate()) {
+                Navigator.pop(context);
+                setState(() => _isLoading = true);
+
+                try {
+                  await _firestore.collection('users').doc(guard.id).update({
+                    'fullName': nameCtrl.text.trim(),
+                    'email': emailCtrl.text.trim().toLowerCase(),
+                    'phoneNumber': phoneCtrl.text.trim(),
+                    if (emailCtrl.text.trim().isNotEmpty) 'hasRealEmail': true,
+                  });
+                  _showMessage('Guard updated successfully', isSuccess: true);
+                  _loadGuards();
+                } catch (e) {
+                  _showMessage('Error updating guard: $e', isError: true);
+                  setState(() => _isLoading = false);
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFD4C4A8)),
+            child: const Text('Update'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==================== DELETE GUARD ====================
   Future<void> _deleteGuard(UserModel guard) async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -409,7 +506,17 @@ class _ManageGuardsState extends State<ManageGuards> {
           Expanded(flex: 2, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(guard.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF5D4037))), if (guard.email.isNotEmpty) Text(guard.email, style: const TextStyle(fontSize: 12, color: Color(0xFF8D6E63)))])),
           Expanded(flex: 1, child: guard.guardId != null ? Container(alignment: Alignment.centerLeft, child: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: const Color(0xFFC4A882).withOpacity(0.2), borderRadius: BorderRadius.circular(6)), child: Text(guard.guardId!, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, fontFamily: 'monospace', color: Color(0xFF8D6E63))))) : const Text('—', style: TextStyle(color: Color(0xFF8D6E63)))),
           Expanded(flex: 1, child: Text(guard.phoneNumber ?? 'No phone', style: const TextStyle(fontSize: 13, color: Color(0xFF8D6E63)))),
-          IconButton(icon: const Icon(Icons.delete, color: Color(0xFFD32F2F)), onPressed: () => _deleteGuard(guard), tooltip: 'Delete Guard'),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert, color: Color(0xFF8D6E63)),
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'edit', child: Text('Edit Info')),
+              const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Color(0xFFD32F2F)))),
+            ],
+            onSelected: (value) async {
+              if (value == 'edit') await _editGuard(guard);
+              if (value == 'delete') await _deleteGuard(guard);
+            },
+          ),
         ],
       ),
     );
@@ -491,7 +598,17 @@ class _ManageGuardsState extends State<ManageGuards> {
                 Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: const Color(0xFF5D4037).withOpacity(0.1), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.security, color: Color(0xFF5D4037), size: 24)),
                 const SizedBox(width: 12),
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(guard.fullName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF5D4037))), if (guard.guardId != null) Text(guard.guardId!, style: const TextStyle(fontFamily: 'monospace', fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF8D6E63)))])),
-                IconButton(icon: const Icon(Icons.delete_outline, color: Color(0xFFD32F2F), size: 22), onPressed: () => _deleteGuard(guard), tooltip: 'Delete Guard'),
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Color(0xFF8D6E63)),
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: 'edit', child: Text('Edit Info')),
+                    const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Color(0xFFD32F2F)))),
+                  ],
+                  onSelected: (value) async {
+                    if (value == 'edit') await _editGuard(guard);
+                    if (value == 'delete') await _deleteGuard(guard);
+                  },
+                ),
               ],
             ),
             const Divider(color: Color(0xFFE0D5C1), height: 24),

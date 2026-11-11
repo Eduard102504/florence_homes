@@ -10,7 +10,6 @@ class TCPService {
   Socket? _socket;
   bool _isConnected = false;
 
-  // ✅ FALLBACK SETTINGS
   String _activeIp = '';
   static const String _ethernetIp = '192.168.1.9';
   static const String _wifiIp = '192.168.1.15';
@@ -25,7 +24,6 @@ class TCPService {
 
   Future<bool> connect() async {
     try {
-      // 1. Clean up old socket
       final oldSub = _subscription;
       _subscription = null;
       if (oldSub != null) await oldSub.cancel();
@@ -37,43 +35,30 @@ class TCPService {
         try { oldSocket.destroy(); } catch (_) {}
       }
 
-      // 2. Try Ethernet first (if we haven't already locked onto WiFi)
       if (_activeIp != _wifiIp) {
         try {
-          print('🔌 Trying Ethernet: $_ethernetIp...');
-          _socket = await Socket.connect(
-            _ethernetIp, _port, timeout: const Duration(seconds: 3),
-          );
+          _socket = await Socket.connect(_ethernetIp, _port, timeout: const Duration(seconds: 3));
           _activeIp = _ethernetIp;
           _isConnected = true;
-          print('✅ Connected to Ethernet ($_ethernetIp)');
           return true;
         } catch (e) {
           print('❌ Ethernet failed: $e. Trying WiFi...');
         }
       }
 
-      // 3. Try WiFi fallback
       try {
-        print('🔌 Trying WiFi: $_wifiIp...');
-        _socket = await Socket.connect(
-          _wifiIp, _port, timeout: const Duration(seconds: 3),
-        );
+        _socket = await Socket.connect(_wifiIp, _port, timeout: const Duration(seconds: 3));
         _activeIp = _wifiIp;
         _isConnected = true;
-        print('✅ Connected to WiFi ($_wifiIp)');
         return true;
       } catch (e) {
         print('❌ WiFi failed: $e');
       }
 
-      // 4. Both failed
       _isConnected = false;
       _activeIp = '';
-      print('❌ Could not connect to Pi on Ethernet or WiFi');
       return false;
     } catch (e) {
-      print('Connection failed: $e');
       _isConnected = false;
       return false;
     }
@@ -90,14 +75,12 @@ class TCPService {
       try { await sock.close(); } catch (_) {}
       try { sock.destroy(); } catch (_) {}
     }
-
     _isConnected = false;
-    print('Disconnected from Raspberry Pi');
   }
 
   Future<String> _sendAndAwait(String command, {Duration timeout = const Duration(seconds: 5)}) async {
     final ok = await connect();
-    if (!ok) return 'ERROR: Not connected to Raspberry Pi';
+    if (!ok) return 'ERROR: Not connected';
 
     final completer = Completer<String>();
     Timer? timer;
@@ -106,22 +89,18 @@ class TCPService {
     try {
       sock.write('$command\n');
       await sock.flush();
-      print('Sent command: $command');
 
       final sub = sock.listen(
             (data) {
           final resp = String.fromCharCodes(data).trim();
-          print('Received response: $resp');
           timer?.cancel();
           if (!completer.isCompleted) completer.complete(resp);
         },
         onError: (e) {
-          print('Socket error: $e');
           timer?.cancel();
           if (!completer.isCompleted) completer.complete('ERROR: $e');
         },
         onDone: () {
-          print('Socket done');
           timer?.cancel();
           if (!completer.isCompleted) completer.complete('ERROR: Connection closed');
         },
@@ -130,14 +109,12 @@ class TCPService {
       _subscription = sub;
 
       timer = Timer(timeout, () {
-        print('Timeout waiting for response');
         if (!completer.isCompleted) completer.complete('ERROR: Timeout');
         sub.cancel();
       });
 
       return await completer.future;
     } catch (e) {
-      print('Send command error: $e');
       timer?.cancel();
       _isConnected = false;
       return 'ERROR: $e';
@@ -156,28 +133,21 @@ class TCPService {
     }
   }
 
-  // ----- High-level gate commands -----
+  // ----- GATE 1 COMMANDS -----
   Future<String> sendCommand(String command) => _sendAndAwait(command);
+  Future<bool> openGate() async => !(await _sendAndAwait('GATE_OPEN')).startsWith('ERROR');
+  Future<bool> manualGateUp() async => (await _sendAndAwait('MANUAL_UP')).contains('GATE_UP');
+  Future<bool> manualGateDown() async => (await _sendAndAwait('MANUAL_DOWN')).contains('GATE_DOWN');
+  Future<bool> registerGate1Tag(String id, String name) async => !(await _sendAndAwait('REGISTER:$id:$name')).startsWith('ERROR');
+  Future<bool> cancelGate1Registration() async => (await _sendAndAwait('CANCEL_REGISTRATION')).contains('CANCELLED');
 
-  Future<bool> openGate() async {
-    final r = await _sendAndAwait('GATE_OPEN');
-    return !r.startsWith('ERROR');
-  }
+  // ----- GATE 2 COMMANDS (NEW) -----
+  Future<bool> openGate2() async => !(await _sendAndAwait('GATE2_OPEN')).startsWith('ERROR');
+  Future<bool> manualGate2Up() async => (await _sendAndAwait('GATE2_MANUAL_UP')).contains('GATE_UP');
+  Future<bool> manualGate2Down() async => (await _sendAndAwait('GATE2_MANUAL_DOWN')).contains('GATE_DOWN');
+  Future<bool> registerGate2Tag(String id, String name) async => !(await _sendAndAwait('REGISTER_G2:$id:$name')).startsWith('ERROR');
+  Future<bool> cancelGate2Registration() async => (await _sendAndAwait('CANCEL_REGISTRATION_G2')).contains('CANCELLED');
 
-  Future<bool> manualGateUp() async {
-    final r = await _sendAndAwait('MANUAL_UP');
-    return r.contains('GATE_UP');
-  }
-
-  Future<bool> manualGateDown() async {
-    final r = await _sendAndAwait('MANUAL_DOWN');
-    return r.contains('GATE_DOWN');
-  }
-
-  Future<bool> checkConnection() async {
-    final r = await _sendAndAwait('PING', timeout: const Duration(seconds: 2));
-    return !r.startsWith('ERROR');
-  }
-
+  Future<bool> checkConnection() async => !(await _sendAndAwait('PING', timeout: const Duration(seconds: 2))).startsWith('ERROR');
   Future<bool> ensureConnection() async => connect();
 }

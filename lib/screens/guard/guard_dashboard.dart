@@ -4,9 +4,11 @@ import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import '../../providers/auth_provider.dart';
 import '../admin/manual_entry_screen.dart';
-import '../admin/gate_entries_history.dart';
+import '../admin/guard_gate_history.dart';        // ✅ Points to GUARD history
 import '../admin/scanner_management_screen.dart';
 import '../admin/pending_visits_screen.dart';
+import 'gate2_manual_entry_screen.dart';
+import 'gate2_qr_scanner_screen.dart';
 
 class GuardDashboard extends StatelessWidget {
   const GuardDashboard({super.key});
@@ -59,6 +61,7 @@ class GuardDashboard extends StatelessWidget {
     );
   }
 
+  // ✅ SIDEBAR — restored to original size (icon 24, font 14, vertical:4)
   Widget _buildWebSidebar(BuildContext context, AuthProvider auth, dynamic user) {
     return Container(
       width: 260,
@@ -66,17 +69,34 @@ class GuardDashboard extends StatelessWidget {
       child: Column(
         children: [
           const SizedBox(height: 40),
-          const Icon(Icons.shield, size: 48, color: Color(0xFFFFF8F0)),
+          const Icon(Icons.home_work, size: 48, color: Color(0xFFFFF8F0)),
           const SizedBox(height: 12),
-          const Text('Guard Portal', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFFF8F0), letterSpacing: 1)),
-          const Text('Florence Homes', style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
+          const Text('Florence Homes',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFFF8F0), letterSpacing: 1)),
+          const Text('Guard Portal',
+              style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
           const SizedBox(height: 40),
-          _buildSidebarItem(Icons.dashboard, 'Dashboard', isActive: true, onTap: () {}),
-          _buildSidebarItem(Icons.edit_document, 'Manual Entry', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
-          _buildSidebarItem(Icons.qr_code_scanner, 'QR Scanner', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
-          _buildSidebarItem(Icons.exit_to_app, 'Pending Visits', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
-          _buildSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GateEntriesHistory()))),
-          const Spacer(),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  _buildSidebarItem(Icons.dashboard, 'Dashboard', isActive: true, onTap: () {}),
+                  _buildSidebarItem(Icons.edit_document, 'Manual Entry (G1)',
+                      onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
+                  _buildSidebarItem(Icons.qr_code_scanner, 'QR Scanner (G1)',
+                      onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
+                  _buildSidebarItem(Icons.drive_file_rename_outline, 'Manual Entry (G2)',
+                      onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Gate2ManualEntryScreen()))),
+                  _buildSidebarItem(Icons.qr_code_2, 'QR Scanner (G2)',
+                      onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Gate2QrScannerScreen()))),
+                  _buildSidebarItem(Icons.exit_to_app, 'Pending Visits',
+                      onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
+                  _buildSidebarItem(Icons.history, 'Gate History',
+                      onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardGateHistory()))),
+                ],
+              ),
+            ),
+          ),
           ListTile(
             leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)),
             title: const Text('Logout', style: TextStyle(color: Color(0xFFD4C4A8))),
@@ -88,6 +108,7 @@ class GuardDashboard extends StatelessWidget {
     );
   }
 
+  // ✅ ORIGINAL SIDEBAR ITEM STYLE — icon 24, font ~14, vertical: 4
   Widget _buildSidebarItem(IconData icon, String title, {bool isActive = false, required VoidCallback onTap}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -140,10 +161,12 @@ class GuardDashboard extends StatelessWidget {
           spacing: 20,
           runSpacing: 20,
           children: [
-            _buildWebActionCard('Manual Entry', 'Record deliveries and guests', Icons.edit_document, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
-            _buildWebActionCard('QR Scanner', 'Scan visitor QR codes', Icons.qr_code_scanner, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
+            _buildWebActionCard('Manual Entry (Gate 1)', 'UHF scanner · record guests', Icons.edit_document, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
+            _buildWebActionCard('QR Scanner (Gate 1)', 'Scan visitor QR codes', Icons.qr_code_scanner, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
+            _buildWebActionCard('Manual Entry (Gate 2)', 'USB NFC · record guests', Icons.drive_file_rename_outline, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Gate2ManualEntryScreen()))),
+            _buildWebActionCard('QR Scanner (Gate 2)', 'Scan visitor QR codes', Icons.qr_code_2, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Gate2QrScannerScreen()))),
             _buildWebActionCard('Pending Visits', 'Mark guests as OUT', Icons.exit_to_app, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
-            _buildWebActionCard('Gate History', 'View all IN and OUT logs', Icons.history, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GateEntriesHistory()))),
+            _buildWebActionCard('Gate History', 'View all IN and OUT logs', Icons.history, () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardGateHistory()))), // ✅ Guard history
           ],
         ),
       ],
@@ -219,10 +242,12 @@ class GuardDashboard extends StatelessWidget {
       children: [
         const Text('Quick Actions', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
         const SizedBox(height: 16),
-        _buildMobileActionTile(context, title: 'Manual Entry', subtitle: 'Record deliveries and guests', icon: Icons.edit_document, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
-        _buildMobileActionTile(context, title: 'QR Scanner', subtitle: 'Scan visitor QR codes', icon: Icons.qr_code_scanner, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
+        _buildMobileActionTile(context, title: 'Manual Entry (Gate 1)', subtitle: 'UHF scanner · record guests', icon: Icons.edit_document, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ManualEntryScreen()))),
+        _buildMobileActionTile(context, title: 'QR Scanner (Gate 1)', subtitle: 'Scan visitor QR codes', icon: Icons.qr_code_scanner, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
+        _buildMobileActionTile(context, title: 'Manual Entry (Gate 2)', subtitle: 'USB NFC · record guests', icon: Icons.drive_file_rename_outline, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const Gate2ManualEntryScreen()))),
+        _buildMobileActionTile(context, title: 'QR Scanner (Gate 2)', subtitle: 'Scan visitor QR codes', icon: Icons.qr_code_2, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const Gate2QrScannerScreen()))),
         _buildMobileActionTile(context, title: 'Pending Visits', subtitle: 'Mark guests as OUT', icon: Icons.exit_to_app, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
-        _buildMobileActionTile(context, title: 'Gate History', subtitle: 'View all IN and OUT logs', icon: Icons.history, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GateEntriesHistory()))),
+        _buildMobileActionTile(context, title: 'Gate History', subtitle: 'View all IN and OUT logs', icon: Icons.history, onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const GuardGateHistory()))), // ✅ Guard history
         const SizedBox(height: 20),
       ],
     );

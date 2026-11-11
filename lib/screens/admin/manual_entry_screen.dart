@@ -8,6 +8,8 @@ import '../../services/tcp_service.dart';
 import '../../providers/auth_provider.dart';
 
 import '../guard/guard_dashboard.dart';
+import '../guard/gate2_manual_entry_screen.dart';
+import '../guard/gate2_qr_scanner_screen.dart';
 import 'scanner_management_screen.dart';
 import 'pending_visits_screen.dart';
 import 'guard_gate_history.dart';
@@ -44,7 +46,6 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     _tcpService.connect();
   }
 
-  // ✅ Log manual UP/DOWN actions to Gate History
   Future<void> _logManualGateAction(String action) async {
     try {
       final authProvider = Provider.of<AuthProvider>(context, listen: false);
@@ -55,6 +56,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
         'residentId': 'manual_gate',
         'residentName': '🎮 Manual $action by $guardName',
         'entryType': 'manual_gate',
+        'gate': 'Gate 1',
         'timestamp': DateTime.now().toIso8601String(),
         'status': action == 'UP' ? 'entry' : 'exit',
         'direction': action,
@@ -62,7 +64,6 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
         'openedById': guardId,
         'note': 'Manual gate control',
       });
-      print('📝 Logged manual gate $action to Firestore');
     } catch (e) {
       print('Failed to log manual gate: $e');
     }
@@ -79,27 +80,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       if (success) {
         setState(() => _isGateUp = true);
         await _logManualGateAction('UP');
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Gate is UP — scanning paused.'),
-              backgroundColor: Color(0xFF8D6E63),
-              behavior: SnackBarBehavior.floating));
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Failed to raise gate. Check connection.'),
-              backgroundColor: Color(0xFFD32F2F),
-              behavior: SnackBarBehavior.floating));
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: const Color(0xFFD32F2F),
-            behavior: SnackBarBehavior.floating));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gate 1 is UP'), backgroundColor: Color(0xFF8D6E63)));
       }
     } finally {
       if (mounted) setState(() => _isGateBusy = false);
@@ -117,27 +98,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       if (success) {
         setState(() => _isGateUp = false);
         await _logManualGateAction('DOWN');
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Gate is DOWN — scanning resumed.'),
-              backgroundColor: Color(0xFF8D6E63),
-              behavior: SnackBarBehavior.floating));
-        }
-      } else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-              content: Text('Failed to lower gate. Check connection.'),
-              backgroundColor: Color(0xFFD32F2F),
-              behavior: SnackBarBehavior.floating));
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Error: $e'),
-            backgroundColor: const Color(0xFFD32F2F),
-            behavior: SnackBarBehavior.floating));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Gate 1 is DOWN'), backgroundColor: Color(0xFF8D6E63)));
       }
     } finally {
       if (mounted) setState(() => _isGateBusy = false);
@@ -249,24 +210,22 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     }
 
     try {
-      // ✅ Build the entry with common fields + delivery/guest specific fields
       final Map<String, dynamic> entryData = {
         'residentId': residentId,
         'residentName': residentName,
         'entryType': 'manual',
+        'gate': 'Gate 1', // ✅ Gate 1 only
         'timestamp': DateTime.now().toIso8601String(),
         'visitorName': visitorName,
         'status': 'entry',
         'openedBy': guardName,
         'openedById': adminId,
-        // ✅ BOTH delivery and guest now go to Pending Visits
         'isGuest': true,
         'visitStatus': 'inside',
         'checkInTime': DateTime.now().toIso8601String(),
-        'isDelivery': isDelivery,   // ✅ NEW — distinguishes delivery in pending visits
+        'isDelivery': isDelivery,
       };
 
-      // Add guest-specific fields only for guests
       if (!isDelivery) {
         entryData['visitingResidentId'] = _selectedResidentId;
         entryData['visitingResidentName'] = _selectedResidentName;
@@ -278,6 +237,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
 
       await _firestore.collection('manual_openings').add({
         'adminId': adminId,
+        'gate': 'Gate 1',
         'entryType': _selectedEntryType,
         'personName': visitorName,
         'reason': !isDelivery ? _reasonController.text.trim() : null,
@@ -291,9 +251,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(gateOpened
-              ? (isDelivery
-              ? '✅ Delivery recorded — will show in Pending Visits'
-              : '✅ Guest recorded — will show in Pending Visits')
+              ? (isDelivery ? '✅ Delivery recorded — Gate 1 opened' : '✅ Guest recorded — Gate 1 opened')
               : '⚠️ Entry recorded but gate failed to open'),
           backgroundColor: gateOpened ? const Color(0xFF8D6E63) : const Color(0xFFFF9800),
           behavior: SnackBarBehavior.floating,
@@ -353,6 +311,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
     );
   }
 
+  // ✅ RESTORED SIDEBAR STYLE (Icon 24, Font 14, Vertical 4)
   Widget _buildWebSidebar(BuildContext context) {
     return Container(
       width: 260,
@@ -365,12 +324,21 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
           const Text('Florence Homes', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFFFFF8F0), letterSpacing: 1)),
           const Text('Guard Portal', style: TextStyle(fontSize: 12, color: Color(0xFFD4C4A8))),
           const SizedBox(height: 40),
-          _buildWebSidebarItem(Icons.dashboard, 'Dashboard', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardDashboard()))),
-          _buildWebSidebarItem(Icons.edit_document, 'Manual Entry', isActive: true, onTap: () {}),
-          _buildWebSidebarItem(Icons.qr_code_scanner, 'QR Scanner', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
-          _buildWebSidebarItem(Icons.exit_to_app, 'Pending Visits', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
-          _buildWebSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardGateHistory()))),
-          const Spacer(),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                children: [
+                  _buildWebSidebarItem(Icons.dashboard, 'Dashboard', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardDashboard()))),
+                  _buildWebSidebarItem(Icons.edit_document, 'Manual Entry (G1)', isActive: true, onTap: () {}),
+                  _buildWebSidebarItem(Icons.qr_code_scanner, 'QR Scanner (G1)', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const ScannerManagementScreen()))),
+                  _buildWebSidebarItem(Icons.drive_file_rename_outline, 'Manual Entry (G2)', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Gate2ManualEntryScreen()))),
+                  _buildWebSidebarItem(Icons.qr_code_2, 'QR Scanner (G2)', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const Gate2QrScannerScreen()))),
+                  _buildWebSidebarItem(Icons.exit_to_app, 'Pending Visits', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const PendingVisitsScreen()))),
+                  _buildWebSidebarItem(Icons.history, 'Gate History', onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardGateHistory()))),
+                ],
+              ),
+            ),
+          ),
           ListTile(leading: const Icon(Icons.logout, color: Color(0xFFD4C4A8)), title: const Text('Back to Dashboard', style: TextStyle(color: Color(0xFFD4C4A8), fontSize: 13)), onTap: () => Navigator.pushReplacement(context, MaterialPageRoute(builder: (_) => const GuardDashboard()))),
           const SizedBox(height: 20),
         ],
@@ -399,11 +367,11 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text('Manual Entry', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
+          const Text('Manual Entry (Gate 1)', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(color: (_isGateUp ? const Color(0xFFFF9800) : const Color(0xFF4CAF50)).withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: (_isGateUp ? const Color(0xFFFF9800) : const Color(0xFF4CAF50)).withOpacity(0.3))),
-            child: Row(children: [Icon(_isGateUp ? Icons.arrow_upward : Icons.arrow_downward, size: 12, color: _isGateUp ? const Color(0xFFFF9800) : const Color(0xFF4CAF50)), const SizedBox(width: 6), Text(_isGateUp ? 'GATE UP' : 'GATE DOWN', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _isGateUp ? const Color(0xFFFF9800) : const Color(0xFF4CAF50)))]),
+            child: Row(children: [Icon(_isGateUp ? Icons.arrow_upward : Icons.arrow_downward, size: 12, color: _isGateUp ? const Color(0xFFFF9800) : const Color(0xFF4CAF50)), const SizedBox(width: 6), Text(_isGateUp ? 'GATE 1 UP' : 'GATE 1 DOWN', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: _isGateUp ? const Color(0xFFFF9800) : const Color(0xFF4CAF50)))]),
           ),
         ],
       ),
@@ -428,12 +396,12 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(children: [Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFFF9800), Color(0xFFF5A623)]), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.door_front_door, size: 24, color: Color(0xFFFFF8F0))), const SizedBox(width: 12), const Expanded(child: Text('Manual Gate Control', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))))]),
+          Row(children: [Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFFFF9800), Color(0xFFF5A623)]), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.door_front_door, size: 24, color: Color(0xFFFFF8F0))), const SizedBox(width: 12), const Expanded(child: Text('Gate 1 Servo Control', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF5D4037))))]),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             decoration: BoxDecoration(color: (_isGateUp ? const Color(0xFFFF9800) : const Color(0xFFD4C4A8)).withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(_isGateUp ? Icons.arrow_upward : Icons.arrow_downward, size: 14, color: _isGateUp ? const Color(0xFFFF9800) : const Color(0xFF8D6E63)), const SizedBox(width: 6), Text(_isGateUp ? 'GATE UP — SCANNING PAUSED' : 'GATE DOWN — SCANNING ACTIVE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5, color: _isGateUp ? const Color(0xFFFF9800) : const Color(0xFF8D6E63)))]),
+            child: Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(_isGateUp ? Icons.arrow_upward : Icons.arrow_downward, size: 14, color: _isGateUp ? const Color(0xFFFF9800) : const Color(0xFF8D6E63)), const SizedBox(width: 6), Text(_isGateUp ? 'GATE 1 UP' : 'GATE 1 DOWN', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 0.5, color: _isGateUp ? const Color(0xFFFF9800) : const Color(0xFF8D6E63)))]),
           ),
           const SizedBox(height: 16),
           ElevatedButton.icon(
@@ -464,7 +432,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(children: [GestureDetector(onTap: () => Navigator.pop(context), child: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.arrow_back, color: Color(0xFFFFF8F0), size: 20))), const SizedBox(width: 12), const Text('Manual Entry', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFFFFF8F0), letterSpacing: 1))]),
+              Row(children: [GestureDetector(onTap: () => Navigator.pop(context), child: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.arrow_back, color: Color(0xFFFFF8F0), size: 20))), const SizedBox(width: 12), const Text('Gate 1 Manual', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 20, color: Color(0xFFFFF8F0), letterSpacing: 1))]),
               Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: (_isGateUp ? const Color(0xFFFF9800) : const Color(0xFF4CAF50)).withOpacity(0.2), borderRadius: BorderRadius.circular(12), border: Border.all(color: _isGateUp ? const Color(0xFFFF9800) : const Color(0xFF4CAF50))), child: Text(_isGateUp ? 'UP' : 'DOWN', style: TextStyle(fontSize: 10, color: _isGateUp ? const Color(0xFFFF9800) : const Color(0xFF4CAF50), fontWeight: FontWeight.bold))),
             ],
           ),
@@ -528,7 +496,7 @@ class _ManualEntryScreenState extends State<ManualEntryScreen> {
         ElevatedButton(
           onPressed: _isSubmitting ? null : _submitManualEntry,
           style: ElevatedButton.styleFrom(minimumSize: const Size(double.infinity, 52), backgroundColor: const Color(0xFF5D4037), foregroundColor: const Color(0xFFFFF8F0), elevation: 3, shadowColor: const Color(0xFF5D4037).withOpacity(0.5), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, letterSpacing: 1)),
-          child: _isSubmitting ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFF8F0)))) : const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.record_voice_over, size: 20), SizedBox(width: 8), Text('Record Entry & Open Gate')]),
+          child: _isSubmitting ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Color(0xFFFFF8F0)))) : const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.record_voice_over, size: 20), SizedBox(width: 8), Text('Record Entry & Open Gate 1')]),
         ),
         const SizedBox(height: 16),
       ],

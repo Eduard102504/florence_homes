@@ -1,3 +1,4 @@
+// lib/models/gate_entry_model.dart
 class GateEntryModel {
   String id;
   String residentId;
@@ -7,6 +8,7 @@ class GateEntryModel {
   String? visitorName;
   String? qrCode;
   String status;
+  String? gate; // ✅ NEW — 'Gate 1' or 'Gate 2'
 
   GateEntryModel({
     required this.id,
@@ -17,6 +19,7 @@ class GateEntryModel {
     this.visitorName,
     this.qrCode,
     required this.status,
+    this.gate,
   });
 
   Map<String, dynamic> toMap() {
@@ -28,6 +31,7 @@ class GateEntryModel {
       'visitorName': visitorName,
       'qrCode': qrCode,
       'status': status,
+      'gate': gate, // ✅ NEW
     };
   }
 
@@ -41,6 +45,7 @@ class GateEntryModel {
       visitorName: map['visitorName'],
       qrCode: map['qrCode'],
       status: map['status'] ?? 'entry',
+      gate: map['gate'], // ✅ NEW
     );
   }
 }
